@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Third Coast Sailing brand colors -->
+    <color name="tcs_navy">#0F2742</color>
+    <color name="tcs_orange">#F28C28</color>
+</resources>

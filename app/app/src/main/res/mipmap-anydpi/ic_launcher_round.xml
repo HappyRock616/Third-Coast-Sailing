@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon: Third Coast Sailing circular logo on navy -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/tcs_navy" />
+    <foreground android:drawable="@mipmap/ic_tcs_foreground" />
+    <monochrome android:drawable="@mipmap/ic_tcs_foreground" />
+</adaptive-icon>
