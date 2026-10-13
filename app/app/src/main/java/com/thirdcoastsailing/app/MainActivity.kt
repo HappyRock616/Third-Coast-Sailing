@@ -103,6 +103,7 @@ import org.maplibre.android.style.sources.ImageSource
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import org.maplibre.geojson.Feature
+import org.maplibre.geojson.Point
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -115,7 +116,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val PREFS = "tcs"
-private const val APP_VERSION = "0.7.1"
+private const val APP_VERSION = "0.7.2"
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
 private const val HOUR_MS = 3_600_000L
 private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interval while online and the app is open
@@ -150,7 +151,8 @@ private fun online(context: Context): Boolean {
 
 /** What the info card shows after tapping a harbor or buoy. */
 private data class Info(val title: String, val lines: List<String>, val phone: String = "", val website: String = "",
-                        val station: String? = null)          // set for buoys: live readings and graph are added
+                        val station: String? = null,          // set for buoys: live readings and graph are added
+                        val at: LatLng? = null)               // position of the tapped marker (blue ring while open)
 
 @Composable
 private fun App() {
@@ -456,7 +458,7 @@ private fun App() {
     ) {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
-                visibleLakes, night, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures,
+                visibleLakes, night, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
                 onTap = { ll ->
                     if (placing) {                                   // "+" armed: this tap drops the next route point
                         setRoute(routePts + GeoPt(ll.latitude, ll.longitude))
@@ -880,6 +882,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
             title = f.text("name").ifEmpty { "Station $id" },
             lines = listOfNotNull(f.text("owner").takeIf { it.isNotEmpty() }),
             station = id,
+            at = f.position(),
         )
     } else {
         val vhf = f.text("vhf")
@@ -888,7 +891,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
             lines = listOfNotNull(kindLabel(f.text("kind")),
                 if (vhf.isNotEmpty()) "VHF $vhf" else "VHF: not listed",
                 if (f.text("phone").isEmpty()) "Phone: not listed" else null),
-            phone = f.text("phone"), website = f.text("website")
+            phone = f.text("phone"), website = f.text("website"), at = f.position()
         )
     }
 
@@ -896,7 +899,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
 @Composable
 private fun ChartMap(lakes: List<Lake>, night: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
                      frame: WxFrame?, layers: WxLayers, routeStart: GeoPt?, routePts: List<GeoPt>, calc: RouteResult?,
-                     buoys: FeatureCollection, onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit) {
+                     buoys: FeatureCollection, selected: LatLng?, onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context).apply { onCreate(null) } }
@@ -1014,7 +1017,27 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, fix: BoatFix?, avgSog: D
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         WeatherOverlay(map, tick, idleTick, frame, layers)
         RouteOverlay(map, tick, routeStart, routePts, calc, night)
+        SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
+    }
+}
+
+/** Position of a point feature, or null. */
+private fun Feature.position(): LatLng? = (geometry() as? Point)?.let { LatLng(it.latitude(), it.longitude()) }
+
+/** Blue ring around the marina or buoy whose info window is open, so it's clear which one was tapped. */
+@Composable
+private fun SelectionRing(map: MapLibreMap?, tick: Int, at: LatLng?) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        tick                                                     // read so camera moves redraw
+        val m = map ?: return@Canvas
+        val p = at ?: return@Canvas
+        val s = m.projection.toScreenLocation(p)
+        val c = Offset(s.x, s.y)
+        val r = 15.dp.toPx()
+        drawCircle(Foam, r, c, style = androidx.compose.ui.graphics.drawscope.Stroke(6.dp.toPx()))
+        drawCircle(androidx.compose.ui.graphics.Color(0xFF1E88FF), r, c,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(3.5.dp.toPx()))
     }
 }
 
