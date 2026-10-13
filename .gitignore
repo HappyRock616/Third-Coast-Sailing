@@ -1,0 +1,29 @@
+# ---- Android / Gradle (app/)
+.gradle/
+.kotlin/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.idea/
+local.properties
+*.apk
+*.aab
+
+# ---- Signing keys: never commit
+*.jks
+*.keystore
+keystore.properties
+
+# ---- Chart packages are published as GitHub Release files, not committed
+*.mbtiles
+*.pmtiles
+*.gpkg
+*.grib2
+*.tar.gz
+
+# ---- OS / editor
+.DS_Store
+Thumbs.db
+*.swp

@@ -1,0 +1,98 @@
+package com.thirdcoastsailing.app
+
+import android.content.Context
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
+import org.json.JSONObject
+import java.io.File
+
+/** One imported lake package stored inside the app. */
+data class Lake(
+    val id: String,            // superior, michigan, huron, erie, ontario
+    val name: String,          // display name
+    val chartsAsOf: String,    // newest NOAA chart issue date in the package (yyyy-mm-dd)
+    val built: String,         // package build date (yyyy-mm-dd)
+    val pmtiles: File,
+)
+
+/**
+ * Lake packages live in the app's private storage: files/packages/<lake>/.
+ * Import copies them from a folder the user picks in Android's system file picker,
+ * so no storage permission is needed (works the same on stock, GrapheneOS and LineageOS).
+ */
+class LakeStore(private val context: Context) {
+
+    private val root = File(context.filesDir, "packages").apply { mkdirs() }
+
+    // Display order west to east
+    private val order = listOf("superior", "michigan", "huron", "erie", "ontario")
+
+    /** All lakes that have a chart file. */
+    fun list(): List<Lake> =
+        (root.listFiles() ?: emptyArray())
+            .filter { it.isDirectory }
+            .mapNotNull { read(it) }
+            .sortedBy { order.indexOf(it.id).let { i -> if (i < 0) 99 else i } }
+
+    private fun read(dir: File): Lake? {
+        val pm = dir.listFiles()?.firstOrNull { it.name.endsWith("_chart.pmtiles") } ?: return null
+        var built = ""
+        var asOf = ""
+        val man = File(dir, "manifest.json")
+        if (man.exists()) {
+            runCatching {
+                val m = JSONObject(man.readText())
+                built = m.optString("built_utc").take(10)
+                val cells = m.optJSONObject("sources")?.optJSONObject("enc")?.optJSONArray("cells")
+                if (cells != null) {
+                    var newest = ""
+                    for (i in 0 until cells.length()) {
+                        val d = cells.getJSONObject(i).optString("issue_date")
+                        if (d > newest) newest = d
+                    }
+                    if (newest.length == 8) asOf = "${newest.take(4)}-${newest.substring(4, 6)}-${newest.takeLast(2)}"
+                }
+            }
+        }
+        return Lake(dir.name, dir.name.replaceFirstChar { it.uppercase() }, asOf, built, pm)
+    }
+
+    /** Delete a lake package from the phone (frees its storage). */
+    fun remove(id: String) {
+        File(root, id).deleteRecursively()
+    }
+
+    /**
+     * Import from a picked folder. The folder can be one lake (contains manifest.json)
+     * or the whole "packages" folder (one sub-folder per lake).
+     * @param progress called with a short status line while copying
+     * @return ids of the lakes imported
+     */
+    fun import(treeUri: Uri, progress: (String) -> Unit): List<String> {
+        val tree = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+        val lakeDirs = if (tree.findFile("manifest.json") != null) listOf(tree)
+        else tree.listFiles().filter { it.isDirectory && it.findFile("manifest.json") != null }
+        val done = mutableListOf<String>()
+        for (d in lakeDirs) {
+            val chart = d.listFiles().firstOrNull { it.name?.endsWith("_chart.pmtiles") == true } ?: continue
+            val id = chart.name!!.removeSuffix("_chart.pmtiles")
+            val dest = File(root, id).apply { mkdirs() }
+            // Chart tiles, routing data and manifest; the .mbtiles copy is not needed on the phone
+            val wanted = d.listFiles().filter { f ->
+                val n = f.name ?: ""
+                n == "manifest.json" || n.endsWith("_chart.pmtiles") || n.endsWith("_hazards.gpkg")
+            }
+            for (f in wanted) {
+                progress("Importing $id: ${f.name}")
+                val tmp = File(dest, f.name + ".part")
+                context.contentResolver.openInputStream(f.uri)?.use { input ->
+                    tmp.outputStream().use { out -> input.copyTo(out, 1 shl 20) }
+                }
+                tmp.renameTo(File(dest, f.name!!))   // replaces an older copy of the same file
+            }
+            done += id
+        }
+        progress(if (done.isEmpty()) "No lake package found in that folder" else "Imported: ${done.joinToString()}")
+        return done
+    }
+}

@@ -1,0 +1,74 @@
+package com.thirdcoastsailing.app
+
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.UUID
+
+/** A saved boat: which template it starts from, sail options, and the owner's own measurements. */
+data class Boat(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val draftFt: Double = 4.9,
+    val template: String = PolarTemplates.DEFAULT,
+    val symSpinnaker: Boolean = false,
+    val asymSpinnaker: Boolean = false,
+    val manual: List<ManualPoint> = emptyList(),
+)
+
+/**
+ * Boats are kept in files/boats.json. Each boat's working polar is also written as files/polars/<name>.pol
+ * (standard format) so it can be exported and used in other software.
+ */
+class BoatStore(private val context: Context) {
+
+    private val file = File(context.filesDir, "boats.json")
+    private val polDir = File(context.filesDir, "polars").apply { mkdirs() }
+
+    data class State(val boats: List<Boat>, val activeId: String?)
+
+    fun load(): State {
+        if (!file.exists()) {
+            // First run: one boat from the default template
+            val b = Boat(name = "My boat")
+            save(State(listOf(b), b.id))
+            return State(listOf(b), b.id)
+        }
+        val root = JSONObject(file.readText())
+        val boats = root.getJSONArray("boats").let { a -> (0 until a.length()).map { fromJson(a.getJSONObject(it)) } }
+        return State(boats, root.optString("active").ifEmpty { boats.firstOrNull()?.id })
+    }
+
+    fun save(state: State) {
+        val a = JSONArray()
+        state.boats.forEach { a.put(toJson(it)) }
+        val tmp = File(file.path + ".tmp")
+        tmp.writeText(JSONObject().put("boats", a).put("active", state.activeId ?: "").toString(1))
+        tmp.renameTo(file)
+        state.boats.forEach { b -> runCatching { File(polDir, safeName(b.name) + ".pol").writeText(polar(b).toPol()) } }
+    }
+
+    /** The polar the router will use: template (+ enabled spinnakers), refit to the owner's measurements. */
+    fun polar(b: Boat): Polar =
+        PolarMath.refit(PolarTemplates.load(context, b.template, b.symSpinnaker, b.asymSpinnaker), b.manual)
+
+    private fun safeName(n: String) = n.replace(Regex("[^A-Za-z0-9._-]+"), "_").ifEmpty { "boat" }
+
+    private fun toJson(b: Boat) = JSONObject()
+        .put("id", b.id).put("name", b.name).put("draftFt", b.draftFt).put("template", b.template)
+        .put("sym", b.symSpinnaker).put("asym", b.asymSpinnaker)
+        .put("manual", JSONArray().also { a ->
+            b.manual.forEach { m -> a.put(JSONObject().put("aws", m.awsKn).put("awa", m.awaDeg).put("bsp", m.bspKn)) }
+        })
+
+    private fun fromJson(o: JSONObject) = Boat(
+        id = o.getString("id"), name = o.getString("name"), draftFt = o.optDouble("draftFt", 4.9),
+        template = o.optString("template", PolarTemplates.DEFAULT),
+        symSpinnaker = o.optBoolean("sym"), asymSpinnaker = o.optBoolean("asym"),
+        manual = o.optJSONArray("manual")?.let { a ->
+            (0 until a.length()).map { a.getJSONObject(it) }
+                .map { ManualPoint(it.getDouble("aws"), it.getDouble("awa"), it.getDouble("bsp")) }
+        } ?: emptyList(),
+    )
+}
