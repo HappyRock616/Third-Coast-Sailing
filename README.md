@@ -15,7 +15,7 @@ Offline Great Lakes chart viewer, weather and sail-routing app for Android.
 
 ## Getting the app
 
-Builds will be published on the [Releases](../../releases) page; chart packages for each lake are published there too and downloaded from inside the app.
+**[Download the latest version](../../releases/latest)** — open the `.apk` file on your phone (Android 14 or newer). On first launch, pick your lakes; the charts download inside the app from the [charts release](../../releases/tag/charts).
 
 ## Building the app from source
 
