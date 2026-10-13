@@ -4,6 +4,13 @@ Offline Great Lakes chart viewer, weather and sail-routing app for Android.
 
 > **Not for navigation.** Official NOAA charts and notices govern. Use at your own risk.
 
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_wind_gauge.png" width="200" alt="Wind field and wind gauge with polar">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_waves_barbs.png" width="200" alt="Wind barbs and animated wave crests with forecast slider">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_live_buoy.png" width="200" alt="Live NOAA buoy report with 24-hour graph">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_harbor.png" width="200" alt="Marina details with call and website buttons">
+</p>
+
 ## What it does
 
 - **Charts:** NOAA electronic charts for Superior, Michigan, Huron, Erie and Ontario (plus connected inland lakes), stored on the phone and usable with no signal. Depth shading, hazards, and water shallower than your depth limit outlined in red.
