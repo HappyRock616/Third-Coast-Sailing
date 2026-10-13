@@ -40,6 +40,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -52,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,6 +83,7 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
 import com.thirdcoastsailing.app.ui.theme.ThirdCoastSailingTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
@@ -112,7 +115,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val PREFS = "tcs"
-private const val APP_VERSION = "0.6"
+private const val APP_VERSION = "0.7"
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
 private const val HOUR_MS = 3_600_000L
 private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interval while online and the app is open
@@ -122,6 +125,13 @@ private const val TACK_PENALTY_MIN = 15.0    // routing: time lost per tack or g
 private const val DEFAULT_DEPTH_LIMIT_FT = 24.0
 private const val WX_SOURCE = "wx_field"     // map source + layer for the wind / gust colour field
 private const val WX_LAYER = "wx_field_layer"
+
+/** One lake row in the menu's Charts list. progress = 0..1 while downloading, else null. */
+private data class LakeRow(val id: String, val name: String, val installed: Boolean, val chartsAsOf: String,
+                           val sizeBytes: Long?, val update: Boolean, val progress: Float?)
+
+/** Lakes west to east. */
+private val LAKE_ORDER = listOf("superior", "michigan", "huron", "erie", "ontario")
 
 /** GPS state shown in the menu. */
 private data class GpsInfo(val hasPermission: Boolean, val locationOn: Boolean, val fix: BoatFix?,
@@ -235,7 +245,7 @@ private fun App() {
         prefs.edit().putBoolean("night", night).putBoolean("offline", offline).putStringSet("hidden", hidden).apply()
     }
 
-    val visibleLakes = lakes.filter { it.id !in hidden }
+    val visibleLakes = lakes                                  // every installed lake is shown
     val currentLakes by rememberUpdatedState(visibleLakes)
     val depthLookup = remember { DepthLookup { currentLakes } }
     DisposableEffect(Unit) { onDispose { depthLookup.close() } }
@@ -244,6 +254,67 @@ private fun App() {
         depthFt = withContext(Dispatchers.IO) { runCatching { depthLookup.depthFt(f.lat, f.lon) }.getOrNull() }
     }
     val activePolar = remember(activeBoat) { activeBoat?.let { runCatching { boatStore.polar(it) }.getOrNull() } }
+
+    // ---- chart downloads from the GitHub "charts" release
+    val chartRepo = remember { ChartRepo(context) }
+    var catalog by remember { mutableStateOf(chartRepo.cachedCatalog()) }
+    var catalogMsg by remember { mutableStateOf("") }
+    var checking by remember { mutableStateOf(false) }
+    val dlProgress = remember { mutableStateMapOf<String, Float>() }      // lake id -> 0..1 while queued / downloading
+    var askMetered by remember { mutableStateOf<List<CatalogLake>?>(null) }
+    var showSetup by remember { mutableStateOf(!prefs.getBoolean("chartsSetupDone", false) && lakes.isEmpty()) }
+    val dlQueue = remember { Channel<CatalogLake>(Channel.UNLIMITED) }
+    // One download at a time, in the order requested
+    LaunchedEffect(Unit) {
+        for (lake in dlQueue) {
+            val r = withContext(Dispatchers.IO) {
+                runCatching {
+                    chartRepo.install(lake,
+                        progress = { done, total -> dlProgress[lake.id] = if (total > 0) done.toFloat() / total else 0f },
+                        beforeSwap = { depthLookup.close() },             // release the old routing file before replacing it
+                        cancel = { false })
+                }
+            }
+            dlProgress.remove(lake.id)
+            lakes = lakeStore.list()
+            status = r.fold({ "${lake.name} charts installed" }, { "${lake.name}: ${it.message}" })
+        }
+    }
+    fun enqueue(list: List<CatalogLake>) {
+        for (l in list) if (l.id !in dlProgress) { dlProgress[l.id] = 0f; dlQueue.trySend(l) }
+    }
+    /** Start downloads, asking first when on mobile data. */
+    fun startDownloads(list: List<CatalogLake>) {
+        if (list.isEmpty()) return
+        if (meteredNetwork(context)) askMetered = list else enqueue(list)
+    }
+    /** Fetch the catalog: which lakes exist, their sizes and whether updates are out. */
+    fun checkCharts() {
+        if (checking) return
+        checking = true
+        catalogMsg = "Checking…"
+        scope.launch {
+            val r = withContext(Dispatchers.IO) { runCatching { chartRepo.fetchCatalog() } }
+            r.onSuccess { c ->
+                catalog = c
+                val n = c.count { chartRepo.updateAvailable(it) }
+                catalogMsg = if (n == 0) "Checked ${clockText(System.currentTimeMillis())} · no updates"
+                else "$n update${if (n > 1) "s" else ""} available"
+            }.onFailure { catalogMsg = "Couldn't reach the chart server. Check your connection." }
+            checking = false
+        }
+    }
+    LaunchedEffect(showSetup) { if (showSetup && catalog.isEmpty()) checkCharts() }
+    val lakeRows = remember(catalog, lakes, dlProgress.toMap()) {
+        val ids = (catalog.map { it.id } + lakes.map { it.id }).distinct()
+            .sortedBy { LAKE_ORDER.indexOf(it).let { i -> if (i < 0) 99 else i } }
+        ids.map { id ->
+            val c = catalog.firstOrNull { it.id == id }
+            val l = lakes.firstOrNull { it.id == id }
+            LakeRow(id, c?.name ?: l?.name ?: id, l != null, l?.chartsAsOf?.ifEmpty { null } ?: c?.chartsAsOf ?: "",
+                c?.size, c != null && l != null && chartRepo.updateAvailable(c), dlProgress[id])
+        }
+    }
 
     // ---- weather updates
     val lakeIds = lakes.map { it.id }
@@ -357,10 +428,17 @@ private fun App() {
         gesturesEnabled = drawer.isOpen,          // keep swipes for panning the chart
         drawerContent = {
             MenuSheet(
-                lakes = lakes, hidden = hidden, night = night, offline = offline, boatName = activeBoat?.name ?: "—",
+                night = night, offline = offline, boatName = activeBoat?.name ?: "—",
+                lakeRows = lakeRows, catalogMsg = catalogMsg, checking = checking,
                 onImport = { scope.launch { drawer.close() }; picker.launch(null) },
-                onToggleLake = { id -> hidden = if (id in hidden) hidden - id else hidden + id; savePrefs() },
-                onRemoveLake = { removeLake = it },
+                onLakeCheck = { id, on ->
+                    if (on) {
+                        val c = catalog.firstOrNull { it.id == id }
+                        if (c != null) startDownloads(listOf(c)) else checkCharts()
+                    } else removeLake = lakes.firstOrNull { it.id == id }
+                },
+                onUpdateLake = { id -> catalog.firstOrNull { it.id == id }?.let { startDownloads(listOf(it)) } },
+                onCheckCharts = { checkCharts() },
                 onBoats = { scope.launch { drawer.close() }; showBoats = true },
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
@@ -449,7 +527,7 @@ private fun App() {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 if (status.isNotEmpty()) Pill(status)
-                if (lakes.isEmpty()) Pill("No charts yet: tap the logo → Import lake package")
+                if (lakes.isEmpty()) Pill(if (dlProgress.isNotEmpty()) "Downloading charts… (progress in the menu)" else "No charts yet: tap the logo → Charts")
                 if (!gaugeOn) {
                     val f = fix
                     Pill(if (f == null) "GPS: no fix yet (details in the menu)"
@@ -478,6 +556,29 @@ private fun App() {
         activeBoat = boatStore.load().let { s -> s.boats.firstOrNull { it.id == s.activeId } }
     }
 
+    // First launch: pick lakes to download
+    if (showSetup) SetupDialog(
+        catalog = catalog, loading = checking, error = if (!checking && catalog.isEmpty()) catalogMsg else "",
+        onRetry = { checkCharts() },
+        onDownload = { picked ->
+            showSetup = false
+            prefs.edit().putBoolean("chartsSetupDone", true).apply()
+            startDownloads(picked)
+        },
+        onLater = { showSetup = false; prefs.edit().putBoolean("chartsSetupDone", true).apply() },
+    )
+
+    // Mobile data: confirm before a big download
+    askMetered?.let { list ->
+        AlertDialog(
+            onDismissRequest = { askMetered = null },
+            title = { Text("Use mobile data?") },
+            text = { Text("You're not on Wi-Fi. Download ${mbText(list.sumOf { it.size })} of charts now?") },
+            confirmButton = { TextButton(onClick = { enqueue(list); askMetered = null }) { Text("Download", color = SignalOrange) } },
+            dismissButton = { TextButton(onClick = { askMetered = null }) { Text("Wait for Wi-Fi") } },
+        )
+    }
+
     removeLake?.let { l ->
         AlertDialog(
             onDismissRequest = { removeLake = null },
@@ -502,6 +603,49 @@ private fun Pill(text: String, modifier: Modifier = Modifier, background: androi
     )
 }
 
+/**
+ * First-launch pop-up: pick which lakes to download, with each lake's download size. Lake Michigan is ticked to start.
+ */
+@Composable
+private fun SetupDialog(catalog: List<CatalogLake>, loading: Boolean, error: String, onRetry: () -> Unit,
+                        onDownload: (List<CatalogLake>) -> Unit, onLater: () -> Unit) {
+    var picked by remember { mutableStateOf(setOf("michigan")) }
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Choose your lakes") },
+        text = {
+            Column {
+                Text("Charts are stored on the phone so they work with no signal. You can add or remove lakes later in the menu.",
+                    color = Mist, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                when {
+                    catalog.isEmpty() && loading -> Text("Loading the lake list…", color = Foam)
+                    catalog.isEmpty() -> {
+                        Text(error.ifEmpty { "Couldn't load the lake list." }, color = Foam)
+                        TextButton(onClick = onRetry) { Text("Try again", color = SignalOrange) }
+                    }
+                    else -> {
+                        for (l in catalog) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
+                                .clickable { picked = if (l.id in picked) picked - l.id else picked + l.id }) {
+                                Checkbox(checked = l.id in picked, onCheckedChange = { picked = if (it) picked + l.id else picked - l.id })
+                                Text(l.name, color = Foam, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                Text(mbText(l.size), color = Mist, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val chosen = catalog.filter { it.id in picked }
+            TextButton(onClick = { onDownload(chosen) }, enabled = chosen.isNotEmpty()) {
+                Text(if (chosen.isEmpty()) "Download" else "Download (${mbText(chosen.sumOf { it.size })})", color = SignalOrange)
+            }
+        },
+        dismissButton = { TextButton(onClick = onLater) { Text("Later") } },
+    )
+}
+
 /** Small round orange-ringed button (route + / −). Armed = filled orange. Half the size of the center button. */
 @Composable
 private fun RoundButton(label: String, armed: Boolean, onClick: () -> Unit) {
@@ -515,8 +659,10 @@ private fun RoundButton(label: String, armed: Boolean, onClick: () -> Unit) {
 /** Side menu: logo header, GPS, charts, weather, boat, display, connection. */
 @Composable
 private fun MenuSheet(
-    lakes: List<Lake>, hidden: Set<String>, night: Boolean, offline: Boolean, boatName: String,
-    onImport: () -> Unit, onToggleLake: (String) -> Unit, onRemoveLake: (Lake) -> Unit, onBoats: () -> Unit,
+    night: Boolean, offline: Boolean, boatName: String,
+    lakeRows: List<LakeRow>, catalogMsg: String, checking: Boolean,
+    onImport: () -> Unit, onLakeCheck: (String, Boolean) -> Unit, onUpdateLake: (String) -> Unit, onCheckCharts: () -> Unit,
+    onBoats: () -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
     wxColor: String, wxBarbs: Boolean, wxWaves: Boolean,
@@ -568,23 +714,6 @@ private fun MenuSheet(
             }
 
             MenuDivider()
-            MenuHeader("Charts")
-            Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import lake package…") }
-            if (lakes.isEmpty()) Text("No lakes on this device yet", color = Mist, fontSize = 13.sp,
-                modifier = Modifier.padding(vertical = 8.dp))
-            for (l in lakes) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Checkbox(checked = l.id !in hidden, onCheckedChange = { onToggleLake(l.id) })
-                    Column(Modifier.weight(1f)) {
-                        Text(l.name, color = Foam, fontSize = 15.sp)
-                        Text("Updated ${l.chartsAsOf.ifEmpty { "?" }}  ·  built ${l.built.ifEmpty { "?" }}",
-                            color = Mist, fontSize = 11.sp)
-                    }
-                    TextButton(onClick = { onRemoveLake(l) }) { Text("Remove", color = SignalOrange, fontSize = 12.sp) }
-                }
-            }
-
-            MenuDivider()
             MenuHeader("Boat")
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -618,6 +747,40 @@ private fun MenuSheet(
             MenuDivider()
             MenuHeader("Connection")
             SwitchRow("Offline mode", "Pause automatic weather downloads (tap the Weather box to update once)", offline, onOffline)
+
+            MenuDivider()
+            MenuHeader("Charts")
+            // Checked = on this phone. Tick to download, untick to remove.
+            if (lakeRows.isEmpty()) Text("Tap Check for updates to see the lakes", color = Mist, fontSize = 13.sp)
+            for (r in lakeRows) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Checkbox(checked = r.installed || r.progress != null, enabled = r.progress == null,
+                        onCheckedChange = { onLakeCheck(r.id, it) })
+                    Column(Modifier.weight(1f)) {
+                        Text(r.name, color = Foam, fontSize = 15.sp)
+                        val size = r.sizeBytes?.let { mbText(it) }
+                        val p = r.progress
+                        val sub = when {
+                            p != null -> "Downloading… ${(p * 100).toInt()}%"
+                            r.installed && r.update -> "Charts ${r.chartsAsOf} · update available (${size ?: "?"})"
+                            r.installed -> "Charts ${r.chartsAsOf.ifEmpty { "?" }}"
+                            else -> size ?: ""
+                        }
+                        Text(sub, color = if (r.update) SignalOrange else Mist, fontSize = 11.5.sp)
+                        if (p != null) LinearProgressIndicator(progress = { p },
+                            modifier = Modifier.fillMaxWidth().padding(top = 3.dp), color = SignalOrange, trackColor = NavyLight)
+                    }
+                    if (r.update && r.progress == null)
+                        TextButton(onClick = { onUpdateLake(r.id) }) { Text("Update", color = SignalOrange, fontSize = 12.sp) }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                OutlinedButton(onClick = onCheckCharts, enabled = !checking) {
+                    Text(if (checking) "Checking…" else "Check for updates", color = SignalOrange, fontSize = 13.sp)
+                }
+            }
+            if (catalogMsg.isNotEmpty()) Text(catalogMsg, color = Mist, fontSize = 11.5.sp, modifier = Modifier.padding(top = 4.dp))
+            TextButton(onClick = onImport) { Text("Import from a folder…", color = Mist, fontSize = 12.sp) }
 
             MenuDivider()
             Text("Version $APP_VERSION · Not for navigation. NOAA chart data governs.", color = Mist, fontSize = 11.sp)
