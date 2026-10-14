@@ -675,13 +675,7 @@ private fun MenuSheet(
     gps: GpsInfo, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 340.dp)) {
-        // Persistent disclaimer: stays at the top while the rest of the menu scrolls
-        Text(
-            "Not for navigation · Reference use only",
-            color = NavyDeep, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().background(Caution).padding(vertical = 8.dp, horizontal = 12.dp),
-        )
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.tcs_logo), null,
                     Modifier.size(64.dp).clip(CircleShape).border(2.dp, SignalOrange, CircleShape))
@@ -761,6 +755,13 @@ private fun MenuSheet(
 
             MenuDivider()
             MenuHeader("Charts")
+            // Disclaimer banner, always shown with the chart downloads
+            Text(
+                "Not for navigation · Reference use only",
+                color = NavyDeep, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(8.dp))
+                    .background(Caution).padding(vertical = 6.dp, horizontal = 10.dp),
+            )
             // Checked = on this phone. Tick to download, untick to remove.
             if (lakeRows.isEmpty()) Text("Tap Check for updates to see the lakes", color = Mist, fontSize = 13.sp)
             for (r in lakeRows) {
