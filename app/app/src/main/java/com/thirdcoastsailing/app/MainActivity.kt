@@ -56,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -171,6 +172,12 @@ private fun App() {
     var fix by remember { mutableStateOf<BoatFix?>(null) }
     val speedAvg = remember { SpeedAverage() }                 // 15-minute average SOG for the 1/2/3 h dots
     var avgSog by remember { mutableStateOf<Double?>(null) }
+    // Trip track (memory only): on/off from the menu; switching off clears it
+    var tripOn by remember { mutableStateOf(false) }
+    val trackPts = remember { mutableStateListOf<GeoPt>() }
+    var trackNm by remember { mutableStateOf(0.0) }
+    var tripStartMs by remember { mutableStateOf(0L) }
+    var tripNowMs by remember { mutableStateOf(0L) }
     var centerRequest by remember { mutableStateOf(0) }
     // Wind gauge: on/off from the menu, position and size from drag / pinch (remembered)
     var gaugeOn by remember { mutableStateOf(prefs.getBoolean("gauge", false)) }
@@ -366,6 +373,21 @@ private fun App() {
     // Messages at the bottom fade after 10 s
     LaunchedEffect(status) { if (status.isNotEmpty()) { delay(10_000); status = "" } }
 
+    // Trip track: add the fix as a point once the boat has moved far enough
+    LaunchedEffect(fix, tripOn) {
+        val f = fix ?: return@LaunchedEffect
+        if (!tripOn) return@LaunchedEffect
+        val d = trackStep(trackPts.lastOrNull(), f) ?: return@LaunchedEffect
+        trackPts.add(GeoPt(f.lat, f.lon))
+        trackNm += d
+    }
+    // Trip track: start the clock when switched on, clear everything when switched off; refresh the time every 15 s
+    LaunchedEffect(tripOn) {
+        if (!tripOn) { trackPts.clear(); trackNm = 0.0; return@LaunchedEffect }
+        tripStartMs = System.currentTimeMillis()
+        while (true) { tripNowMs = System.currentTimeMillis(); delay(15_000) }
+    }
+
     // ---- route editing and weather routing
     val routeStart = fix?.let { GeoPt(it.lat, it.lon) }
     fun setRoute(p: List<GeoPt>) {
@@ -447,6 +469,7 @@ private fun App() {
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
                 gaugeOn = gaugeOn,
+                tripOn = tripOn, onTrip = { tripOn = it },
                 onGauge = { gaugeOn = it; prefs.edit().putBoolean("gauge", it).apply() },
                 wxColor = wxColor, wxBarbs = wxBarbs, wxWaves = wxWaves,
                 onWxColor = { wxColor = it; prefs.edit().putString("wxColor", it).apply() },
@@ -460,7 +483,7 @@ private fun App() {
     ) {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
-                visibleLakes, night, depthLimitFt, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
+                visibleLakes, night, depthLimitFt, trackPts, if (tripOn) trackLabel(trackNm, tripNowMs - tripStartMs) else null, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
                 onTap = { ll ->
                     if (placing) {                                   // "+" armed: this tap drops the next route point
                         setRoute(routePts + GeoPt(ll.latitude, ll.longitude))
@@ -669,6 +692,7 @@ private fun MenuSheet(
     onBoats: () -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
+    tripOn: Boolean, onTrip: (Boolean) -> Unit,
     wxColor: String, wxBarbs: Boolean, wxWaves: Boolean,
     onWxColor: (String) -> Unit, onWxBarbs: (Boolean) -> Unit, onWxWaves: (Boolean) -> Unit,
     gps: GpsInfo, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
@@ -716,6 +740,10 @@ private fun MenuSheet(
                     }
                 }
             }
+
+            Spacer(Modifier.height(8.dp))
+            SwitchRow("Trip track", "Dashed line of where you've been, with distance and time. Turning it off clears it.",
+                tripOn, onTrip)
 
             MenuDivider()
             MenuHeader("Boat")
@@ -906,7 +934,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
 
 /** The chart: MapLibre MapView inside Compose, restyled when lakes or day/night change. */
 @Composable
-private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
+private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, track: List<GeoPt>, trackText: String?, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
                      frame: WxFrame?, layers: WxLayers, routeStart: GeoPt?, routePts: List<GeoPt>, calc: RouteResult?,
                      buoys: FeatureCollection, selected: LatLng?, onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit) {
     val context = LocalContext.current
@@ -1026,6 +1054,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, fi
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         WeatherOverlay(map, tick, idleTick, frame, layers)
         RouteOverlay(map, tick, routeStart, routePts, calc, night)
+        TrackOverlay(map, tick, track, fix, trackText, night)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
     }

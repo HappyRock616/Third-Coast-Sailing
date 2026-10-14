@@ -2,6 +2,9 @@
 
 ## 0.7.2 (not yet released)
 
+### Added
+- **Trip track.** A *Trip track* switch in the GPS section of the menu draws a thin dashed line of where the boat has been, labelled with distance and elapsed time (e.g. "12.4 nm · 1:23"). It isn't saved: switching it off clears the track. Points are recorded every 15 m (50 m when nearly stopped, so drifting at the dock adds nothing), and only while the app is open.
+
 ### Changed
 - **Minimum depth per boat.** Boat setup has a new *Minimum depth* dropdown (6, 12, 18, 24 or 30 ft; default 24 ft). The weather router and the chart shading both use the active boat's setting.
 - **Shallow water is shaded red, with one red line at the limit.** Water shallower than the minimum depth gets a light red fill instead of red outlines around every shallow area. This removes the confusing extra lines at chart seams, dredged channels and band edges. A single red line marks the charted contour at the minimum depth (from zoom 8 inward).
