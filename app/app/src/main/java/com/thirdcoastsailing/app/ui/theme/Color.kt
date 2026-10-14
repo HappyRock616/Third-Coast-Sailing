@@ -12,4 +12,5 @@ val OrangeDim = Color(0xFFB8661A)
 val Foam = Color(0xFFF4F1EA)          // main text on navy
 val Mist = Color(0xFFAFC2D6)          // secondary text on navy
 val Alarm = Color(0xFFFF5A4F)
+val Caution = Color(0xFFF2C14E)       // warning banners (not tappable, so not orange)
 val Ink = Color(0xFF1B1F23)

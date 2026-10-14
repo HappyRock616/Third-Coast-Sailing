@@ -47,6 +47,9 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextAlign
+import com.thirdcoastsailing.app.ui.theme.NavyDeep
+import com.thirdcoastsailing.app.ui.theme.Caution
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -672,7 +675,13 @@ private fun MenuSheet(
     gps: GpsInfo, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 340.dp)) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+        // Persistent disclaimer: stays at the top while the rest of the menu scrolls
+        Text(
+            "Not for navigation · Reference use only",
+            color = NavyDeep, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().background(Caution).padding(vertical = 8.dp, horizontal = 12.dp),
+        )
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.tcs_logo), null,
                     Modifier.size(64.dp).clip(CircleShape).border(2.dp, SignalOrange, CircleShape))
@@ -785,7 +794,7 @@ private fun MenuSheet(
             TextButton(onClick = onImport) { Text("Import from a folder…", color = Mist, fontSize = 12.sp) }
 
             MenuDivider()
-            Text("Version $APP_VERSION · Not for navigation. NOAA chart data governs.", color = Mist, fontSize = 11.sp)
+            Text("Version $APP_VERSION · NOAA chart data governs.", color = Mist, fontSize = 11.sp)
         }
     }
 }
