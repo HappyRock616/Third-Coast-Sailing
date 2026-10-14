@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -124,6 +127,7 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
                 NumberOrText("Draft (ft)", "%.1f".format(boat.draftFt), boat.id) { s ->
                     s.toDoubleOrNull()?.let { edit(boat.copy(draftFt = it)) }
                 }
+                MinDepthPicker(boat.minDepthFt) { edit(boat.copy(minDepthFt = it)) }
                 Text("Starting template (by length)", color = Mist, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (t in PolarTemplates.names) FilterChip(
@@ -211,6 +215,23 @@ private fun ToggleRow(label: String, value: Boolean, onChange: (Boolean) -> Unit
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(label, modifier = Modifier.weight(1f))
         Switch(checked = value, onCheckedChange = onChange)
+    }
+}
+
+/** Dropdown for the boat's minimum depth: shallower water is shaded red and avoided by the router. */
+@Composable
+private fun MinDepthPicker(valueFt: Double, onPick: (Double) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Text("Minimum depth (shaded red, avoided by routing)", color = Mist, fontSize = 13.sp)
+        Box {
+            OutlinedButton(onClick = { open = true }) { Text("%.0f ft  ▾".format(valueFt)) }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (ft in MIN_DEPTH_CHOICES_FT) DropdownMenuItem(
+                    text = { Text("%.0f ft".format(ft)) },
+                    onClick = { open = false; onPick(ft) })
+            }
+        }
     }
 }
 

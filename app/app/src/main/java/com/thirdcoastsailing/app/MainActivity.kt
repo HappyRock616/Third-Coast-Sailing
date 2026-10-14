@@ -126,7 +126,6 @@ private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interva
 private const val FORECAST_HOURS = 48        // forecast time slider range
 private const val CRUISE_FACTOR = 0.85       // routing: fraction of polar speed actually sailed
 private const val TACK_PENALTY_MIN = 15.0    // routing: time lost per tack or gybe
-private const val DEFAULT_DEPTH_LIMIT_FT = 24.0
 private const val WX_SOURCE = "wx_field"     // map source + layer for the wind / gust colour field
 private const val WX_LAYER = "wx_field_layer"
 
@@ -206,7 +205,7 @@ private fun App() {
     var buoyVersion by remember { mutableStateOf(0) }
     var buoyStations by remember { mutableStateOf<List<BuoyStation>>(emptyList()) }
     var buoyObs by remember { mutableStateOf<Map<String, BuoyObs>>(emptyMap()) }
-    val depthLimitFt = remember { prefs.getFloat("depthLimitFt", DEFAULT_DEPTH_LIMIT_FT.toFloat()).toDouble() }
+    val depthLimitFt = activeBoat?.minDepthFt ?: DEFAULT_MIN_DEPTH_FT     // active boat's minimum depth
     val scope = rememberCoroutineScope()
     val drawer = rememberDrawerState(DrawerValue.Closed)
 
@@ -461,7 +460,7 @@ private fun App() {
     ) {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
-                visibleLakes, night, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
+                visibleLakes, night, depthLimitFt, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
                 onTap = { ll ->
                     if (placing) {                                   // "+" armed: this tap drops the next route point
                         setRoute(routePts + GeoPt(ll.latitude, ll.longitude))
@@ -907,7 +906,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
 
 /** The chart: MapLibre MapView inside Compose, restyled when lakes or day/night change. */
 @Composable
-private fun ChartMap(lakes: List<Lake>, night: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
+private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
                      frame: WxFrame?, layers: WxLayers, routeStart: GeoPt?, routePts: List<GeoPt>, calc: RouteResult?,
                      buoys: FeatureCollection, selected: LatLng?, onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit) {
     val context = LocalContext.current
@@ -965,10 +964,10 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, fix: BoatFix?, avgSog: D
         }
     }
 
-    // (Re)build the style whenever the lake set or day/night changes
-    LaunchedEffect(map, lakes, night) {
+    // (Re)build the style whenever the lake set, day/night or the boat's minimum depth changes
+    LaunchedEffect(map, lakes, night, depthLimitFt) {
         val m = map ?: return@LaunchedEffect
-        m.setStyle(Style.Builder().fromJson(ChartStyle.build(lakes, night))) { s -> style = s; tick++ }
+        m.setStyle(Style.Builder().fromJson(ChartStyle.build(lakes, night, depthLimitFt))) { s -> style = s; tick++ }
     }
 
     // Center on the first fix, and whenever the center button is pressed: boat centered, north up, default zoom

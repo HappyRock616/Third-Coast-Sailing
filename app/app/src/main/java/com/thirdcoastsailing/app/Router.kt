@@ -70,8 +70,11 @@ class NavMask private constructor(
                         for (poly in Gpkg.polygons(blob)) g.fill(poly, paint)
                     }
                 }
-                layer("bathy_band", "dmin", null) { v -> if (v != null && v >= limitM) OPEN else BLOCKED }
-                layer("depth_area", "drval1", "band") { v -> if (v == null) null else if (v >= limitM) OPEN else BLOCKED }
+                // 0.1 m margin: an area starting exactly at the limit (7.3 m for 24 ft) counts as deep enough,
+                // matching the red shading on the chart (feet/metre rounding would otherwise block it)
+                val edge = limitM - 0.1
+                layer("bathy_band", "dmin", null) { v -> if (v != null && v >= edge) OPEN else BLOCKED }
+                layer("depth_area", "drval1", "band") { v -> if (v == null) null else if (v >= edge) OPEN else BLOCKED }
                 layer("land", null, null) { BLOCKED }
                 layer("shoreline_construction_area", null, null) { BLOCKED }
                 layer("hazard_area", null, null) { BLOCKED }

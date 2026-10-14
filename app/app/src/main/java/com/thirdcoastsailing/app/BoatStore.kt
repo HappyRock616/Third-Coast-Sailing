@@ -6,11 +6,16 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
+/** Minimum-depth choices (ft): the depth steps NOAA Great Lakes charts carry, so the shading matches real chart data. */
+val MIN_DEPTH_CHOICES_FT = listOf(6.0, 12.0, 18.0, 24.0, 30.0)
+const val DEFAULT_MIN_DEPTH_FT = 24.0
+
 /** A saved boat: which template it starts from, sail options, and the owner's own measurements. */
 data class Boat(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val draftFt: Double = 4.9,
+    val minDepthFt: Double = DEFAULT_MIN_DEPTH_FT,     // routing limit and red shading on the chart
     val template: String = PolarTemplates.DEFAULT,
     val symSpinnaker: Boolean = false,
     val asymSpinnaker: Boolean = false,
@@ -56,7 +61,7 @@ class BoatStore(private val context: Context) {
     private fun safeName(n: String) = n.replace(Regex("[^A-Za-z0-9._-]+"), "_").ifEmpty { "boat" }
 
     private fun toJson(b: Boat) = JSONObject()
-        .put("id", b.id).put("name", b.name).put("draftFt", b.draftFt).put("template", b.template)
+        .put("id", b.id).put("name", b.name).put("draftFt", b.draftFt).put("minDepthFt", b.minDepthFt).put("template", b.template)
         .put("sym", b.symSpinnaker).put("asym", b.asymSpinnaker)
         .put("manual", JSONArray().also { a ->
             b.manual.forEach { m -> a.put(JSONObject().put("aws", m.awsKn).put("awa", m.awaDeg).put("bsp", m.bspKn)) }
@@ -64,6 +69,7 @@ class BoatStore(private val context: Context) {
 
     private fun fromJson(o: JSONObject) = Boat(
         id = o.getString("id"), name = o.getString("name"), draftFt = o.optDouble("draftFt", 4.9),
+        minDepthFt = o.optDouble("minDepthFt", DEFAULT_MIN_DEPTH_FT),
         template = o.optString("template", PolarTemplates.DEFAULT),
         symSpinnaker = o.optBoolean("sym"), asymSpinnaker = o.optBoolean("asym"),
         manual = o.optJSONArray("manual")?.let { a ->

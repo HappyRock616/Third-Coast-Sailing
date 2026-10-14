@@ -6,8 +6,8 @@ import org.json.JSONObject
 /**
  * Builds the MapLibre style for the imported lake packages.
  * One vector source per lake (local .pmtiles file); the same set of layers is drawn for each lake.
- * Land is tan/charcoal, water is blue shaded by depth, anything shallower than the depth limit
- * and every hazard is outlined in red.
+ * Land is tan/charcoal, water is blue shaded by depth. Water shallower than the boat's minimum depth
+ * is shaded red with one red line at that depth; hazards are red.
  */
 object ChartStyle {
 
@@ -15,6 +15,7 @@ object ChartStyle {
     private data class Palette(
         val background: String, val land: String, val coast: String,
         val water: List<String>,          // shallow -> deep
+        val tooShallow: String,           // water shallower than the boat's minimum depth (red-tinted)
         val contour: String, val structure: String,
         val hazard: String, val harbor: String, val buoy: String,
     )
@@ -22,6 +23,7 @@ object ChartStyle {
     private val DAY = Palette(
         background = "#E9DDBF", land = "#E9DDBF", coast = "#6E6048",
         water = listOf("#E3F0FA", "#CCE2F4", "#B4D3EC", "#98C1E3", "#7DAFD9"),
+        tooShallow = "#F2C4C0",
         contour = "#5B8DB8", structure = "#4A4A4A",
         hazard = "#D62828", harbor = "#F28C28", buoy = "#707070",
     )
@@ -29,6 +31,7 @@ object ChartStyle {
     private val NIGHT = Palette(
         background = "#2A2D31", land = "#2A2D31", coast = "#8A8F96",
         water = listOf("#2E4B63", "#24405A", "#1C3650", "#152C45", "#10233A"),
+        tooShallow = "#5C2E36",
         contour = "#4D7EA8", structure = "#B0B4B8",
         hazard = "#FF4D4D", harbor = "#F28C28", buoy = "#8A8F96",
     )
@@ -36,10 +39,13 @@ object ChartStyle {
     // Depth band edges in meters (NOAA charts carry metric depth areas): 6, 18, 30, 60 ft
     private val DEPTH_EDGES_M = listOf(1.8, 5.4, 9.1, 18.2)
 
+    // Margin (m) so an area starting exactly at the limit (7.3 m for 24 ft) isn't shaded through feet/metre rounding
+    private const val LIMIT_MARGIN_M = 0.1
+
     /**
      * @param lakes          imported lakes with their .pmtiles files
      * @param night          dark palette when true
-     * @param depthLimitFt   water shallower than this gets a red outline (default 24 ft)
+     * @param depthLimitFt   water shallower than this is shaded red (default 24 ft)
      */
     fun build(lakes: List<Lake>, night: Boolean, depthLimitFt: Double = 24.0): String {
         val p = if (night) NIGHT else DAY
@@ -71,11 +77,10 @@ object ChartStyle {
 
     private fun addWaterLayers(layers: JSONArray, src: String, p: Palette, limitM: Double) {
         // Approximate depth (NCEI grid) underneath the charted data; charted depth areas draw on top
-        layers.put(fill("${src}_bathy", src, "bathy_band", depthColor("dmin", p), opacity = 0.9))
-        layers.put(fill("${src}_depth", src, "depth_area", depthColor("drval1", p)))
-        // Red outline: charted water shallower than the depth limit
-        layers.put(line("${src}_shallow", src, "depth_area", p.hazard, width = 1.0,
-            filter = JSONArray("[\"<\", [\"coalesce\", [\"get\", \"drval1\"], 0], $limitM]")))
+        // Water shallower than the minimum depth gets the red-tinted colour in the same fill (no overlay layer,
+        // so overlapping chart cells can't stack into darker patches or seams)
+        layers.put(fill("${src}_bathy", src, "bathy_band", depthColor("dmin", p, limitM), opacity = 0.9))
+        layers.put(fill("${src}_depth", src, "depth_area", depthColor("drval1", p, limitM)))
     }
 
     /** First land layer of the style: map overlays added below it draw on water only. */
@@ -85,6 +90,10 @@ object ChartStyle {
         layers.put(fill("${src}_land", src, "land", p.land))
         layers.put(line("${src}_coast", src, "coastline", p.coast, width = 0.8))
         layers.put(line("${src}_contour", src, "depth_contour", p.contour, width = 0.5, minzoom = 8.0))
+        // One red line: the charted contour at the minimum depth (NOAA contours are drawn from zoom 8)
+        layers.put(line("${src}_limit", src, "depth_contour", p.hazard, width = 1.5, minzoom = 8.0,
+            filter = JSONArray("[\"all\", [\">=\", [\"coalesce\", [\"get\", \"valdco\"], -1], ${limitM - 0.15}], " +
+                "[\"<=\", [\"coalesce\", [\"get\", \"valdco\"], -1], ${limitM + 0.15}]]")))
         layers.put(fill("${src}_structarea", src, "shoreline_construction_area", p.structure, minzoom = 11.0))
         layers.put(line("${src}_struct", src, "shoreline_construction", p.structure, width = 1.0, minzoom = 11.0))
         // Hazards: obstructions, rocks, wrecks
@@ -100,13 +109,17 @@ object ChartStyle {
     fun tapLayers(lakes: List<Lake>): Array<String> =
         (listOf(BUOY_LAYER) + lakes.map { "lake_${it.id}_harbor" }).toTypedArray()
 
-    /** Step expression: deeper water gets a darker blue. */
-    private fun depthColor(field: String, p: Palette): JSONArray {
-        val e = JSONArray().put("step")
-            .put(JSONArray("[\"coalesce\", [\"get\", \"$field\"], 0]"))
-            .put(p.water[0])
-        DEPTH_EDGES_M.forEachIndexed { i, edge -> e.put(edge).put(p.water[i + 1]) }
-        return e
+    /**
+     * Fill colour by depth: red-tinted where the area's shallow edge is above the minimum depth,
+     * otherwise a step ramp where deeper water gets a darker blue.
+     */
+    private fun depthColor(field: String, p: Palette, limitM: Double): JSONArray {
+        val value = "[\"coalesce\", [\"get\", \"$field\"], 0]"
+        val ramp = JSONArray().put("step").put(JSONArray(value)).put(p.water[0])
+        DEPTH_EDGES_M.forEachIndexed { i, edge -> ramp.put(edge).put(p.water[i + 1]) }
+        return JSONArray().put("case")
+            .put(JSONArray("[\"<\", $value, ${limitM - LIMIT_MARGIN_M}]")).put(p.tooShallow)
+            .put(ramp)
     }
 
     private fun base(id: String, type: String, src: String, layer: String, minzoom: Double?) =
