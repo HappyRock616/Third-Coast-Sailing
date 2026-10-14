@@ -172,16 +172,14 @@ private fun App() {
     var fix by remember { mutableStateOf<BoatFix?>(null) }
     val speedAvg = remember { SpeedAverage() }                 // 15-minute average SOG for the 1/2/3 h dots
     var avgSog by remember { mutableStateOf<Double?>(null) }
-    // Trip track (memory only): on/off from the menu (off clears it); Pause stops recording and the clock, keeping the line
+    // Trip track (memory only). Switch = recording on/off; off keeps the line and stops the clock.
+    // The reset arrow next to the switch clears it. Gaps (switch off, phone asleep) are spanned and counted.
     var tripOn by remember { mutableStateOf(false) }
-    var tripPaused by remember { mutableStateOf(false) }
     val trackPts = remember { mutableStateListOf<GeoPt>() }
-    val trackBreaks = remember { mutableStateListOf<Int>() }   // indices where a new segment starts (after a resume)
     var trackNm by remember { mutableStateOf(0.0) }
-    var tripRunStartMs by remember { mutableStateOf(0L) }       // when the current running stretch began
-    var tripElapsedBeforeMs by remember { mutableStateOf(0L) }  // time from earlier stretches, before the last pause
+    var tripRunStartMs by remember { mutableStateOf(0L) }       // when the current recording stretch began
+    var tripElapsedBeforeMs by remember { mutableStateOf(0L) }  // recording time from earlier stretches
     var tripNowMs by remember { mutableStateOf(0L) }
-    var tripNewSegment by remember { mutableStateOf(false) }    // next point starts a segment (no line or distance across the gap)
     var centerRequest by remember { mutableStateOf(0) }
     // Wind gauge: on/off from the menu, position and size from drag / pinch (remembered)
     var gaugeOn by remember { mutableStateOf(prefs.getBoolean("gauge", false)) }
@@ -377,29 +375,21 @@ private fun App() {
     // Messages at the bottom fade after 10 s
     LaunchedEffect(status) { if (status.isNotEmpty()) { delay(10_000); status = "" } }
 
-    // Trip track: add the fix as a point once the boat has moved far enough (not while paused)
-    LaunchedEffect(fix, tripOn, tripPaused) {
+    // Trip track: add the fix as a point once the boat has moved far enough (only while recording).
+    // The step from the last point always counts, so a gap is spanned by a straight line and its distance included.
+    LaunchedEffect(fix, tripOn) {
         val f = fix ?: return@LaunchedEffect
-        if (!tripOn || tripPaused) return@LaunchedEffect
-        val last = if (tripNewSegment) null else trackPts.lastOrNull()
-        val d = trackStep(last, f) ?: return@LaunchedEffect
-        if (tripNewSegment && trackPts.isNotEmpty()) trackBreaks.add(trackPts.size)
-        tripNewSegment = false
+        if (!tripOn) return@LaunchedEffect
+        val d = trackStep(trackPts.lastOrNull(), f) ?: return@LaunchedEffect
         trackPts.add(GeoPt(f.lat, f.lon))
         trackNm += d
     }
-    // Trip track: switching off clears everything; switching on starts a fresh trip
+    // Trip clock: refresh every minute while recording
     LaunchedEffect(tripOn) {
-        trackPts.clear(); trackBreaks.clear(); trackNm = 0.0
-        tripPaused = false; tripNewSegment = false; tripElapsedBeforeMs = 0L
-        tripRunStartMs = System.currentTimeMillis(); tripNowMs = tripRunStartMs
+        while (tripOn) { tripNowMs = System.currentTimeMillis(); delay(60_000) }
     }
-    // Trip clock: refresh every minute while running
-    LaunchedEffect(tripOn, tripPaused) {
-        while (tripOn && !tripPaused) { tripNowMs = System.currentTimeMillis(); delay(60_000) }
-    }
-    val tripElapsedMs = tripElapsedBeforeMs + if (tripOn && !tripPaused) (tripNowMs - tripRunStartMs).coerceAtLeast(0) else 0L
-    val tripText = if (!tripOn) null else trackLabel(trackNm, tripElapsedMs) + if (tripPaused) " · paused" else ""
+    val tripElapsedMs = tripElapsedBeforeMs + if (tripOn) (tripNowMs - tripRunStartMs).coerceAtLeast(0) else 0L
+    val tripText = if (trackPts.isEmpty()) null else trackLabel(trackNm, tripElapsedMs)
 
     // ---- route editing and weather routing
     val routeStart = fix?.let { GeoPt(it.lat, it.lon) }
@@ -482,14 +472,17 @@ private fun App() {
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
                 gaugeOn = gaugeOn,
-                tripOn = tripOn, onTrip = { tripOn = it },
-                tripPaused = tripPaused,
-                onTripPause = { pause ->
+                tripOn = tripOn, hasTrack = trackPts.isNotEmpty(),
+                onTrip = { on ->
                     val now = System.currentTimeMillis()
-                    if (pause) tripElapsedBeforeMs += (now - tripRunStartMs).coerceAtLeast(0)
-                    else { tripRunStartMs = now; tripNewSegment = true }   // resume: new segment, no line across the gap
+                    if (on) tripRunStartMs = now                                       // clock resumes
+                    else tripElapsedBeforeMs += (now - tripRunStartMs).coerceAtLeast(0)   // clock stops, line stays
                     tripNowMs = now
-                    tripPaused = pause
+                    tripOn = on
+                },
+                onTripReset = {
+                    trackPts.clear(); trackNm = 0.0
+                    tripElapsedBeforeMs = 0L; tripRunStartMs = System.currentTimeMillis(); tripNowMs = tripRunStartMs
                 },
                 onGauge = { gaugeOn = it; prefs.edit().putBoolean("gauge", it).apply() },
                 wxColor = wxColor, wxBarbs = wxBarbs, wxWaves = wxWaves,
@@ -504,7 +497,7 @@ private fun App() {
     ) {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
-                visibleLakes, night, depthLimitFt, trackPts, trackBreaks, tripText, tripOn && !tripPaused && !tripNewSegment, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
+                visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
                 onTap = { ll ->
                     if (placing) {                                   // "+" armed: this tap drops the next route point
                         setRoute(routePts + GeoPt(ll.latitude, ll.longitude))
@@ -713,8 +706,7 @@ private fun MenuSheet(
     onBoats: () -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
-    tripOn: Boolean, onTrip: (Boolean) -> Unit,
-    tripPaused: Boolean, onTripPause: (Boolean) -> Unit,
+    tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
     wxColor: String, wxBarbs: Boolean, wxWaves: Boolean,
     onWxColor: (String) -> Unit, onWxBarbs: (Boolean) -> Unit, onWxWaves: (Boolean) -> Unit,
     gps: GpsInfo, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
@@ -764,10 +756,14 @@ private fun MenuSheet(
             }
 
             Spacer(Modifier.height(8.dp))
-            SwitchRow("Trip track", "Dashed line of where you've been, with distance and time. Turning it off clears it.",
-                tripOn, onTrip)
-            if (tripOn) OutlinedButton(onClick = { onTripPause(!tripPaused) }) {
-                Text(if (tripPaused) "Resume trip" else "Pause trip", color = SignalOrange, fontSize = 13.sp)
+            // Trip track: the switch starts/stops recording; the reset arrow (shown once there is a track) clears it
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Trip track", color = Foam, fontSize = 15.sp)
+                    Text("Dashed line of where you've been, with distance and time", color = Mist, fontSize = 12.sp)
+                }
+                if (hasTrack) TextButton(onClick = onTripReset) { Text("↺", color = SignalOrange, fontSize = 24.sp) }
+                Switch(checked = tripOn, onCheckedChange = onTrip)
             }
 
             MenuDivider()
@@ -959,7 +955,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
 
 /** The chart: MapLibre MapView inside Compose, restyled when lakes or day/night change. */
 @Composable
-private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, track: List<GeoPt>, trackBreaks: List<Int>, trackText: String?, trackLive: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
+private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, track: List<GeoPt>, trackText: String?, trackLive: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
                      frame: WxFrame?, layers: WxLayers, routeStart: GeoPt?, routePts: List<GeoPt>, calc: RouteResult?,
                      buoys: FeatureCollection, selected: LatLng?, onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit) {
     val context = LocalContext.current
@@ -1079,7 +1075,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         WeatherOverlay(map, tick, idleTick, frame, layers)
         RouteOverlay(map, tick, routeStart, routePts, calc, night)
-        TrackOverlay(map, tick, track, trackBreaks, if (trackLive) fix else null, trackText, night)
+        TrackOverlay(map, tick, track, if (trackLive) fix else null, trackText, night)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
     }

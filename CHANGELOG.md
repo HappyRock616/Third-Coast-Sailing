@@ -3,7 +3,7 @@
 ## 0.7.2 (not yet released)
 
 ### Added
-- **Trip track.** A *Trip track* switch in the GPS section of the menu draws a thin dashed line of where the boat has been, labelled with distance and elapsed time (e.g. "12.4 nm · 1:23"). The time updates every minute. *Pause trip* / *Resume trip* (shown under the switch while it's on) stops recording and the clock but keeps the line; resuming starts a new segment, with no line or distance across the gap. The track isn't saved: switching it off clears it. Points are recorded every 15 m (50 m when nearly stopped, so drifting at the dock adds nothing), and only while the app is open.
+- **Trip track.** A *Trip track* switch in the GPS section of the menu records a thin dashed line of where the boat has been, labelled with distance and elapsed time (e.g. "12.4 nm · 1:23", updated every minute). Switching it off stops recording and the clock but keeps the line; switching it back on continues it. The line is continuous: any gap (switched off, phone asleep) is spanned by a straight line and its distance counts, while time spent switched off doesn't. Once there's a track, a reset arrow (↺) appears beside the switch to clear it. Nothing is saved between app sessions. Points are recorded every 15 m (50 m when nearly stopped, so drifting at the dock adds nothing), and only while the app is open.
 
 ### Changed
 - **Minimum depth per boat.** Boat setup has a new *Minimum depth* dropdown (6, 12, 18, 24 or 30 ft; default 24 ft). The weather router and the chart shading both use the active boat's setting.
