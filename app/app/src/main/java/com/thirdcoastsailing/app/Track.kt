@@ -25,6 +25,7 @@ import org.maplibre.android.maps.MapLibreMap
 /*
  * Trip track: a thin dashed line of where the boat has been since the menu toggle was switched on,
  * labelled with distance and elapsed time. Kept in memory only; switching it off clears it.
+ * Pause stops recording and the clock but keeps the line; Resume starts a new segment (no line across the gap).
  * Points are recorded while the app is open (GPS stops when the app is in the background).
  */
 
@@ -55,10 +56,11 @@ fun trackLabel(distNm: Double, elapsedMs: Long): String {
 
 /**
  * Draws the trip track over the chart: thin dashed line through the recorded points to the boat's
- * current position, with the label beside the newest end.
+ * current position (null boat = paused: no live segment), with the label beside the newest end.
  */
 @Composable
-fun TrackOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, boat: BoatFix?, label: String?, night: Boolean) {
+fun TrackOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, breaks: List<Int>, boat: BoatFix?, label: String?,
+                 night: Boolean) {
     val measurer = rememberTextMeasurer()
     Canvas(Modifier.fillMaxSize()) {
         tick                                                         // read so camera moves redraw
@@ -68,7 +70,11 @@ fun TrackOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, boat: BoatFi
 
         val ink = if (night) Foam else Navy                          // dark on the day chart, light at night
         val path = Path()
-        points.forEachIndexed { i, p -> val o = xy(p.lat, p.lon); if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
+        // a resume after a pause starts a new segment: no line across the gap
+        points.forEachIndexed { i, p ->
+            val o = xy(p.lat, p.lon)
+            if (i == 0 || i in breaks) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y)
+        }
         val end = boat?.let { xy(it.lat, it.lon) } ?: xy(points.last().lat, points.last().lon)
         if (boat != null) path.lineTo(end.x, end.y)                  // live segment to the boat
         drawPath(path, ink, style = Stroke(1.6.dp.toPx(), join = StrokeJoin.Round, cap = StrokeCap.Round,
