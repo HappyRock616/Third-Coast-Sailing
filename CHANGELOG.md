@@ -1,9 +1,28 @@
 # Changelog
 
-## 0.7.2 (not yet released)
+## 0.7.3 (not yet released)
 
 ### Added
-- **Trip track.** A *Trip track* switch in the GPS section of the menu records a thin dashed line of where the boat has been, labeled with distance and elapsed time (e.g. "12.4 nm · 1:23", updated every minute). Switching it off stops recording and the clock but keeps the line; switching it back on continues it. The line is continuous: any gap (switched off, phone asleep) is spanned by a straight line and its distance counts, while time spent switched off doesn't. Once there's a track, a reset arrow (↺) appears beside the switch: hold it for 1.2 seconds to clear the track (an orange ring fills while you hold; let go early to cancel). Nothing is saved between app sessions. Points are recorded every 15 m (50 m when nearly stopped, so drifting at the dock adds nothing). While Trip track is on and the app is in the background or the screen is off, the position is still sampled every 5 minutes; Android shows a "Trip track recording" notification during that time. GPS isn't used in the background at any other time, and swiping the app away stops it.
+- **Compact menu.** Narrower, with the logo and THIRD COAST / SAILING at the top. Every switch is an icon and one word (Track, Wind, Gusts, Barbs, Waves, Night, Gauge, Offline) with no descriptions. Boat, Celestial (with a small sextant), Charts and About are large orange-bordered buttons with icons at the bottom. Charts (lake downloads and updates, with the yellow not-for-navigation banner) opens its own screen.
+- **Chart key** in the menu: buoy fill = wind (0, 8, 14, 20, 25+ kt; gray = no report for 2 h), buoy ring = waves (<3, 3–5, 5+ ft), and the marina, shallow-water, track, route and celestial-fix marks.
+
+### Changed
+- **Marina symbol.** Marinas are now an orange rounded tile with an anchor instead of an orange dot, so they never look like buoys.
+- **Trip track reset.** Hold the reset arrow (↺) for 1.2 seconds to clear the track (an orange ring fills while you hold; let go early to cancel). A tap no longer clears it.
+- **GPS only.** The app no longer uses network (cell / Wi-Fi) location at all.
+- **Wave crests drift at every zoom** (they used to stop moving when zoomed out past about one lake). Same battery use: the number of crests depends on screen spacing, not zoom.
+
+### Fixed
+- Trip track zigzags and starbursts. Rough network positions, which were mixed in every 5 seconds, are gone (GPS only). The track also leaves out impossible jumps (a fix that would need far more than twice the GPS speed to reach); after three in a row the new position is accepted, so a real move after a GPS gap still shows. Each track point is the moving average of the last 3 GPS fixes. The boat and navigation still use every GPS fix.
+- Wind / gust color showed as blocks over land when zoomed out or panned away from the downloaded lakes. The color is now drawn only where the Great Lakes wave model has water, so it stays on the lakes at every zoom.
+- Star finder: the 3D boat never appeared. The Android build stores the gzipped boat model unpacked under a shorter name, so the app couldn't find it; it now loads either form.
+- Star finder: every star, the constellation lines and the names are now shown day or night (they were hidden in daylight and faded in at twilight), as a learning aid. Navigation stars, planets and the Moon have floating name labels. Below the horizon is now plain solid ground.
+- Star finder: the orange arrow now works at every level and points to the body the finder was opened for (or one you tap). Off screen it shows the way to turn, worked out from bearing and altitude so it no longer flips when the body is behind you, with a label giving its name, bearing and altitude, or "below the horizon now".
+
+## 0.7.2
+
+### Added
+- **Trip track.** A *Trip track* switch in the GPS section of the menu records a thin dashed line of where the boat has been, labeled with distance and elapsed time (e.g. "12.4 nm · 1:23", updated every minute). Switching it off stops recording and the clock but keeps the line; switching it back on continues it. The line is continuous: any gap (switched off, phone asleep) is spanned by a straight line and its distance counts, while time spent switched off doesn't. Once there's a track, a reset arrow (↺) appears beside the switch to clear it. Nothing is saved between app sessions. Points are recorded every 15 m (50 m when nearly stopped, so drifting at the dock adds nothing). While Trip track is on and the app is in the background or the screen is off, the position is still sampled every 5 minutes; Android shows a "Trip track recording" notification during that time. GPS isn't used in the background at any other time, and swiping the app away stops it.
 - **Celestial navigation trainer.** Menu → *Celestial navigation trainer*. A yellow "Training · not for navigation" banner sits at the top. Pick a skill level (Beginner, Intermediate, Advanced); it applies to all three tabs:
   - **Plan:** today's dawn, sunrise, noon, sunset and dusk times. Beginner and Intermediate also get what to shoot and when, with preset altitude and bearing, plus *Find in sky* and *Add to workbook* buttons. Beginner adds tips and *How to take this sight ›*, which opens the sextant guide. Advanced gets the times only.
   - **Workbook:** one card per sight. The next shot's entry is always showing, headed "Shot 3" (and so on): tap **MARK TIME · SHOT 3** the instant the body touches the horizon and it writes the time, to the second, into the time box; then type the sextant reading in the angle box and tap *Enter ✓*. Either box can be typed by hand (a time from your watch, or a correction). Take 3–5 shots: they're averaged, and any off the trend are struck through with one sentence saying why (for example "5.2′ higher than the line through your other shots, likely a misread drum or the body held above the horizon, so it isn't used."). The working is laid out line by line the way a navigator writes it, each line with its equation:
@@ -43,21 +62,12 @@
 - **Adding and moving route points.** "+" now drops the next point straight away, a quarter of the screen height ahead (so the spacing follows the zoom): the first point goes along the boat's course (straight up the screen when stopped or without GPS), later points continue the last leg. To move a point, hold it for about half a second without moving (the phone buzzes), then drag; quick taps, swipes, pans and pinches never move a point. Routes are limited to 6 points (the "+" fades at the limit).
 - **Minimum depth per boat.** Boat setup has a new *Minimum depth* dropdown (6, 12, 18, 24 or 30 ft; default 24 ft). The weather router and the chart shading both use the active boat's setting.
 - **Shallow water is shaded red, with one red line at the limit.** Water shallower than the minimum depth gets a light red fill instead of red outlines around every shallow area. This removes the confusing extra lines at chart seams, dredged channels and band edges. A single red line marks the charted contour at the minimum depth (from zoom 8 inward).
-- **Disclaimer banner.** A yellow "Not for navigation · Reference use only" banner sits at the top of the Charts screen.
-- **Compact menu.** Narrower, with the logo and THIRD COAST / SAILING at the top. Every switch is an icon and one word (Track, Wind, Gusts, Barbs, Waves, Night, Gauge, Offline) with no descriptions. Boat, Celestial (with a small sextant), Charts and About are large orange-bordered buttons with icons at the bottom; Charts (lake downloads and updates) opens its own screen.
-- **Chart key** in the menu: buoy fill = wind (0, 8, 14, 20, 25+ kt; gray = no report for 2 h), buoy ring = waves (<3, 3–5, 5+ ft), and the marina, shallow-water, track, route and celestial-fix marks.
-- **Marina symbol.** Marinas are now an orange rounded tile with an anchor instead of an orange dot, so they never look like buoys.
+- **Disclaimer banner.** A yellow "Not for navigation · Reference use only" banner sits at the top of the Charts section of the menu.
 - **Selection ring.** A blue ring marks the marina or buoy whose info card is open.
 - **Lower battery use with waves on.** The wave-crest animation updates about 10 times a second instead of every screen frame (60–120 times a second). It looks the same and uses a fraction of the power.
 - **Smaller app.** The APK now carries the map engine only for ARM phones and tablets (64- and 32-bit), dropping the two x86 emulator copies: about 27 MB smaller (74 MB → about 47 MB). The app no longer installs on x86 emulators or Intel Chromebooks.
 
 ### Fixed
-- Trip track zigzags and starbursts. The app now uses GPS only: rough network (cell / Wi-Fi) positions, which were mixed in every 5 seconds, are no longer used. The track also leaves out impossible jumps (a fix that would need far more than twice the GPS speed to reach); after three in a row the new position is accepted, so a real move after a GPS gap still shows. The boat and navigation still use every GPS fix. Each track point is the moving average of the last 3 GPS fixes, which takes out the remaining wobble.
-- Wind / gust color showed as blocks over land when zoomed out or panned away from the downloaded lakes. The color is now drawn only where the Great Lakes wave model has water, so it stays on the lakes at every zoom.
-- Wave crests now drift at every zoom (they used to stop moving when zoomed out past about one lake). Same battery use: the number of crests depends on screen spacing, not zoom.
-- Star finder: the 3D boat never appeared. The Android build stores the gzipped boat model unpacked under a shorter name, so the app couldn't find it; it now loads either form.
-- Star finder: every star, the constellation lines and the names are now shown day or night (they were hidden in daylight and faded in at twilight), as a learning aid. Navigation stars, planets and the Moon have floating name labels. Below the horizon is now plain solid ground.
-- Star finder: the orange arrow now works at every level and points to the body the finder was opened for (or one you tap). Off screen it shows the way to turn, worked out from bearing and altitude so it no longer flips when the body is behind you, with a label giving its name, bearing and altitude, or "below the horizon now".
 - The wind gauge's "target" speed label could be cut off at the edge; it now sits on the inner side of the dot and stays inside the gauge.
 - The weather box read "Updated updating…" during an update; it now reads "Updating…" (and "Never updated" before the first one).
 - The heading box showed "---°" with no course yet; it now shows a dash.
