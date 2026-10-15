@@ -110,6 +110,38 @@ object SextantProcedure {
         "sextant_step_rate",
     )
 
+    // ---- plotting: what the workbook's small plot shows, done by hand on a plotting sheet
+
+    val plotWhere = SextantStep(
+        "plot_where", "Where you looked",
+        "You faced the body to measure its height above the horizon. The direction you faced is its true bearing, " +
+            "Zn, worked out in the workbook.\n\n" +
+            "Plot that compass bearing, not the angle off the bow: the bearing is the same whichever way the boat " +
+            "points. The boat's heading only decides which side of the boat you looked from.",
+        "sextant_step_plot_where",
+    )
+    val plotLine = SextantStep(
+        "plot_line", "Plot the line",
+        "1. Mark the assumed position (AP) from the workbook.\n\n" +
+            "2. Draw a line through it toward the body, at Zn: the direction you looked.\n\n" +
+            "3. Measure the intercept along it: toward the body if Ho is bigger than Hc, away if smaller (1′ of " +
+            "altitude = 1 nautical mile).\n\n" +
+            "4. Draw the line of position at right angles there. Everyone on a huge circle round the body's ground " +
+            "point sees it at the same height; near you that circle is this straight line. You are somewhere on it.\n\n" +
+            "Each sight in the workbook has this plot at the end; tap it to enlarge.",
+        "sextant_step_plot_line",
+    )
+    val plotFix = SextantStep(
+        "plot_fix", "Cross the lines for a fix",
+        "Plot a line for each body. Where the lines cross is your fix. Bodies spread round the sky (about 120° " +
+            "apart for three) cross at good angles; two bodies close in bearing give a long, uncertain crossing.\n\n" +
+            "If the boat moved between sights, slide each earlier line along the course by the distance run (a " +
+            "running fix); the workbook does this for you.\n\n" +
+            "The circle round the fix is where you most likely are, about 95% of the time. The fix plot at the end " +
+            "of the workbook shows your lines, the circle and the GPS position.",
+        "sextant_step_plot_fix",
+    )
+
     /** The steps for a body, in order. Index error once per session (first time only). */
     fun steps(kind: BodyKind, includeIndexError: Boolean = true): List<SextantStep> = buildList {
         if (includeIndexError) add(indexError)
@@ -117,10 +149,12 @@ object SextantProcedure {
         add(preset); add(bringDown); add(rock)
         add(when (kind) { BodyKind.SUN -> touchSun; BodyKind.MOON -> touchMoon; else -> touchStar })
         add(mark); add(read); add(repeat); add(rate)
+        add(plotWhere); add(plotLine); add(plotFix)
     }
 
     /** All distinct steps (for preloading the pictures). */
-    val all: List<SextantStep> = listOf(indexError, shades, preset, bringDown, rock, touchSun, touchMoon, touchStar, mark, read, repeat, rate)
+    val all: List<SextantStep> = listOf(indexError, shades, preset, bringDown, rock, touchSun, touchMoon, touchStar, mark, read, repeat, rate,
+        plotWhere, plotLine, plotFix)
 }
 
 /** A plain-language suggestion: shoot this, at about this time, preset to this, face this way. */

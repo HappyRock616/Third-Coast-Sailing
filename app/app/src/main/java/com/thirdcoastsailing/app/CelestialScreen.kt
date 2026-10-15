@@ -317,7 +317,7 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
             val sp = remember(f) { savedPlot(f) }
             Text("Saved ${fixLabel(f.timeMs)} · ${f.settings.level.title} · eye ${"%.0f".format(f.settings.heightOfEyeFt)} ft · read-only", color = Mist, fontSize = 12.sp)
             for (w in sp.works) SightCard(w, f.settings.level, gps, position, store, typed, onFind, onGuide, onAlmanac, readOnly = true)
-            FixCard(sp, onSave = null)
+            FixCard(sp, gps = null, onSave = null)
             Spacer(Modifier.height(40.dp))
             return@Column
         }
@@ -390,7 +390,7 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
         }
 
         // ---- result; Save fix keeps it in the log and starts a fresh workbook
-        FixCard(plot, onSave = { store.saveFix(); typed.clear() })
+        FixCard(plot, gps, onSave = { store.saveFix(); typed.clear() })
         Spacer(Modifier.height(40.dp))
     }
 
@@ -503,10 +503,14 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
         for (line in w.lines) WorkRow(s, line, level, store, typed, readOnly,
             onAlmanac = if (level == SkillLevel.ADVANCED) null else almanacTarget(s.body, shot.timeMs, line.field)?.let { t -> { onAlmanac(t) } })
 
+        // ---- the line of position: a small plot to teach plotting; tap for the large, labelled one
         val lop = w.lop
-        if (lop != null) Text(
-            "Line of position: Zn %05.1f°, %.1f nm %s".format(lop.znDeg, kotlin.math.abs(lop.interceptNm), if (lop.interceptNm >= 0) "toward" else "away"),
-            color = Foam, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+        if (lop != null) {
+            val course = plotCourse(s.shots.filter { !it.hsDeg.isNaN() }, if (readOnly) null else gps)
+            var big by remember(s.id) { mutableStateOf(false) }
+            LopInsetRow(lop, course, onEnlarge = { big = true })
+            if (big) LopPlotDialog(lop, course, onClose = { big = false })
+        }
         else if (level == SkillLevel.ADVANCED) Text("Fill in every line to plot this sight.", color = Mist, fontSize = 12.sp)
     }
 }
@@ -650,7 +654,7 @@ private fun hintFor(k: FieldKind) = when (k) {
 }
 
 @Composable
-private fun FixCard(plot: CelestialPlot, onSave: (() -> Unit)?) {
+private fun FixCard(plot: CelestialPlot, gps: BoatFix?, onSave: (() -> Unit)?) {
     if (plot.lops.isEmpty()) return
     Card {
         val f = plot.fix
@@ -662,6 +666,9 @@ private fun FixCard(plot: CelestialPlot, onSave: (() -> Unit)?) {
         }
         Text("Fix  ${formatLat(f.position.lat)}  ${formatLon(f.position.lon)}", color = Foam, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Text("At ${hhmmss(f.timeMs)} from ${f.lops.size} lines · they cross within %.1f nm".format(f.residualNm), color = Mist, fontSize = 13.sp)
+
+        // ---- the fix plotted: lines, where you looked, the circle, GPS / DR and the boat
+        FixPlot(f, plotCourse(plot.works.flatMap { w -> w.sight.shots.filter { !it.hsDeg.isNaN() } }, gps), Modifier.padding(top = 6.dp))
 
         // ---- how sure: the circle drawn round the fix on the chart, and what it's based on
         val u = f.uncertainty
