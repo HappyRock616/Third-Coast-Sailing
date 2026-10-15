@@ -126,7 +126,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
         uniformMat(lineProg, "uVP", cam.skyViewProj)
         GLES20.glLineWidth((1.6f * scale).coerceIn(1f, 4f))
         lineBuf?.let { lb ->
-            val a = 0.55f * shade.artAlpha
+            val a = 0.40f + 0.20f * shade.artAlpha                  // always shown: a learning aid, not the real sky
             if (a > 0.01f && lineVerts > 0) {
                 GLES20.glUniform4f(loc(lineProg, "uCol"), 0.47f * a, 0.65f * a, 0.80f * a, a)
                 attrib(lineProg, "aDir", lb, 3, 3, 0)
@@ -142,7 +142,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
         starBuf?.let { sb ->
             GLES20.glUseProgram(pointProg)
             uniformMat(pointProg, "uVP", cam.skyViewProj)
-            GLES20.glUniform1f(loc(pointProg, "uLim"), shade.limitingMag)
+            GLES20.glUniform1f(loc(pointProg, "uLim"), ALL_STARS_MAG)   // every star in the catalog, day or night
             GLES20.glUniform1f(loc(pointProg, "uScale"), scale * (65f / v.fovYDeg.toFloat()).coerceIn(0.7f, 1.8f))
             attrib(pointProg, "aDir", sb, 3, 8, 0)
             attrib(pointProg, "aMag", sb, 1, 8, 3)
@@ -262,7 +262,11 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
 
     /** Boat mesh into vertex / index buffers, hull decal into a mipmapped texture. */
     private fun loadBoat() {
-        val m = mesh ?: runCatching { BoatMesh.decode(context.assets.open("finder/boat.tcsm.gz").use { it.readBytes() }) }.getOrNull()
+        // the build tools store "boat.tcsm.gz" unpacked as "boat.tcsm": try that name first, then the original
+        val m = mesh ?: listOf("finder/boat.tcsm", "finder/boat.tcsm.gz").firstNotNullOfOrNull { name ->
+            runCatching { BoatMesh.decode(context.assets.open(name).use { it.readBytes() }) }
+                .onFailure { android.util.Log.w("StarFinder", "boat mesh $name: $it") }.getOrNull()
+        }
         mesh = m ?: return
         val ids = IntArray(2); GLES20.glGenBuffers(2, ids, 0)
         boatVbo = ids[0]; boatIbo = ids[1]
@@ -357,6 +361,9 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     }
 
     companion object {
+        /** Star points are shown down to this magnitude whatever the sky brightness (the catalog stops at 4.5). */
+        private const val ALL_STARS_MAG = 5.0f
+
         private const val PRECISION = """
             #ifdef GL_FRAGMENT_PRECISION_HIGH
             precision highp float;
@@ -397,9 +404,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
                 float daz = 0.0;
                 if (length(h) > 1e-4 && length(sh) > 1e-4) daz = acos(clamp(dot(normalize(h), normalize(sh)), -1.0, 1.0)) * RAD;
                 if (alt < 0.0) {
-                    vec3 dh = vec3(normalize(h + vec2(1e-6, 0.0)) * 0.99996, 0.0087);
-                    float gam = acos(clamp(dot(dh, uSun), -1.0, 1.0)) * RAD;
-                    gl_FragColor = vec4(sky(0.5, daz, gam) * (0.28 + 0.12 * exp(alt / 6.0)), 1.0);
+                    gl_FragColor = vec4(0.118, 0.149, 0.188, 1.0);       // the horizon is a solid wall: plain ground
                 } else {
                     float gam = acos(clamp(dot(d, uSun), -1.0, 1.0)) * RAD;
                     gl_FragColor = vec4(sky(alt, daz, gam), 1.0);

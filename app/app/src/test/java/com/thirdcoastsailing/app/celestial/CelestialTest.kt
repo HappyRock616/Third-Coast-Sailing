@@ -127,6 +127,25 @@ class CelestialTest {
         assertEquals(10.0, PhonePose.fromQuaternion(s, 0.0, 0.0, s, 0, 10.0).azDeg, 1e-6)
     }
 
+    @Test fun finderArrowTurnsTheShortWayEvenBehindYou() {
+        // facing WSW, 25° up: Markab at 120°, 48° up is behind you to the left and above
+        val pose = PhonePose.look(255.0, 25.0)
+        val right = (pose.forward cross pose.up).unit()
+        val d = V3.altAz(48.0, 120.0)
+        assertTrue("turn left", (d dot right) < 0.0)
+        assertTrue("look up", (d dot pose.up) > 0.0)
+        // a body just right of straight behind still says turn right (no flip)
+        assertTrue((V3.altAz(10.0, 255.0 + 170.0) dot right) > 0.0)
+    }
+
+    @Test fun boatMeshDecodesPackedOrUnpacked() {
+        val gz = java.io.File("src/main/assets/finder/boat.tcsm.gz").takeIf { it.exists() }
+            ?: java.io.File("app/src/main/assets/finder/boat.tcsm.gz")
+        val bytes = gz.readBytes()
+        val raw = java.util.zip.GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
+        assertEquals(BoatMesh.decode(bytes).vertexCount, BoatMesh.decode(raw).vertexCount)
+    }
+
     @Test fun traditionalAssumedPositionGivesWholeLha() {
         val ap = AlmanacTables.traditionalAssumedPosition(LatLon(43.37, -86.74), 123.456)
         assertEquals(43.0, ap.lat, 1e-9)

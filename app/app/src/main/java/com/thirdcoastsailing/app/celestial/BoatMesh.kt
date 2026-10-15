@@ -27,8 +27,10 @@ class BoatMesh(
     companion object {
         const val FLOATS = 12
 
-        fun decode(gz: ByteArray): BoatMesh {
-            val raw = GZIPInputStream(ByteArrayInputStream(gz)).use { it.readBytes() }
+        /** Decodes the mesh, gzipped or not (the Android build unpacks .gz assets, dropping the extension). */
+        fun decode(bytes: ByteArray): BoatMesh {
+            val gzipped = bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+            val raw = if (gzipped) GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() } else bytes
             val b = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
             val magic = ByteArray(4).also { b.get(it) }
             require(String(magic, Charsets.US_ASCII) == "TCSM") { "not a boat mesh" }

@@ -70,6 +70,7 @@ import com.thirdcoastsailing.app.celestial.Sky3D
 import com.thirdcoastsailing.app.celestial.Sky3DObject
 import com.thirdcoastsailing.app.celestial.SkyBody
 import com.thirdcoastsailing.app.celestial.SkyObjectKind
+import com.thirdcoastsailing.app.celestial.SightReduction
 import com.thirdcoastsailing.app.celestial.SkyShade
 import com.thirdcoastsailing.app.celestial.StarCatalog
 import com.thirdcoastsailing.app.celestial.StarFinder
@@ -96,7 +97,11 @@ import kotlin.math.sin
  *
  *  - The boat (lower part of the screen) lies on its last course inside a compass ring fixed to north, seen from
  *    behind in the direction the phone faces. A vertical line runs from the boat up to the bearing box.
- *  - BEGINNER: an orange arrow points to the suggested body (on screen: at it; off screen: from the edge).
+ *  - Every star, the constellation lines and the names are shown day or night (a learning aid, not the real sky).
+ *    Below the horizon is solid ground: nothing is drawn through it.
+ *  - An orange arrow points to the target body at every level: the body the finder was opened for, or one tapped.
+ *    On screen it points at the body; off screen it points from the middle toward it, worked out from bearing and
+ *    altitude so it never flips, with the body's name, bearing and altitude.
  *  - Tap a star, planet, Moon or Sun to select it; "Use <name>" sends it back to the workbook.
  *  - Pinch to zoom. Phones without a compass sensor: drag to look around.
  *  - ✕ (top left) or Back returns to the workbook.
@@ -119,7 +124,7 @@ fun StarFinderScreen(
     position: LatLon,
     positionIsGps: Boolean,
     boatHeadingDeg: Double?,           // last course; null = not known yet (boat drawn heading north)
-    suggested: SkyBody?,               // BEGINNER: orange arrow to this body
+    suggested: SkyBody?,               // orange arrow to this body (any level); a tapped body replaces it
     pickLabel: String?,                // e.g. "Use" (null = no picking, just looking)
     onPick: (SkyBody) -> Unit,
     onClose: () -> Unit,
@@ -203,6 +208,12 @@ fun StarFinderScreen(
 
     BackHandler(onBack = onClose)
     var selected by remember { mutableStateOf<Sky3DObject?>(null) }
+    // the arrow's body: a tapped one, else the one the finder was opened for; position worked out directly so it's
+    // known even below the horizon (the sky list leaves out bodies well below it)
+    val arrowBody: SkyBody? = selected?.body ?: suggested
+    val arrowAltAz = remember(arrowBody, sky) {
+        arrowBody?.let { b -> runCatching { SightReduction.altAz(b, position, System.currentTimeMillis()) }.getOrNull() }
+    }
     val currentSky by rememberUpdatedState(sky)
     val measurer = rememberTextMeasurer()
 
@@ -255,9 +266,8 @@ fun StarFinderScreen(
             val base = cam.projectBoat(V3(0.0, 0.0, 4.0))
             val boxBottom = bearingBoxTop(k) + 90f * k
             drawLine(Foam.copy(alpha = 0.9f), Offset(size.width / 2, base.y), Offset(size.width / 2, boxBottom), 2f * k.coerceAtLeast(1f))
-            // beginner: arrow to the suggested body
-            val target = s?.objects?.firstOrNull { it.body != null && suggested != null && it.body.name == suggested.name }
-            if (target != null) drawTargetArrow(cam, target, k)
+            // arrow to the target body (any level)
+            if (arrowBody != null && arrowAltAz != null) drawTargetArrow(cam, arrowBody.name, arrowAltAz.hcDeg, arrowAltAz.znDeg, measurer, k)
             selected?.let { o ->
                 val p = cam.projectSky(V3.altAz(o.altDeg, o.azDeg))
                 if (p.onScreen) drawCircle(SignalOrange, 24f * k, Offset(p.x, p.y), style = Stroke(3f * k))
@@ -312,26 +322,26 @@ private fun Note(text: String) {
 
 /** Names next to navigational stars, planets, Moon and Sun; constellation names (fading in as the sky darkens). */
 private fun DrawScope.drawSkyLabels(s: Sky3D, cam: FinderCameras, shade: SkyShade, m: TextMeasurer, k: Float) {
-    val art = shade.artAlpha
-    if (art > 0.02f) for (n in s.names) {
+    // constellation names: always shown (a learning aid), stronger when the sky is dark
+    val art = 0.7f + 0.3f * shade.artAlpha
+    for (n in s.names) {
         if (n.altDeg < 2.0) continue
         val p = cam.projectSky(V3.altAz(n.altDeg, n.azDeg)); if (!p.onScreen) continue
-        val a = art * (if (n.nav) 0.8f else 0.45f)
+        val a = art * (if (n.nav) 0.8f else 0.55f)
         val t = m.measure(n.name.uppercase(), TextStyle(fontSize = textSp(17 * k, 10f), color = Color(0xFF78A5CD).copy(alpha = a), letterSpacing = 1.sp))
         drawText(t, topLeft = Offset(p.x - t.size.width / 2, p.y - t.size.height / 2))
     }
     for (o in s.objects) {
         if (o.name == null || o.altDeg < 0) continue
         val p = cam.projectSky(V3.altAz(o.altDeg, o.azDeg)); if (!p.onScreen) continue
-        val vis = when (o.kind) {
-            SkyObjectKind.MOON, SkyObjectKind.SUN -> 1f
-            else -> SkyShade.starAlpha(o.mag, shade.limitingMag.toDouble()).toFloat()
-        }
-        if (vis < 0.25f) continue
+        // every named body (navigation stars, planets, Moon, Sun) gets a floating label on a soft backing, day or night
         val col = when (o.kind) { SkyObjectKind.PLANET -> Color(0xFFFFD696); else -> Foam }
         val r = when (o.kind) { SkyObjectKind.MOON -> 14f; SkyObjectKind.SUN -> 18f; else -> ((4.8 - o.mag) * 2.1).toFloat().coerceAtLeast(1.5f) } * k
-        val t = m.measure(o.name, TextStyle(fontSize = textSp(22 * k, 13f), color = col.copy(alpha = vis)))
-        drawText(t, topLeft = Offset(p.x + r + 6f * k, p.y - t.size.height / 2))
+        val t = m.measure(o.name, TextStyle(fontSize = textSp(22 * k, 13f), color = col))
+        val tl = Offset(p.x + r + 8f * k, p.y - t.size.height / 2)
+        drawRoundRect(Color(0xFF0A1B2E).copy(alpha = 0.6f), tl - Offset(5f * k, 1f * k),
+            Size(t.size.width + 10f * k, t.size.height + 2f * k), CornerRadius(7f * k))
+        drawText(t, topLeft = tl)
     }
 }
 
@@ -366,12 +376,17 @@ private fun DrawScope.drawBearingBox(cam: FinderCameras, m: TextMeasurer, k: Flo
     drawText(small, topLeft = Offset(size.width / 2 - small.size.width / 2, top + h * 0.76f - small.size.height / 2))
 }
 
-/** Orange arrow to the suggested body: pointing at it when on screen, from the screen edge toward it when not. */
-private fun DrawScope.drawTargetArrow(cam: FinderCameras, o: Sky3DObject, k: Float) {
-    val dir = V3.altAz(o.altDeg, o.azDeg)
+/**
+ * Orange arrow to the target body. On screen: a ring round it and an arrow pointing at it. Off screen: an arrow from
+ * the middle of the sky toward it, with its name, bearing and altitude. The direction comes from where the body is
+ * relative to the phone's own right and up axes (not from the screen projection), so it never flips when the body is
+ * behind you. Below the horizon the label says so.
+ */
+private fun DrawScope.drawTargetArrow(cam: FinderCameras, name: String, altDeg: Double, azDeg: Double, m: TextMeasurer, k: Float) {
+    val dir = V3.altAz(altDeg, azDeg)
     val p = cam.projectSky(dir)
     val orange = SignalOrange
-    if (p.onScreen) {
+    if (p.onScreen && altDeg > 0.0) {
         val c = Offset(p.x, p.y)
         drawCircle(orange, 26f * k, c, style = Stroke(4f * k))
         val tip = c + Offset(-33f * k, 33f * k)
@@ -382,11 +397,11 @@ private fun DrawScope.drawTargetArrow(cam: FinderCameras, o: Sky3DObject, k: Flo
         drawPath(head, orange)
         return
     }
-    // off screen: direction on screen from the center toward the body (flipped when it is behind the phone)
+    // off screen: which way to turn, from the body's direction against the phone's right and up axes (screen y is down)
+    val rightAxis = (cam.pose.forward cross cam.pose.up).unit()
+    var dx = (dir dot rightAxis).toFloat(); val dy = -(dir dot cam.pose.up).toFloat()
+    if (abs(dx) < 1e-3 && abs(dy) < 1e-3) dx = 1f                     // straight behind: point sideways
     val cx = size.width / 2; val cy = size.height * 0.35f
-    var dx = p.x - cx; var dy = p.y - cy
-    if (!p.inFront) { dx = -dx; dy = -dy }
-    if (abs(dx) < 1e-3 && abs(dy) < 1e-3) dx = 1f
     val ang = atan2(dy, dx)
     val r = minOf(size.width, size.height) * 0.36f
     val tip = Offset(cx + cos(ang) * r, cy + sin(ang) * r)
@@ -399,6 +414,14 @@ private fun DrawScope.drawTargetArrow(cam: FinderCameras, o: Sky3DObject, k: Flo
         lineTo(tip.x + cos(right) * 30f * k, tip.y + sin(right) * 30f * k); close()
     }
     drawPath(head, orange)
+    // label behind the arrow: name, bearing, altitude (or below the horizon)
+    val txt = if (altDeg < 0.0) "$name · below the horizon now" else "%s  %03.0f°  %.0f° up".format(name, azDeg, altDeg)
+    val t = m.measure(txt, TextStyle(fontSize = textSp(18 * k, 12f), color = Foam, fontWeight = FontWeight.Bold))
+    val lx = (tail.x - cos(ang) * 24f * k - t.size.width / 2).coerceIn(8f * k, size.width - t.size.width - 8f * k)
+    val ly = (tail.y - sin(ang) * 34f * k - t.size.height / 2).coerceIn(8f * k, size.height - t.size.height - 8f * k)
+    drawRoundRect(Navy, Offset(lx - 8f * k, ly - 4f * k), Size(t.size.width + 16f * k, t.size.height + 8f * k), CornerRadius(8f * k))
+    drawRoundRect(orange, Offset(lx - 8f * k, ly - 4f * k), Size(t.size.width + 16f * k, t.size.height + 8f * k), CornerRadius(8f * k), style = Stroke(2f * k))
+    drawText(t, topLeft = Offset(lx, ly))
 }
 
 /**

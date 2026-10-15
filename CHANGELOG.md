@@ -49,6 +49,9 @@
 - **Smaller app.** The APK now carries the map engine only for ARM phones and tablets (64- and 32-bit), dropping the two x86 emulator copies: about 27 MB smaller (74 MB → about 47 MB). The app no longer installs on x86 emulators or Intel Chromebooks.
 
 ### Fixed
+- Star finder: the 3D boat never appeared. The Android build stores the gzipped boat model unpacked under a shorter name, so the app couldn't find it; it now loads either form.
+- Star finder: every star, the constellation lines and the names are now shown day or night (they were hidden in daylight and faded in at twilight), as a learning aid. Navigation stars, planets and the Moon have floating name labels. Below the horizon is now plain solid ground.
+- Star finder: the orange arrow now works at every level and points to the body the finder was opened for (or one you tap). Off screen it shows the way to turn, worked out from bearing and altitude so it no longer flips when the body is behind you, with a label giving its name, bearing and altitude, or "below the horizon now".
 - The wind gauge's "target" speed label could be cut off at the edge; it now sits on the inner side of the dot and stays inside the gauge.
 - The weather box read "Updated updating…" during an update; it now reads "Updating…" (and "Never updated" before the first one).
 - The heading box showed "---°" with no course yet; it now shows a dash.

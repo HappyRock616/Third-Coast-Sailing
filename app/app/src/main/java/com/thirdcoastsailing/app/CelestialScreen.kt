@@ -184,8 +184,9 @@ fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
 
             // ---- star finder over everything; ✕ / Back come back here
             finder?.let { req ->
+                // the arrow's body: the one the finder was opened for (any level); BEGINNER with none gets the next suggestion
                 val beginnerTarget = remember(req, set.level) {
-                    if (set.level == SkillLevel.BEGINNER) req.target ?: nextSuggested(set.level, position) else null
+                    req.target ?: if (set.level == SkillLevel.BEGINNER) nextSuggested(set.level, position) else null
                 }
                 StarFinderScreen(
                     position = position, positionIsGps = gpsPos != null,
