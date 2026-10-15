@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -118,6 +119,7 @@ private val WaveMid = Color(0xFF7FD3F0)
 private val WaveHigh = Color(0xFFF2C14E)
 private val WaveBig = Color(0xFFE5484D)
 
+private const val WAVE_FRAME_MS = 100L      // wave animation step: about 10 updates a second
 private const val WAVE_MIN_ZOOM = 7.0      // waves stop animating (and are drawn still) when zoomed out past this
 
 /** Colour for a wind speed in knots, from the scale above. */
@@ -246,10 +248,11 @@ fun WeatherOverlay(map: MapLibreMap?, tick: Int, idleTick: Int, frame: WxFrame?,
         }
     }
 
-    // wave animation clock: runs only while crests are shown and zoomed in enough
+    // wave animation clock: runs only while crests are shown and zoomed in enough, at about 10 updates a second
+    // (the crests drift slowly, so this looks the same as every frame for a fraction of the battery)
     var nowMs by remember { mutableLongStateOf(0L) }
     val animate = waves.isNotEmpty() && m.cameraPosition.zoom >= WAVE_MIN_ZOOM
-    LaunchedEffect(animate) { if (animate) while (true) withFrameMillis { nowMs = it } }
+    LaunchedEffect(animate) { if (animate) while (true) { withFrameMillis { nowMs = it }; delay(WAVE_FRAME_MS) } }
 
     Canvas(modifier.fillMaxSize().onSizeChanged { wPx = it.width.toFloat(); hPx = it.height.toFloat() }) {
         tick                                                     // read so camera moves redraw
