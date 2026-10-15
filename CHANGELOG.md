@@ -11,7 +11,6 @@
 - **Shallow water is shaded red, with one red line at the limit.** Water shallower than the minimum depth gets a light red fill instead of red outlines around every shallow area. This removes the confusing extra lines at chart seams, dredged channels and band edges. A single red line marks the charted contour at the minimum depth (from zoom 8 inward).
 - **Disclaimer banner.** A yellow "Not for navigation · Reference use only" banner sits at the top of the Charts section of the menu.
 - **Selection ring.** A blue ring marks the marina or buoy whose info card is open.
-
 - **Smaller app.** The APK now carries the map engine only for ARM phones and tablets (64- and 32-bit), dropping the two x86 emulator copies: about 27 MB smaller (74 MB → about 47 MB). The app no longer installs on x86 emulators or Intel Chromebooks.
 
 ### Fixed
