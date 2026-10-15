@@ -52,7 +52,7 @@
 - The router treated water starting exactly at the limit (for example 24–30 ft areas with a 24 ft limit) as too shallow, because of feet-to-metres rounding. It now matches the chart shading.
 
 ### Planned for this release
-- Store description (with the name-origin note) once the app goes to a store.
+- Store description (with the name note) once the app goes to a store. It must say up front that the charts, weather and routing cover the Great Lakes only, and that the celestial navigation trainer works anywhere in the world.
 
 ## 0.7.1
 - Turned off R8 code shrinking in release builds (0.7 crashed on start).

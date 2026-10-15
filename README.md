@@ -1,6 +1,11 @@
 # Third Coast Sailing
 
-Offline Great Lakes chart viewer, weather and sail-routing app for Android.
+Offline Great Lakes chart viewer, weather and sail-routing app for Android, with a celestial navigation trainer.
+
+**Where it works**
+
+- **Charts, weather, buoys and routing: the Great Lakes only** (and the inland lakes connected to them). The charts, wind and wave forecasts and buoy reports all come from US NOAA sources for the Great Lakes; other waters aren't covered and aren't planned.
+- **Celestial navigation trainer: anywhere in the world.** The almanac, star finder, sight planning and sight workbook are calculated for any position and any date, so you can practise anywhere, at sea or at home. Fixes are plotted on the chart where there's a Great Lakes chart; elsewhere the workbook gives the position in numbers.
 
 > **Not for navigation.** Official NOAA charts and notices govern. Use at your own risk.
 
