@@ -100,17 +100,27 @@ object SextantProcedure {
         "sextant_step_repeat",
     )
 
+    val rate = SextantStep(
+        "rate", "Rate the conditions",
+        "In the workbook, pick how hard the sight was. Easy: calm, steady deck, sharp horizon. Moderate: some " +
+            "motion, fair horizon. Hard: rolling hard, rain or spray, a hazy or dim horizon, or the body low " +
+            "(under 15°).\n\n" +
+            "Harder sights count for less in the fix, and make the circle round the fix bigger: that circle shows " +
+            "where you most likely are. At Beginner level every sight is treated as Moderate.",
+        "sextant_step_rate",
+    )
+
     /** The steps for a body, in order. Index error once per session (first time only). */
     fun steps(kind: BodyKind, includeIndexError: Boolean = true): List<SextantStep> = buildList {
         if (includeIndexError) add(indexError)
         if (kind == BodyKind.SUN) add(shades)
         add(preset); add(bringDown); add(rock)
         add(when (kind) { BodyKind.SUN -> touchSun; BodyKind.MOON -> touchMoon; else -> touchStar })
-        add(mark); add(read); add(repeat)
+        add(mark); add(read); add(repeat); add(rate)
     }
 
     /** All distinct steps (for preloading the pictures). */
-    val all: List<SextantStep> = listOf(indexError, shades, preset, bringDown, rock, touchSun, touchMoon, touchStar, mark, read, repeat)
+    val all: List<SextantStep> = listOf(indexError, shades, preset, bringDown, rock, touchSun, touchMoon, touchStar, mark, read, repeat, rate)
 }
 
 /** A plain-language suggestion: shoot this, at about this time, preset to this, face this way. */

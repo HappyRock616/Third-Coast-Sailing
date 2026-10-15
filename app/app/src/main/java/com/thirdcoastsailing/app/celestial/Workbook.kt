@@ -71,7 +71,25 @@ data class WorkbookSight(
     val limb: Limb = defaultLimb(body),
     val shots: List<Shot> = emptyList(),
     val entries: Map<Field, Double> = emptyMap(),
+    val condition: SightCondition = SightCondition.MODERATE,
 )
+
+/**
+ * How hard the sight was to take, which sets how much it can be trusted. Two parts (arc-minutes = nm):
+ *  - scatter: the random error of one shot, which averaging several shots reduces (Starpath gives about 0.2′ ideal,
+ *    0.4′ good, 1–2′ poor for experienced observers; these allow a little more for a small boat);
+ *  - fixed: errors every shot of the sight shares, which averaging does not reduce (dip and refraction differing
+ *    from the tables, the clock, index error). These are judgement values, not published figures.
+ * A sight's error is √(scatter² ÷ shots kept + fixed²). BEGINNER sights are always MODERATE.
+ */
+enum class SightCondition(val title: String, val description: String, val scatterMin: Double, val fixedMin: Double) {
+    EASY("Easy", "Calm, steady deck, sharp horizon", 0.5, 0.8),
+    MODERATE("Moderate", "Some motion, fair horizon", 1.0, 1.5),
+    HARD("Hard", "Rolling hard, rain or spray, hazy or dim horizon, or the body low (under 15°)", 2.5, 3.0);
+
+    /** Error of the averaged sight (arc-minutes) from `shots` shots. */
+    fun sightErrorMin(shots: Int): Double = sqrt(scatterMin * scatterMin / shots.coerceAtLeast(1) + fixedMin * fixedMin)
+}
 
 fun defaultLimb(b: SkyBody): Limb = if (b == SkyBody.Sun || b == SkyBody.Moon) Limb.LOWER else Limb.CENTER
 
@@ -139,6 +157,9 @@ data class WorkLop(
     val interceptNm: Double,
     val dr: LatLon,                        // boat position at the sight (for advancing to the fix time)
     val drIsGps: Boolean = true,
+    val sigmaNm: Double = SightCondition.MODERATE.sightErrorMin(3),   // how far this line may be off (1 standard deviation)
+    val condition: SightCondition = SightCondition.MODERATE,
+    val shotsUsed: Int = 1,
 ) {
     val footPoint: LatLon get() = travel(assumed, znDeg, interceptNm)
     fun segment(halfLengthNm: Double = 10.0): Pair<LatLon, LatLon> =
@@ -162,25 +183,16 @@ data class WorkFix(
 }
 
 /**
- * How sure the fix is, as a circle around it that should hold the true position about 95% of the time.
- *
- *   s  = spread of the lines about the fix = √(Σr² ÷ (n − 2))      (only with 3 or more lines; r = each line's miss)
- *   σ  = sight error used = the larger of s and 1.0′               (1′ is typical for a hand-held sextant at sea)
- *   G  = geometry factor = √(trace (AᵀA)⁻¹), A = rows (sin Zn, cos Zn)   (3 lines 120° apart: 1.15; worse as
- *        the lines get closer to parallel)
- *   R  = 2 × σ × G                                                 (2 drms ≈ 95%)
- * Minutes of arc and nautical miles are the same thing here.
+ * How sure the fix is: a circle that should hold the true position about 95% of the time (2 drms).
+ * Each line counts by how trustworthy its sight was (SightCondition and the number of shots); lines crossing at wide
+ * angles pin the position better than nearly parallel ones. With 3 or more lines, if they disagree with each other
+ * more than their conditions suggest, the circle is enlarged by that factor (`enlarged`).
  */
 data class FixUncertainty(
-    val lines: Int,
-    val sumSqNm2: Double,
-    val spreadNm: Double?,          // s, null with only 2 lines (two lines always meet exactly)
-    val sigmaNm: Double,            // σ
-    val geometry: Double,           // G
-    val radius95Nm: Double,         // R
-) {
-    companion object { const val TYPICAL_SIGHT_ERROR_NM = 1.0 }
-}
+    val radius95Nm: Double,
+    val enlarged: Double?,                  // > 1 when the lines' own spread made the circle bigger; null if not
+    val lines: List<WorkLop>,               // each with its sigmaNm, condition and shots used
+)
 
 object Workbook {
 
@@ -385,7 +397,9 @@ object Workbook {
 
         // ADVANCED: plot only once every line has been typed
         val complete = !adv || lines.all { it.value != null }
-        val lop = if (complete) WorkLop(body.name, t, LatLon(uApLat, uApLon), uZn, uA, dr, shot.gps) else null
+        val cond = if (set.level == SkillLevel.BEGINNER) SightCondition.MODERATE else s.condition
+        val lop = if (complete) WorkLop(body.name, t, LatLon(uApLat, uApLon), uZn, uA, dr, shot.gps,
+            cond.sightErrorMin(used), cond, used) else null
         return SightWork(s, shot, used, lines, extract, lop)
     }
 
@@ -496,25 +510,29 @@ object Workbook {
             if (run < 0.01) l else l.copy(assumed = travel(l.assumed, bearing(l.dr, last.dr), run))
         }
         val ref = last.dr
+        // nearly parallel lines can't make a fix (checked on the bare geometry)
+        var g11 = 0.0; var g12 = 0.0; var g22 = 0.0
+        for (l in adv) { val nx = sin(l.znDeg * DEG); val ny = cos(l.znDeg * DEG); g11 += nx * nx; g12 += nx * ny; g22 += ny * ny }
+        if (g11 * g22 - g12 * g12 < 0.03 * adv.size * adv.size) return null
+        // weighted least squares: each line counts by 1 / σ² (its sight's condition and shots)
         var a11 = 0.0; var a12 = 0.0; var a22 = 0.0; var b1 = 0.0; var b2 = 0.0
         val rows = adv.map { l ->
             val nx = sin(l.znDeg * DEG); val ny = cos(l.znDeg * DEG)
             val ex = norm180(l.assumed.lon - ref.lon) * 60.0 * cos(ref.lat * DEG); val ny0 = (l.assumed.lat - ref.lat) * 60.0
-            Triple(nx, ny, l.interceptNm + nx * ex + ny * ny0)
+            doubleArrayOf(nx, ny, l.interceptNm + nx * ex + ny * ny0, 1.0 / (l.sigmaNm * l.sigmaNm))
         }
-        for ((nx, ny, c) in rows) { a11 += nx * nx; a12 += nx * ny; a22 += ny * ny; b1 += nx * c; b2 += ny * c }
+        for (r in rows) { val (nx, ny, c, w) = r.toList(); a11 += w * nx * nx; a12 += w * nx * ny; a22 += w * ny * ny; b1 += w * nx * c; b2 += w * ny * c }
         val det = a11 * a22 - a12 * a12
-        if (det < 0.03 * adv.size * adv.size) return null
         val x = (b1 * a22 - b2 * a12) / det
         val y = (a11 * b2 - a12 * b1) / det
-        val sumSq = rows.sumOf { (nx, ny, c) -> val r = nx * x + ny * y - c; r * r }
-        val rms = sqrt(sumSq / rows.size)
-        // uncertainty: sight error from the spread of the lines (or the typical 1′), times the geometry factor
+        val miss = rows.map { r -> r[0] * x + r[1] * y - r[2] }
+        val rms = sqrt(miss.sumOf { it * it } / rows.size)
+        // uncertainty: covariance (AᵀWA)⁻¹; enlarged if the lines disagree more than their conditions suggest
         val n = rows.size
-        val spread = if (n >= 3) sqrt(sumSq / (n - 2)) else null
-        val sigma = maxOf(spread ?: 0.0, FixUncertainty.TYPICAL_SIGHT_ERROR_NM)
-        val gdop = sqrt((a11 + a22) / det)
-        val unc = FixUncertainty(n, sumSq, spread, sigma, gdop, 2.0 * sigma * gdop)
+        val chi = if (n >= 3) sqrt(rows.indices.sumOf { rows[it][3] * miss[it] * miss[it] } / (n - 2)) else null
+        val scale = chi?.takeIf { it > 1.0 }
+        val drms = sqrt((a11 + a22) / det) * (scale ?: 1.0)
+        val unc = FixUncertainty(2.0 * drms, scale, adv)
         val pos = LatLon(ref.lat + y / 60.0, norm180(ref.lon + x / 60.0 / cos(ref.lat * DEG)))
         return WorkFix(pos, last.timeMs, adv, rms, last.dr, last.drIsGps, unc)
     }

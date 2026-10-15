@@ -70,6 +70,7 @@ import com.thirdcoastsailing.app.celestial.Guidance
 import com.thirdcoastsailing.app.celestial.LatLon
 import com.thirdcoastsailing.app.celestial.Limb
 import com.thirdcoastsailing.app.celestial.Shot
+import com.thirdcoastsailing.app.celestial.SightCondition
 import com.thirdcoastsailing.app.celestial.SightPlanner
 import com.thirdcoastsailing.app.celestial.SightWork
 import com.thirdcoastsailing.app.celestial.SkillLevel
@@ -435,6 +436,10 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
             }
         }
         if (readOnly && s.limb != Limb.CENTER) Text(if (s.limb == Limb.LOWER) "Lower limb" else "Upper limb", color = Mist, fontSize = 12.sp)
+        if (level != SkillLevel.BEGINNER) {
+            if (readOnly) Text("Conditions: ${s.condition.title}", color = Mist, fontSize = 12.sp)
+            else ConditionDropdown(s.condition) { c -> store.updateSight(s.id) { it.copy(condition = c) } }
+        }
         if (!readOnly && (s.body == SkyBody.Sun || s.body == SkyBody.Moon)) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (l in listOf(Limb.LOWER, Limb.UPPER)) FilterChip(selected = s.limb == l,
                 onClick = { store.updateSight(s.id) { it.copy(limb = l) } },
@@ -577,6 +582,20 @@ private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: B
     }
 }
 
+/** How hard the sight was: Easy / Moderate / Hard, which sets how much the line counts and the fix's circle. */
+@Composable
+private fun ConditionDropdown(current: SightCondition, onPick: (SightCondition) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }) { Text("Conditions: ${current.title}  ▾", color = Foam) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (c in SightCondition.entries) DropdownMenuItem(
+                text = { Column { Text(c.title, fontWeight = FontWeight.Bold); Text(c.description, fontSize = 12.sp) } },
+                onClick = { open = false; onPick(c) })
+        }
+    }
+}
+
 @Composable
 private fun Extract(w: SightWork) {
     Column(Modifier.fillMaxWidth().background(Navy, RoundedCornerShape(8.dp)).horizontalScroll(rememberScrollState()).padding(8.dp)) {
@@ -644,24 +663,18 @@ private fun FixCard(plot: CelestialPlot, onSave: (() -> Unit)?) {
         Text("Fix  ${formatLat(f.position.lat)}  ${formatLon(f.position.lon)}", color = Foam, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Text("At ${hhmmss(f.timeMs)} from ${f.lops.size} lines · they cross within %.1f nm".format(f.residualNm), color = Mist, fontSize = 13.sp)
 
-        // ---- how sure: the circle drawn round the fix on the chart, with the working
+        // ---- how sure: the circle drawn round the fix on the chart, and what it's based on
         val u = f.uncertainty
         if (u != null) {
             HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 6.dp))
-            Text("How sure is this fix?", color = Foam, fontWeight = FontWeight.Bold)
-            val mono = FontFamily.Monospace
-            if (u.spreadNm != null) {
-                Text("Spread of the lines  s = √(Σr² ÷ (n − 2))", color = Mist, fontSize = 12.sp)
-                Text("  = √(%.2f ÷ %d) = %.1f′".format(u.sumSqNm2, u.lines - 2, u.spreadNm), color = Mist, fontFamily = mono, fontSize = 12.sp)
-            } else Text("Two lines always meet exactly, so their spread can't be measured; a third body would show it.", color = Mist, fontSize = 12.sp)
-            Text("Sight error used  σ = the larger of s and 1.0′ (typical for a hand-held sextant)", color = Mist, fontSize = 12.sp)
-            Text("  = %.1f′".format(u.sigmaNm), color = Mist, fontFamily = mono, fontSize = 12.sp)
-            Text("Geometry  G = √(trace (AᵀA)⁻¹), from the lines' bearings (3 lines 120° apart: 1.15; bigger as they get closer to parallel)",
+            Text("Within %.1f nm, about 95%% of the time".format(u.radius95Nm), color = Foam, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Shown as a circle round the fix on the chart. It comes from how each sight was rated and how many shots it had, and from how widely the lines cross.",
                 color = Mist, fontSize = 12.sp)
-            Text("  = %.2f".format(u.geometry), color = Mist, fontFamily = mono, fontSize = 12.sp)
-            Text("Radius (about 95%)  R = 2 × σ × G", color = Mist, fontSize = 12.sp)
-            Text("  = 2 × %.1f × %.2f = %.1f nm".format(u.sigmaNm, u.geometry, u.radius95Nm), color = Foam, fontFamily = mono, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Text("Drawn as a circle round the fix on the chart.", color = Mist, fontSize = 12.sp)
+            for (l in u.lines) Text("${l.bodyName} · ${l.condition.title} · ${l.shotsUsed} shot${if (l.shotsUsed == 1) "" else "s"} · ±%.1f′".format(l.sigmaNm),
+                color = Mist, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            u.enlarged?.let { k ->
+                Text("The lines disagree more than their conditions suggest, so the circle is %.1f× bigger.".format(k), color = SignalOrange, fontSize = 12.sp)
+            }
         }
 
         // ---- error against the GPS (or the typed DR when there was no GPS)

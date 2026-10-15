@@ -84,11 +84,13 @@ class CelestialTest {
         val fix = Workbook.fix(works.mapNotNull { it.lop })
         assertNotNull(fix)
         assertTrue("workbook fix within 0.3 nm (table rounding)", distanceNm(fix!!.position, truth) < 0.3)
-        // uncertainty: perfect sights -> the typical 1' sight error; 3 well-spread lines -> geometry about 1.2
+        // uncertainty: Moderate sights of 1 shot each (σ = √(1 + 1.5²) = 1.80′), 3 lines spread round the sky
         val u = fix.uncertainty!!
-        assertEquals(1.0, u.sigmaNm, 1e-9)
-        assertTrue(u.geometry in 1.1..2.0)
-        assertEquals(2.0 * u.sigmaNm * u.geometry, u.radius95Nm, 1e-9)
+        assertEquals(null, u.enlarged)                                        // perfect sights: no extra spread
+        assertTrue("radius ${u.radius95Nm}", u.radius95Nm in 3.5..6.0)
+        // the same sights rated Hard give a bigger circle
+        val hard = Workbook.fix(works.map { Workbook.work(it.sight.copy(condition = SightCondition.HARD), set.copy(level = SkillLevel.INTERMEDIATE)) }.mapNotNull { it.lop })!!
+        assertTrue(hard.uncertainty!!.radius95Nm > 1.8 * u.radius95Nm)
         assertTrue(fix.offsetNm > 7.0 && fix.drIsGps)                       // DR was set 8 nm off
     }
 

@@ -9,6 +9,7 @@ import com.thirdcoastsailing.app.celestial.Field
 import com.thirdcoastsailing.app.celestial.LatLon
 import com.thirdcoastsailing.app.celestial.Limb
 import com.thirdcoastsailing.app.celestial.Shot
+import com.thirdcoastsailing.app.celestial.SightCondition
 import com.thirdcoastsailing.app.celestial.SightWork
 import com.thirdcoastsailing.app.celestial.SkillLevel
 import com.thirdcoastsailing.app.celestial.SkyBody
@@ -127,7 +128,7 @@ class CelestialStore(context: Context) {
 
         fun sightsJson(list: List<WorkbookSight>) = JSONArray().apply {
             for (w in list) put(JSONObject().apply {
-                put("id", w.id); put("body", w.body.name); put("limb", w.limb.name)
+                put("id", w.id); put("body", w.body.name); put("limb", w.limb.name); put("cond", w.condition.name)
                 put("shots", JSONArray().apply {
                     for (sh in w.shots) put(JSONArray().put(sh.timeMs)
                         .put(if (sh.hsDeg.isNaN()) JSONObject.NULL else sh.hsDeg)     // JSON can't hold NaN
@@ -148,7 +149,8 @@ class CelestialStore(context: Context) {
             val eo = so.optJSONObject("entries")
             val entries = mutableMapOf<Field, Double>()
             if (eo != null) for (k in eo.keys()) runCatching { entries[Field.valueOf(k)] = eo.getDouble(k) }
-            WorkbookSight(so.getLong("id"), body, runCatching { Limb.valueOf(so.optString("limb")) }.getOrDefault(Limb.CENTER), shots, entries)
+            WorkbookSight(so.getLong("id"), body, runCatching { Limb.valueOf(so.optString("limb")) }.getOrDefault(Limb.CENTER), shots, entries,
+                runCatching { SightCondition.valueOf(so.optString("cond")) }.getOrDefault(SightCondition.MODERATE))
         }
 
         fun fromJson(o: JSONObject): CelestialState {
