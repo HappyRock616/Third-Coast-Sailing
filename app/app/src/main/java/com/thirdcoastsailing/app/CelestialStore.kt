@@ -31,16 +31,31 @@ data class CelestialState(
     val sights: List<WorkbookSight> = emptyList(),
     val manualDr: LatLon? = null,
     val nextId: Long = 1,
+    val saved: List<SavedFix> = emptyList(),        // earlier fixes this trip, oldest first, each with its workbook
 )
 
-/** What the workbook works out from the state: each sight's working, the lines of position and the fix. */
-data class CelestialPlot(val works: List<SightWork>, val lops: List<WorkLop>, val fix: WorkFix?)
+/** A fix kept for the trip log: where and when, and the workbook (sights and settings) that produced it. */
+data class SavedFix(val timeMs: Long, val position: LatLon, val settings: WorkbookSettings, val sights: List<WorkbookSight>)
+
+/** A point on the celestial fix log drawn on the chart. `saved` = false for the current, not yet saved, fix. */
+data class LogFix(val timeMs: Long, val position: LatLon, val saved: Boolean)
+
+/**
+ * What the workbook works out from the state: each sight's working, the lines of position, the fix, and the fix
+ * log (saved fixes, then the current fix if there is one) for the chart.
+ */
+data class CelestialPlot(val works: List<SightWork>, val lops: List<WorkLop>, val fix: WorkFix?, val log: List<LogFix> = emptyList())
 
 fun celestialPlot(s: CelestialState): CelestialPlot {
     val works = s.sights.map { runCatching { Workbook.work(it, s.settings) }.getOrNull() ?: SightWork(it, null, 0, emptyList(), emptyList(), null) }
     val lops = works.mapNotNull { it.lop }
-    return CelestialPlot(works, lops, runCatching { Workbook.fix(lops) }.getOrNull())
+    val fix = runCatching { Workbook.fix(lops) }.getOrNull()
+    val log = s.saved.map { LogFix(it.timeMs, it.position, true) } + listOfNotNull(fix?.let { LogFix(it.timeMs, it.position, false) })
+    return CelestialPlot(works, lops, fix, log)
 }
+
+/** A saved fix's workbook, worked again for viewing (read-only). */
+fun savedPlot(f: SavedFix): CelestialPlot = celestialPlot(CelestialState(settings = f.settings, sights = f.sights))
 
 class CelestialStore(context: Context) {
 
@@ -65,8 +80,14 @@ class CelestialStore(context: Context) {
 
     fun removeSight(id: Long) = update { st -> st.copy(sights = st.sights.filter { it.id != id }) }
 
-    /** The reset arrow: clear every sight (settings stay). */
-    fun clearSights() = update { it.copy(sights = emptyList()) }
+    /** Keep the current fix and its workbook in the trip log, and start a fresh workbook for the next fix. */
+    fun saveFix() = update { st ->
+        val fix = celestialPlot(st).fix ?: return@update st
+        st.copy(saved = st.saved + SavedFix(fix.timeMs, fix.position, st.settings, st.sights), sights = emptyList())
+    }
+
+    /** The reset arrow: clear the current sights, every saved fix and the fix log (settings stay). */
+    fun clearAll() = update { it.copy(sights = emptyList(), saved = emptyList()) }
 
     private fun load(): CelestialState =
         runCatching { prefs.getString(KEY, null)?.let { fromJson(JSONObject(it)) } }.getOrNull() ?: CelestialState()
@@ -82,17 +103,51 @@ class CelestialStore(context: Context) {
             put("mb", s.settings.pressureMb)
             s.manualDr?.let { put("dr", JSONArray().put(it.lat).put(it.lon)) }
             put("nextId", s.nextId)
-            put("sights", JSONArray().apply {
-                for (w in s.sights) put(JSONObject().apply {
-                    put("id", w.id); put("body", w.body.name); put("limb", w.limb.name)
-                    put("shots", JSONArray().apply {
-                        for (sh in w.shots) put(JSONArray().put(sh.timeMs)
-                            .put(if (sh.hsDeg.isNaN()) JSONObject.NULL else sh.hsDeg)     // JSON can't hold NaN
-                            .put(sh.dr.lat).put(sh.dr.lon))
-                    })
-                    put("entries", JSONObject().apply { for ((f, v) in w.entries) put(f.name, v) })
+            put("sights", sightsJson(s.sights))
+            put("saved", JSONArray().apply {
+                for (f in s.saved) put(JSONObject().apply {
+                    put("t", f.timeMs); put("lat", f.position.lat); put("lon", f.position.lon)
+                    put("settings", settingsJson(f.settings)); put("sights", sightsJson(f.sights))
                 })
             })
+        }
+
+        fun settingsJson(s: WorkbookSettings) = JSONObject().apply {
+            put("level", s.level.name); put("hoe", s.heightOfEyeFt); put("ie", s.indexErrorMin); put("tc", s.temperatureC); put("mb", s.pressureMb)
+        }
+
+        fun settingsFrom(o: JSONObject) = WorkbookSettings(
+            level = runCatching { SkillLevel.valueOf(o.optString("level")) }.getOrDefault(SkillLevel.BEGINNER),
+            heightOfEyeFt = o.optDouble("hoe", DEFAULT_HEIGHT_OF_EYE_FT),
+            indexErrorMin = o.optDouble("ie", 0.0),
+            temperatureC = o.optDouble("tc", 10.0),
+            pressureMb = o.optDouble("mb", 1010.0),
+        )
+
+        fun sightsJson(list: List<WorkbookSight>) = JSONArray().apply {
+            for (w in list) put(JSONObject().apply {
+                put("id", w.id); put("body", w.body.name); put("limb", w.limb.name)
+                put("shots", JSONArray().apply {
+                    for (sh in w.shots) put(JSONArray().put(sh.timeMs)
+                        .put(if (sh.hsDeg.isNaN()) JSONObject.NULL else sh.hsDeg)     // JSON can't hold NaN
+                        .put(sh.dr.lat).put(sh.dr.lon))
+                })
+                put("entries", JSONObject().apply { for ((f, v) in w.entries) put(f.name, v) })
+            })
+        }
+
+        fun sightsFrom(arr: JSONArray): List<WorkbookSight> = (0 until arr.length()).mapNotNull { i ->
+            val so = arr.getJSONObject(i)
+            val body = SkyBody.byName(so.optString("body")) ?: return@mapNotNull null
+            val sh = so.optJSONArray("shots") ?: JSONArray()
+            val shots = (0 until sh.length()).map { j ->
+                val a = sh.getJSONArray(j)
+                Shot(a.getLong(0), if (a.isNull(1)) Double.NaN else a.getDouble(1), LatLon(a.getDouble(2), a.getDouble(3)))
+            }
+            val eo = so.optJSONObject("entries")
+            val entries = mutableMapOf<Field, Double>()
+            if (eo != null) for (k in eo.keys()) runCatching { entries[Field.valueOf(k)] = eo.getDouble(k) }
+            WorkbookSight(so.getLong("id"), body, runCatching { Limb.valueOf(so.optString("limb")) }.getOrDefault(Limb.CENTER), shots, entries)
         }
 
         fun fromJson(o: JSONObject): CelestialState {
@@ -104,21 +159,17 @@ class CelestialStore(context: Context) {
                 pressureMb = o.optDouble("mb", 1010.0),
             )
             val dr = o.optJSONArray("dr")?.let { LatLon(it.getDouble(0), it.getDouble(1)) }
-            val arr = o.optJSONArray("sights") ?: JSONArray()
-            val sights = (0 until arr.length()).mapNotNull { i ->
-                val so = arr.getJSONObject(i)
-                val body = SkyBody.byName(so.optString("body")) ?: return@mapNotNull null
-                val sh = so.optJSONArray("shots") ?: JSONArray()
-                val shots = (0 until sh.length()).map { j ->
-                    val a = sh.getJSONArray(j)
-                    Shot(a.getLong(0), if (a.isNull(1)) Double.NaN else a.getDouble(1), LatLon(a.getDouble(2), a.getDouble(3)))
-                }
-                val eo = so.optJSONObject("entries")
-                val entries = mutableMapOf<Field, Double>()
-                if (eo != null) for (k in eo.keys()) runCatching { entries[Field.valueOf(k)] = eo.getDouble(k) }
-                WorkbookSight(so.getLong("id"), body, runCatching { Limb.valueOf(so.optString("limb")) }.getOrDefault(Limb.CENTER), shots, entries)
+            val sights = sightsFrom(o.optJSONArray("sights") ?: JSONArray())
+            val sa = o.optJSONArray("saved") ?: JSONArray()
+            val saved = (0 until sa.length()).mapNotNull { i ->
+                runCatching {
+                    val f = sa.getJSONObject(i)
+                    SavedFix(f.getLong("t"), LatLon(f.getDouble("lat"), f.getDouble("lon")),
+                        settingsFrom(f.optJSONObject("settings") ?: JSONObject()), sightsFrom(f.optJSONArray("sights") ?: JSONArray()))
+                }.getOrNull()
             }
-            return CelestialState(set, sights, dr, o.optLong("nextId", (sights.maxOfOrNull { it.id } ?: 0) + 1))
+            val maxId = (sights + saved.flatMap { it.sights }).maxOfOrNull { it.id } ?: 0
+            return CelestialState(set, sights, dr, maxOf(o.optLong("nextId", maxId + 1), maxId + 1), saved)
         }
     }
 }

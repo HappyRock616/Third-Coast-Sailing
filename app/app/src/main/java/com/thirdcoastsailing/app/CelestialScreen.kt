@@ -284,15 +284,47 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
     val set = st.settings
     var confirmClear by remember { mutableStateOf(false) }
     var addMenu by remember { mutableStateOf(false) }
+    var viewing by remember { mutableStateOf<Int?>(null) }              // index of a saved fix's workbook; null = current
+    var pickMenu by remember { mutableStateOf(false) }
     val typed = remember { mutableStateMapOf<String, String>() }        // what's in each text box (sight:field)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // ---- which workbook: the current one, or a saved fix's (by fix time); ↺ clears everything
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(onClick = { pickMenu = true }) {
+                    Text("Workbook: " + (viewing?.let { st.saved.getOrNull(it) }?.let { "Fix ${fixLabel(it.timeMs)}" } ?: "Current") + "  ▾", color = Foam)
+                }
+                DropdownMenu(expanded = pickMenu, onDismissRequest = { pickMenu = false }) {
+                    DropdownMenuItem(text = { Text("Current", fontWeight = if (viewing == null) FontWeight.Bold else FontWeight.Normal) },
+                        onClick = { pickMenu = false; viewing = null })
+                    for (i in st.saved.indices.reversed()) DropdownMenuItem(
+                        text = { Text("Fix ${fixLabel(st.saved[i].timeMs)}", fontWeight = if (viewing == i) FontWeight.Bold else FontWeight.Normal) },
+                        onClick = { pickMenu = false; viewing = i })
+                }
+            }
+            // ↺ appears once anything is entered: clears the sights, saved fixes and the fix log on the chart
+            if (st.sights.isNotEmpty() || st.saved.isNotEmpty()) TextButton(onClick = { confirmClear = true }) {
+                Text("↺", color = SignalOrange, fontSize = 24.sp)
+            }
+        }
+
+        // ---- a saved fix's workbook: read-only
+        val v = viewing?.takeIf { it < st.saved.size }                    // gone if everything was cleared
+        if (v != null) {
+            val f = st.saved[v]
+            val sp = remember(f) { savedPlot(f) }
+            Text("Saved ${fixLabel(f.timeMs)} · ${f.settings.level.title} · eye ${"%.0f".format(f.settings.heightOfEyeFt)} ft · read-only", color = Mist, fontSize = 12.sp)
+            for (w in sp.works) SightCard(w, f.settings.level, gps, position, store, typed, onFind, onGuide, onAlmanac, readOnly = true)
+            FixCard(sp, onSave = null)
+            Spacer(Modifier.height(40.dp))
+            return@Column
+        }
+
         // ---- settings for every sight
         Card {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Sight settings", color = Foam, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                // ↺ clears the sights, their lines and the fix (also on the chart)
-                if (st.sights.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("↺", color = SignalOrange, fontSize = 24.sp) }
             }
             if (set.level == SkillLevel.BEGINNER) EyeDropdown(set.heightOfEyeFt) { h ->
                 store.update { it.copy(settings = it.settings.copy(heightOfEyeFt = h)) }
@@ -356,16 +388,16 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
             }
         }
 
-        // ---- result
-        FixCard(plot)
+        // ---- result; Save fix keeps it in the log and starts a fresh workbook
+        FixCard(plot, onSave = { store.saveFix(); typed.clear() })
         Spacer(Modifier.height(40.dp))
     }
 
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
-        title = { Text("Clear all sights?") },
-        text = { Text("This removes every sight, and their lines and fix from the chart.") },
-        confirmButton = { TextButton(onClick = { store.clearSights(); typed.clear(); confirmClear = false }) { Text("Clear", color = SignalOrange) } },
+        title = { Text("Clear everything?") },
+        text = { Text("This removes the current sights, every saved fix and its workbook, and the fix log from the chart.") },
+        confirmButton = { TextButton(onClick = { store.clearAll(); typed.clear(); viewing = null; confirmClear = false }) { Text("Clear", color = SignalOrange) } },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
     )
 }
@@ -390,17 +422,20 @@ private fun EyeDropdown(current: Double, onPick: (Double) -> Unit) {
 @Composable
 private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: LatLon, store: CelestialStore,
                       typed: MutableMap<String, String>, onFind: (SkyBody, Long) -> Unit,
-                      onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit) {
+                      onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit, readOnly: Boolean = false) {
     val s = w.sight
     var showExtract by remember(s.id) { mutableStateOf(false) }
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(s.body.name, color = Foam, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (level != SkillLevel.ADVANCED) TextButton(onClick = { onGuide(s.body) }) { Text("Guide", color = SignalOrange) }
-            TextButton(onClick = { onFind(s.body, s.id) }) { Text("★ Find", color = SignalOrange) }
-            TextButton(onClick = { store.removeSight(s.id) }) { Text("Remove", color = Mist, fontSize = 12.sp) }
+            if (!readOnly) {
+                if (level != SkillLevel.ADVANCED) TextButton(onClick = { onGuide(s.body) }) { Text("Guide", color = SignalOrange) }
+                TextButton(onClick = { onFind(s.body, s.id) }) { Text("★ Find", color = SignalOrange) }
+                TextButton(onClick = { store.removeSight(s.id) }) { Text("Remove", color = Mist, fontSize = 12.sp) }
+            }
         }
-        if (s.body == SkyBody.Sun || s.body == SkyBody.Moon) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (readOnly && s.limb != Limb.CENTER) Text(if (s.limb == Limb.LOWER) "Lower limb" else "Upper limb", color = Mist, fontSize = 12.sp)
+        if (!readOnly && (s.body == SkyBody.Sun || s.body == SkyBody.Moon)) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (l in listOf(Limb.LOWER, Limb.UPPER)) FilterChip(selected = s.limb == l,
                 onClick = { store.updateSight(s.id) { it.copy(limb = l) } },
                 label = { Text(if (l == Limb.LOWER) "Lower limb" else "Upper limb") })
@@ -421,7 +456,7 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
                 Text(if (sh.hsDeg.isNaN()) "—" else Workbook.format(sh.hsDeg, FieldKind.ALTITUDE), color = if (used) Foam else Mist,
                     fontFamily = FontFamily.Monospace, fontSize = 14.sp, textDecoration = strike, modifier = Modifier.weight(1f))
                 if (used) Text("✓", color = Color(0xFF6FCF97), fontWeight = FontWeight.Bold)
-                TextButton(onClick = { store.updateSight(s.id) { x -> x.copy(shots = x.shots.filterIndexed { j, _ -> j != i }) } }) {
+                if (!readOnly) TextButton(onClick = { store.updateSight(s.id) { x -> x.copy(shots = x.shots.filterIndexed { j, _ -> j != i }) } }) {
                     Text("✕", color = Mist)
                 }
             }
@@ -430,7 +465,7 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
         }
 
         // ---- the next shot, always ready: MARK TIME writes the time into its box; either box can be typed
-        NextShot(s, typed, gps, position, store, beginner = level == SkillLevel.BEGINNER)
+        if (!readOnly) NextShot(s, typed, gps, position, store, beginner = level == SkillLevel.BEGINNER)
 
         val shot = w.shot ?: return@Card
         Text("Using ${w.shotsUsed} of ${valid.size} shots: ${hhmmss(shot.timeMs)} (UT ${utc(shot.timeMs)}), Hs ${Workbook.format(shot.hsDeg, FieldKind.ALTITUDE)}",
@@ -460,7 +495,7 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
         HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 6.dp))
 
         // ---- the working, line by line
-        for (line in w.lines) WorkRow(s, line, level, store, typed,
+        for (line in w.lines) WorkRow(s, line, level, store, typed, readOnly,
             onAlmanac = if (level == SkillLevel.ADVANCED) null else almanacTarget(s.body, shot.timeMs, line.field)?.let { t -> { onAlmanac(t) } })
 
         val lop = w.lop
@@ -556,7 +591,7 @@ private fun Extract(w: SightWork) {
  */
 @Composable
 private fun WorkRow(s: WorkbookSight, line: WorkLine, level: SkillLevel, store: CelestialStore, typed: MutableMap<String, String>,
-                    onAlmanac: (() -> Unit)?) {
+                    readOnly: Boolean, onAlmanac: (() -> Unit)?) {
     val kind = line.field.kind()
     Column(Modifier.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -565,6 +600,11 @@ private fun WorkRow(s: WorkbookSight, line: WorkLine, level: SkillLevel, store: 
                 Text(Workbook.format(line.expected, kind), color = Foam, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 if (onAlmanac != null) Text(" ›", color = SignalOrange, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clickable(onClick = onAlmanac).padding(horizontal = 6.dp))
+            } else if (readOnly) {
+                // a saved ADVANCED workbook: what was typed, struck through if it was wrong
+                Text(line.value?.let { Workbook.format(it, kind) } ?: "—", color = if (line.check == Check.WRONG) Alarm else Foam,
+                    fontFamily = FontFamily.Monospace, fontSize = 14.sp,
+                    textDecoration = if (line.check == Check.WRONG) TextDecoration.LineThrough else TextDecoration.None)
             } else {
                 val key = "${s.id}:${line.field.name}"
                 Box(Modifier.widthIn(min = 150.dp, max = 180.dp)) {
@@ -591,7 +631,7 @@ private fun hintFor(k: FieldKind) = when (k) {
 }
 
 @Composable
-private fun FixCard(plot: CelestialPlot) {
+private fun FixCard(plot: CelestialPlot, onSave: (() -> Unit)?) {
     if (plot.lops.isEmpty()) return
     Card {
         val f = plot.fix
@@ -604,7 +644,11 @@ private fun FixCard(plot: CelestialPlot) {
         Text("Fix  ${formatLat(f.position.lat)}  ${formatLon(f.position.lon)}", color = Foam, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Text("At ${hhmmss(f.timeMs)} from ${f.lops.size} lines · they cross within %.1f nm".format(f.residualNm), color = Mist, fontSize = 13.sp)
         Text("%.1f nm %s of the GPS / DR position".format(f.offsetNm, Coach.compassPoint(f.offsetBearing)), color = SignalOrange, fontSize = 14.sp)
-        Text("Shown on the chart. ↺ above clears it.", color = Mist, fontSize = 12.sp)
+        if (onSave != null) {
+            Text("Shown on the chart. Save it to keep it in the fix log and start the next workbook.", color = Mist, fontSize = 12.sp)
+            Button(onClick = onSave, colors = ButtonDefaults.buttonColors(containerColor = SignalOrange, contentColor = Navy),
+                modifier = Modifier.padding(top = 6.dp)) { Text("Save fix ✓", fontWeight = FontWeight.Bold) }
+        }
     }
 }
 
@@ -653,6 +697,8 @@ private fun TypedBox(hint: String, text: String, check: Check, onChange: (String
 
 // ==================================================================== time helpers
 
+/** "19:52 · 17 Oct" for a saved fix. */
+private fun fixLabel(ms: Long) = SimpleDateFormat("HH:mm · d MMM", Locale.getDefault()).format(Date(ms))
 private fun hhmm(ms: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
 private fun hhmmss(ms: Long) = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(ms))
 private fun utc(ms: Long) = SimpleDateFormat("HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
