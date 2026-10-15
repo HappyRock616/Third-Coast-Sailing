@@ -52,7 +52,7 @@ Harbour data derived from OpenStreetMap is available under the ODbL.
 
 ## About the name
 
-It is a personal, non-commercial project and isn't affiliated with, endorsed by or connected to any club, school, business or organization with a similar name.
+"Third Coast" is a common name for the Great Lakes and their shoreline. Third Coast Sailing is an independent, non-commercial project. It isn't affiliated with, endorsed by or connected to any business, club, school or other organization, including any that use "Third Coast" in their name.
 
 ## License
 

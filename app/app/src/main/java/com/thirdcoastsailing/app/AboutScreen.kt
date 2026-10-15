@@ -48,11 +48,11 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
 
 const val SOURCE_URL = "https://github.com/HappyRock616/Third-Coast-Sailing"
 
-/** Where the app's name comes from, and that it isn't affiliated with anyone. */
+/** What "Third Coast" means, and that the app isn't affiliated with anyone. */
 const val NAME_ORIGIN =
-    "Third Coast Sailing is an independent project. " +
-        "It is a personal, non-commercial project and isn't affiliated with, endorsed by or connected to any club, " +
-        "school, business or organization with a similar name."
+    "\"Third Coast\" is a common name for the Great Lakes and their shoreline. Third Coast Sailing is an " +
+        "independent, non-commercial project. It isn't affiliated with, endorsed by or connected to any business, " +
+        "club, school or other organization, including any that use \"Third Coast\" in their name."
 
 /** The not-for-navigation statement, used on first launch and in About. */
 const val NOT_FOR_NAVIGATION =
