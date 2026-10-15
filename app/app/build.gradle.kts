@@ -17,6 +17,11 @@ android {
         versionName = "0.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Phones and tablets only: ship the map engine for ARM (64- and 32-bit), not the x86 emulator builds (-27 MB)
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
