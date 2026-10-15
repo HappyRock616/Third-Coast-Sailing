@@ -210,6 +210,9 @@ class WeatherRepo(private val context: Context) {
             }
             return Float.NaN
         }
+
+        /** True when any source has a value at the nearest grid point (for the wave grid: the point is on the water). */
+        fun hasNearest(lat: Double, lon: Double): Boolean = parts.any { (g, v) -> !g.sampleNearest(v, lat, lon).isNaN() }
     }
 
     /** Field for a quantity at a time, or null when nothing is forecast within 3 h. Decoding can take a moment: call off the main thread. */

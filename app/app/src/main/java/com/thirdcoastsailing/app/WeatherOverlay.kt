@@ -74,7 +74,11 @@ data class WxLayers(val colorKind: Wx?, val barbs: Boolean, val waves: Boolean) 
     val windBox get() = colorKind != null || barbs
 }
 
-/** Decoded forecast fields for one forecast time; only the ones the active layers need are loaded. */
+/**
+ * Decoded forecast fields for one forecast time; only the ones the active layers need are loaded.
+ * Wave height is also loaded for the wind / gust color: the wave model covers the lakes only, so it is the water mask
+ * that keeps the color off land at every zoom.
+ */
 class WxFrame(
     val timeMs: Long,
     val speed: WeatherRepo.Field? = null,
@@ -95,7 +99,7 @@ class WxFrame(
                 speed = if (wantWind) repo.field(Wx.WIND_SPEED, timeMs) else null,
                 dir = if (layers.barbs) repo.field(Wx.WIND_DIR, timeMs) else null,
                 gust = if (layers.colorKind == Wx.GUST) repo.field(Wx.GUST, timeMs) else null,
-                waveH = if (layers.waves) repo.field(Wx.WAVE_HEIGHT, timeMs) else null,
+                waveH = if (layers.waves || layers.colorKind != null) repo.field(Wx.WAVE_HEIGHT, timeMs) else null,
                 waveDir = if (layers.waves) repo.field(Wx.WAVE_DIR, timeMs) else null,
                 wavePer = if (layers.waves) repo.field(Wx.WAVE_PERIOD, timeMs) else null,
             )
@@ -120,7 +124,6 @@ private val WaveHigh = Color(0xFFF2C14E)
 private val WaveBig = Color(0xFFE5484D)
 
 private const val WAVE_FRAME_MS = 100L      // wave animation step: about 10 updates a second
-private const val WAVE_MIN_ZOOM = 7.0      // waves stop animating (and are drawn still) when zoomed out past this
 
 /** Color for a wind speed in knots, from the scale above. */
 fun windColor(kn: Double): Color {
@@ -154,8 +157,11 @@ private fun mercLat(y: Double) = Math.toDegrees(2 * atan(exp(y)) - PI / 2)
  * which is how MapLibre stretches an image between its corners, so every pixel lands on the right spot.
  * About 2.5 km per pixel; the map smooths between pixels. Slow-ish: call off the main thread.
  * @param box lon_min, lat_min, lon_max, lat_max
+ * @param water wave-height field used as a water mask: pixels where the wave model has no value (land) stay clear,
+ *              so the color never shows on land, whichever lakes are downloaded and however far out you zoom.
+ *              Null (no wave forecast yet): no mask, the chart's land layer hides the color as before.
  */
-fun buildFieldImage(src: WeatherRepo.Field, box: DoubleArray): FieldImage? {
+fun buildFieldImage(src: WeatherRepo.Field, box: DoubleArray, water: WeatherRepo.Field? = null): FieldImage? {
     val step = 0.025
     val cols = ((box[2] - box[0]) / step).roundToInt().coerceIn(2, 900)
     val yTop = mercY(box[3])
@@ -167,6 +173,7 @@ fun buildFieldImage(src: WeatherRepo.Field, box: DoubleArray): FieldImage? {
         val lat = mercLat(yTop + (yBot - yTop) * (r + 0.5) / rows)
         for (c in 0 until cols) {
             val lon = box[0] + (box[2] - box[0]) * (c + 0.5) / cols
+            if (water != null && !water.hasNearest(lat, lon)) continue          // land: leave clear
             val v = src.at(lat, lon)
             if (!v.isNaN()) { px[r * cols + c] = windColor(v * WeatherRepo.MS_TO_KN).toArgb(); any = true }
         }
@@ -248,10 +255,11 @@ fun WeatherOverlay(map: MapLibreMap?, tick: Int, idleTick: Int, frame: WxFrame?,
         }
     }
 
-    // wave animation clock: runs only while crests are shown and zoomed in enough, at about 10 updates a second
-    // (the crests drift slowly, so this looks the same as every frame for a fraction of the battery)
+    // wave animation clock: runs whenever crests are shown, at any zoom, about 10 updates a second (the crests drift
+    // slowly, so this looks the same as every frame for a fraction of the battery; the number of crests is set by
+    // screen spacing, so zooming out costs no more)
     var nowMs by remember { mutableLongStateOf(0L) }
-    val animate = waves.isNotEmpty() && m.cameraPosition.zoom >= WAVE_MIN_ZOOM
+    val animate = waves.isNotEmpty()
     LaunchedEffect(animate) { if (animate) while (true) { withFrameMillis { nowMs = it }; delay(WAVE_FRAME_MS) } }
 
     Canvas(modifier.fillMaxSize().onSizeChanged { wPx = it.width.toFloat(); hPx = it.height.toFloat() }) {

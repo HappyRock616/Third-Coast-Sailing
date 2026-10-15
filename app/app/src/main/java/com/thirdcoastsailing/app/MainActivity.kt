@@ -1190,7 +1190,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         val src = when (layers.colorKind) { Wx.WIND_SPEED -> frame?.speed; Wx.GUST -> frame?.gust; else -> null }
         val box = WeatherRepo.boxFor(lakes.map { it.id })
         val img = if (src == null || box == null) null
-        else withContext(Dispatchers.Default) { runCatching { buildFieldImage(src, box) }.getOrNull() }
+        else withContext(Dispatchers.Default) { runCatching { buildFieldImage(src, box, frame?.waveH) }.getOrNull() }
         if (!s.isFullyLoaded) return@LaunchedEffect
         if (img == null) {
             s.getLayer(WX_LAYER)?.let { s.removeLayer(WX_LAYER) }
