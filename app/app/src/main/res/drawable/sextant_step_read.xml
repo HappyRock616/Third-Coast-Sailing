@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sextant step picture for the celestial trainer (generated; edit make_gfx.py, not this file) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M18,0 H78 A18,18 0 0 1 96,18 V78 A18,18 0 0 1 78,96 H18 A18,18 0 0 1 0,78 V18 A18,18 0 0 1 18,0 Z"
+        android:fillColor="#0F2742" />
+    <path android:pathData="M3.67,39.26 A72,72 0 0,1 92.33,39.26"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="3" />
+    <path android:pathData="M7.85,38.66 L11.86,44.39 M11.43,36.32 L13.52,39.73 M15.14,34.19 L17.01,37.73 M18.97,32.30 L20.63,35.94 M22.91,30.65 L24.35,34.38 M26.95,29.24 L29.06,35.92 M31.07,28.08 L32.03,31.96 M35.24,27.17 L35.97,31.11 M39.47,26.52 L39.96,30.49 M43.73,26.13 L43.97,30.12 M48.00,26.00 L48.00,33.00 M52.27,26.13 L52.03,30.12 M56.53,26.52 L56.04,30.49 M60.76,27.17 L60.03,31.11 M64.93,28.08 L63.97,31.96 M69.05,29.24 L66.94,35.92 M73.09,30.65 L71.65,34.38 M77.03,32.30 L75.37,35.94 M80.86,34.19 L78.99,37.73 M84.57,36.32 L82.48,39.73 M88.15,38.66 L84.14,44.39"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="1.5" />
+    <path android:pathData="M47,40 L53,40 L50,47 Z"
+        android:fillColor="#F28C28" />
+    <path android:pathData="M50.00,47.00 L54.00,60.00"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+    <path android:pathData="M56.00,66.00 a14.00,14.00 0 1,0 28.00,0 a14.00,14.00 0 1,0 -28.00,0 Z"
+        android:fillColor="#0A1B2E"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="2" />
+    <path android:pathData="M83.00,66.00 L79.00,66.00 M82.72,68.70 L80.76,68.29 M81.88,71.29 L80.05,70.47 M80.52,73.64 L78.90,72.47 M78.70,75.66 L77.36,74.17 M76.50,77.26 L74.50,73.79 M74.02,78.36 L73.40,76.46 M71.36,78.93 L71.15,76.94 M68.64,78.93 L68.85,76.94 M65.98,78.36 L66.60,76.46 M63.50,77.26 L65.50,73.79 M61.30,75.66 L62.64,74.17 M59.48,73.64 L61.10,72.47 M58.12,71.29 L59.95,70.47 M57.28,68.70 L59.24,68.29 M57.00,66.00 L61.00,66.00 M57.28,63.30 L59.24,63.71 M58.12,60.71 L59.95,61.53 M59.48,58.36 L61.10,59.53 M61.30,56.34 L62.64,57.83 M63.50,54.74 L65.50,58.21 M65.98,53.64 L66.60,55.54 M68.64,53.07 L68.85,55.06 M71.36,53.07 L71.15,55.06 M74.02,53.64 L73.40,55.54 M76.50,54.74 L74.50,58.21 M78.70,56.34 L77.36,57.83 M80.52,58.36 L78.90,59.53 M81.88,60.71 L80.05,61.53 M82.72,63.30 L80.76,63.71"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="1.2" />
+    <path android:pathData="M84.5,60 H88.5 A1.5,1.5 0 0 1 90,61.5 V70.5 A1.5,1.5 0 0 1 88.5,72 H84.5 A1.5,1.5 0 0 1 83,70.5 V61.5 A1.5,1.5 0 0 1 84.5,60 Z"
+        android:fillColor="#1B3B5F"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="1.4" />
+    <path android:pathData="M86.50,62.00 L86.50,70.00"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="1" />
+    <path android:pathData="M13.00,70.00 a9.00,9.00 0 1,0 18.00,0 a9.00,9.00 0 1,0 -18.00,0 Z"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="1.8"
+        android:strokeAlpha="0.6" />
+    <path android:pathData="M28.40,76.40 L34.00,82.00"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="2.6"
+        android:strokeAlpha="0.6"
+        android:strokeLineCap="round" />
+</vector>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sextant step picture for the celestial trainer (generated; edit make_gfx.py, not this file) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M18,0 H78 A18,18 0 0 1 96,18 V78 A18,18 0 0 1 78,96 H18 A18,18 0 0 1 0,78 V18 A18,18 0 0 1 18,0 Z"
+        android:fillColor="#0F2742" />
+    <path android:pathData="M15.00,30.00 a9.00,9.00 0 1,0 18.00,0 a9.00,9.00 0 1,0 -18.00,0 Z"
+        android:fillColor="#F2C14E" />
+    <path android:pathData="M35.50,30.00 L39.00,30.00 M32.13,38.13 L34.61,40.61 M24.00,41.50 L24.00,45.00 M15.87,38.13 L13.39,40.61 M12.50,30.00 L9.00,30.00 M15.87,21.87 L13.39,19.39 M24.00,18.50 L24.00,15.00 M32.13,21.87 L34.61,19.39"
+        android:strokeColor="#F2C14E"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+    <path android:pathData="M30.00,36.00 L32.61,37.48 M34.79,38.71 L37.40,40.18 M39.58,41.41 L42.19,42.89 M44.36,44.12 L46.98,45.60 M49.15,46.83 L51.76,48.30 M53.94,49.53 L56.55,51.01 M58.73,52.24 L61.34,53.71 M63.52,54.94 L66.13,56.42 M68.30,57.65 L70.92,59.13 M73.09,60.36 L75.70,61.83"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+    <path android:pathData="M42,30 H45 A2,2 0 0 1 47,32 V52 A2,2 0 0 1 45,54 H42 A2,2 0 0 1 40,52 V32 A2,2 0 0 1 42,30 Z"
+        android:fillColor="#3A4A5C"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="1.2" />
+    <path android:pathData="M52,36 H55 A2,2 0 0 1 57,38 V58 A2,2 0 0 1 55,60 H52 A2,2 0 0 1 50,58 V38 A2,2 0 0 1 52,36 Z"
+        android:fillColor="#0A1B2E"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="1.2" />
+    <path android:pathData="M66,64 Q76,54 86,64 Q76,74 66,64 Z"
+        android:fillColor="#F4F1EA" />
+    <path android:pathData="M72.00,64.00 a4.00,4.00 0 1,0 8.00,0 a4.00,4.00 0 1,0 -8.00,0 Z"
+        android:fillColor="#0F2742" />
+    <path android:pathData="M74.40,64.00 a1.60,1.60 0 1,0 3.20,0 a1.60,1.60 0 1,0 -3.20,0 Z"
+        android:fillColor="#F4F1EA" />
+</vector>

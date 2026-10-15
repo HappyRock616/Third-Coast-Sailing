@@ -42,6 +42,9 @@ Requirements: Android 14 (API 34) or newer. The build fails on purpose if any Go
 | Wave forecasts | NOAA NCEP (GLWU) | Public domain |
 | Buoy observations | NOAA National Data Buoy Center | Public domain |
 | Marinas, clubs, docks, anchorages | © OpenStreetMap contributors | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) |
+| Almanac calculations (celestial trainer) | [Astronomy Engine](https://github.com/cosinekitty/astronomy) by Don Cross | MIT |
+| Star positions (celestial trainer) | Yale Bright Star Catalogue, 5th ed. | Public domain |
+| Constellation figures and names | [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn | BSD 3-Clause |
 
 Harbour data derived from OpenStreetMap is available under the ODbL.
 

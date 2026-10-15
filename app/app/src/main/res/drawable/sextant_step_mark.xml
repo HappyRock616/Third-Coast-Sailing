@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sextant step picture for the celestial trainer (generated; edit make_gfx.py, not this file) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M18,0 H78 A18,18 0 0 1 96,18 V78 A18,18 0 0 1 78,96 H18 A18,18 0 0 1 0,78 V18 A18,18 0 0 1 18,0 Z"
+        android:fillColor="#0F2742" />
+    <path android:pathData="M45,16 H51 A2,2 0 0 1 53,18 V21 A2,2 0 0 1 51,23 H45 A2,2 0 0 1 43,21 V18 A2,2 0 0 1 45,16 Z"
+        android:fillColor="#F28C28" />
+    <path android:pathData="M48.00,23.00 L48.00,28.00"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="3" />
+    <path android:pathData="M22.00,54.00 a26.00,26.00 0 1,0 52.00,0 a26.00,26.00 0 1,0 -52.00,0 Z"
+        android:fillColor="#0A1B2E"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="3" />
+    <path android:pathData="M70.00,54.00 L66.00,54.00 M67.05,65.00 L63.59,63.00 M59.00,73.05 L57.00,69.59 M48.00,76.00 L48.00,72.00 M37.00,73.05 L39.00,69.59 M28.95,65.00 L32.41,63.00 M26.00,54.00 L30.00,54.00 M28.95,43.00 L32.41,45.00 M37.00,34.95 L39.00,38.41 M48.00,32.00 L48.00,36.00 M59.00,34.95 L57.00,38.41 M67.05,43.00 L63.59,45.00"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round" />
+    <path android:pathData="M48.00,54.00 L60.00,40.00"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round" />
+    <path android:pathData="M45.00,54.00 a3.00,3.00 0 1,0 6.00,0 a3.00,3.00 0 1,0 -6.00,0 Z"
+        android:fillColor="#F28C28" />
+    <path android:pathData="M62.00,14.00 L66.00,8.00 M70.00,19.00 L77.00,15.00 M74.00,27.00 L82.00,26.00"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+</vector>

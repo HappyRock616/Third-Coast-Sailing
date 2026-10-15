@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sextant step picture for the celestial trainer (generated; edit make_gfx.py, not this file) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M18,0 H78 A18,18 0 0 1 96,18 V78 A18,18 0 0 1 78,96 H18 A18,18 0 0 1 0,78 V18 A18,18 0 0 1 18,0 Z"
+        android:fillColor="#0F2742" />
+    <path android:pathData="M20,44 A28,28 0 0 1 76,44 Z"
+        android:fillColor="#7DAFD9" />
+    <path android:pathData="M20,44 A28,28 0 0 0 76,44 Z"
+        android:fillColor="#1B3B5F" />
+    <path android:pathData="M48,16 A28,28 0 0 1 48,72 Z"
+        android:fillColor="#F4F1EA"
+        android:fillAlpha="0.16" />
+    <path android:pathData="M20.00,44.00 L76.00,44.00"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="2" />
+    <path android:pathData="M48.00,16.00 L48.00,72.00"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="1"
+        android:strokeAlpha="0.6" />
+    <path android:pathData="M20.00,44.00 a28.00,28.00 0 1,0 56.00,0 a28.00,28.00 0 1,0 -56.00,0 Z"
+        android:strokeColor="#2C5078"
+        android:strokeWidth="3.5" />
+    <path android:pathData="M52.00,26.00 L53.49,28.60 M54.73,30.78 L56.00,33.00 M56.00,33.00 L58.50,34.66 M60.58,36.05 L62.00,37.00 M62.00,37.00 L64.50,35.34 M66.58,33.95 L68.00,33.00 M68.00,33.00 L69.49,30.40 M70.73,28.22 L72.00,26.00"
+        android:strokeColor="#F4F1EA"
+        android:strokeWidth="1.6"
+        android:strokeAlpha="0.85"
+        android:strokeLineCap="round" />
+    <path android:pathData="M57.50,38.50 a4.50,4.50 0 1,0 9.00,0 a4.50,4.50 0 1,0 -9.00,0 Z"
+        android:fillColor="#F2C14E" />
+    <path android:pathData="M15.37,28.79 A36,36 0 0,1 32.79,11.37"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+    <path android:pathData="M15.09,24.29 L15.37,28.79 L19.00,26.12"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path android:pathData="M63.21,11.37 A36,36 0 0,1 80.63,28.79"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+    <path android:pathData="M77.00,26.12 L80.63,28.79 L80.91,24.29"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
