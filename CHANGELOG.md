@@ -29,6 +29,9 @@
     - Pinch to zoom; on devices with no compass, drag to look around.
     - ✕ or Back returns to the workbook.
 - **Celestial navigation trainer: calculations.** Built-in almanac for the Sun, Moon, Venus, Mars, Jupiter, Saturn and the 58 navigational stars (checked against JPL's DE421 ephemeris: within 0.3 arc-minutes); full sight reduction from sextant reading to line of position (index error, dip, dip short of a shoreline, refraction with temperature and pressure, parallax, semi-diameter); fixes from two or more sights, including running fixes for a moving boat; daily sight planning following Bowditch (twilight star windows, the best three stars about 120° apart with preset altitude and bearing, shooting order, morning / noon / afternoon Sun, Sun–Moon daytime fixes); star finder data with constellation figures and names; printed-almanac style tables for working by hand; three skill levels (beginner step-by-step, intermediate suggestions, advanced tables only); and eight sextant step pictures.
+- **About & credits** (bottom of the menu): version, the not-for-navigation statement, the name ("Third Coast" is a common name for the Great Lakes; no affiliation with any business or organization), free and open source (AGPL-3.0, link to the code), and every data source and library with its terms, including the OpenStreetMap attribution. The README has the same name note.
+- **First-launch notice.** Before anything else, a one-time "Before you start" notice says the app is for reference only, not for navigation, and must be accepted ("I understand").
+- **Workbook: air temperature (°F) and pressure (inHg)** for the refraction correction (Intermediate and Advanced; defaults 50 °F, 29.83 inHg).
 
 ### Changed
 - **Adding and moving route points.** "+" now drops the next point straight away, a quarter of the screen height ahead (so the spacing follows the zoom): the first point goes along the boat's course (straight up the screen when stopped or without GPS), later points continue the last leg. To move a point, hold it for about half a second without moving (the phone buzzes), then drag; quick taps, swipes, pans and pinches never move a point. Routes are limited to 6 points (the "+" fades at the limit).
@@ -40,14 +43,13 @@
 - **Smaller app.** The APK now carries the map engine only for ARM phones and tablets (64- and 32-bit), dropping the two x86 emulator copies: about 27 MB smaller (74 MB → about 47 MB). The app no longer installs on x86 emulators or Intel Chromebooks.
 
 ### Fixed
+- The wind gauge's "target" speed label could be cut off at the edge; it now sits on the inner side of the dot and stays inside the gauge.
+- The weather box read "Updated updating…" during an update; it now reads "Updating…" (and "Never updated" before the first one).
+- The heading box showed "---°" with no course yet; it now shows a dash.
 - The router treated water starting exactly at the limit (for example 24–30 ft areas with a 24 ft limit) as too shallow, because of feet-to-metres rounding. It now matches the chart shading.
 
 ### Planned for this release
-- Workbook: an optional temperature and pressure setting for refraction (fixed at 10 °C and 1010 mb for now).
-- Name-origin note in the README, store description and an About screen: "Third Coast" is a common name for the Great Lakes, and the app isn't affiliated with any organization.
-- Wind gauge "target" label is clipped.
-- Weather box reads "Updated updating…".
-- Heading box shows "---°".
+- Store description (with the name-origin note) once the app goes to a store.
 
 ## 0.7.1
 - Turned off R8 code shrinking in release builds (0.7 crashed on start).

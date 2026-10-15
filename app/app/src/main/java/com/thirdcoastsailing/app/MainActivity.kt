@@ -295,6 +295,9 @@ private fun App() {
     val dlProgress = remember { mutableStateMapOf<String, Float>() }      // lake id -> 0..1 while queued / downloading
     var askMetered by remember { mutableStateOf<List<CatalogLake>?>(null) }
     var showSetup by remember { mutableStateOf(!prefs.getBoolean("chartsSetupDone", false) && lakes.isEmpty()) }
+    // First launch: the not-for-navigation notice must be accepted before anything else (then the lake picker)
+    var showDisclaimer by remember { mutableStateOf(!prefs.getBoolean("disclaimerAccepted", false)) }
+    var showAbout by remember { mutableStateOf(false) }
     val dlQueue = remember { Channel<CatalogLake>(Channel.UNLIMITED) }
     // One download at a time, in the order requested
     LaunchedEffect(Unit) {
@@ -516,6 +519,7 @@ private fun App() {
                 onCheckCharts = { checkCharts() },
                 onBoats = { scope.launch { drawer.close() }; showBoats = true },
                 onCelestial = { scope.launch { drawer.close() }; showCelestial = true },
+                onAbout = { scope.launch { drawer.close() }; showAbout = true },
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
                 gaugeOn = gaugeOn,
@@ -650,8 +654,13 @@ private fun App() {
         activeBoat = boatStore.load().let { s -> s.boats.firstOrNull { it.id == s.activeId } }
     }
 
-    // First launch: pick lakes to download
-    if (showSetup) SetupDialog(
+    if (showAbout) AboutScreen(APP_VERSION) { showAbout = false }
+
+    // First launch: accept the disclaimer, then pick lakes to download
+    if (showDisclaimer) FirstLaunchDisclaimer {
+        prefs.edit().putBoolean("disclaimerAccepted", true).apply()
+        showDisclaimer = false
+    } else if (showSetup) SetupDialog(
         catalog = catalog, loading = checking, error = if (!checking && catalog.isEmpty()) catalogMsg else "",
         onRetry = { checkCharts() },
         onDownload = { picked ->
@@ -759,6 +768,7 @@ private fun MenuSheet(
     onImport: () -> Unit, onLakeCheck: (String, Boolean) -> Unit, onUpdateLake: (String) -> Unit, onCheckCharts: () -> Unit,
     onBoats: () -> Unit,
     onCelestial: () -> Unit,
+    onAbout: () -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
     tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
@@ -912,7 +922,16 @@ private fun MenuSheet(
             TextButton(onClick = onImport) { Text("Import from a folder…", color = Mist, fontSize = 12.sp) }
 
             MenuDivider()
-            Text("Version $APP_VERSION · NOAA chart data governs.", color = Mist, fontSize = 11.sp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onAbout).padding(vertical = 6.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("About & credits", color = Foam, fontSize = 15.sp)
+                    Text("Version $APP_VERSION · NOAA chart data governs.", color = Mist, fontSize = 11.sp)
+                }
+                Text("›", color = SignalOrange, fontSize = 22.sp)
+            }
         }
     }
 }

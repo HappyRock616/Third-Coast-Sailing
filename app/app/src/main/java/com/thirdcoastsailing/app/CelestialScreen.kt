@@ -115,6 +115,7 @@ import java.util.TimeZone
 
 private const val DEFAULT_LAT = 44.0          // middle of Lake Michigan, when there's no GPS and no DR typed in
 private const val DEFAULT_LON = -87.0
+private const val MB_PER_INHG = 33.8639        // millibars per inch of mercury
 
 /** Star finder request: which body to point at (BEGINNER arrow) and what a pick does. */
 private data class FinderRequest(val target: SkyBody?, val forSightId: Long?, val pickToAdd: Boolean)
@@ -294,6 +295,23 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
             }
             NumberBox("Index error (′, + on the arc, − off)", if (set.indexErrorMin == 0.0) "0" else "%+.1f".format(set.indexErrorMin), "ie") { t ->
                 t.replace("−", "-").toDoubleOrNull()?.let { v -> store.update { it.copy(settings = it.settings.copy(indexErrorMin = v)) } }
+            }
+            // air temperature and pressure change refraction a little (mostly for low sights); not at Beginner level
+            if (set.level != SkillLevel.BEGINNER) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) {
+                    NumberBox("Air temp (°F)", "%.0f".format(set.temperatureC * 9.0 / 5.0 + 32.0), "temp") { t ->
+                        t.toDoubleOrNull()?.takeIf { it in -40.0..120.0 }?.let { f ->
+                            store.update { it.copy(settings = it.settings.copy(temperatureC = (f - 32.0) * 5.0 / 9.0)) }
+                        }
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    NumberBox("Pressure (inHg)", "%.2f".format(set.pressureMb / MB_PER_INHG), "press") { t ->
+                        t.toDoubleOrNull()?.takeIf { it in 27.0..32.0 }?.let { p ->
+                            store.update { it.copy(settings = it.settings.copy(pressureMb = p * MB_PER_INHG)) }
+                        }
+                    }
+                }
             }
             if (!isGps) {
                 Text("No GPS: type your DR position", color = Mist, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))

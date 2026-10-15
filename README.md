@@ -13,11 +13,12 @@ Offline Great Lakes chart viewer, weather and sail-routing app for Android.
 
 ## What it does
 
-- **Charts:** NOAA electronic charts for Superior, Michigan, Huron, Erie and Ontario (plus connected inland lakes), stored on the phone and usable with no signal. Depth shading, hazards, and water shallower than your depth limit outlined in red.
+- **Charts:** NOAA electronic charts for Superior, Michigan, Huron, Erie and Ontario (plus connected inland lakes), stored on the phone and usable with no signal. Depth shading, hazards, and water shallower than your boat's minimum depth shaded red, with one red line at that depth.
 - **Weather:** wind, gusts and waves from NOAA (NDFD and the GLWU wave model), downloaded by the phone directly — no server in between. Colour field, wind barbs, animated wave crests and a 48-hour forecast slider.
 - **Buoys:** NOAA NDBC stations coloured by wind speed, ringed for waves over 3 ft / 5 ft; tap for the latest report and a 24-hour graph.
 - **Boat:** GPS position, course line with 1/2/3-hour marks, and a heading-up wind gauge with your polar.
 - **Routes:** lay in points, see leg distance and magnetic bearing, distance / VMG / time to destination, and calculate a weather-optimised route (isochrones, your polar at a cruise factor, tack penalty, depth limit).
+- **Celestial navigation trainer:** 3D star finder that turns with the phone, sight planning, a step-by-step sight workbook with every equation shown, printed-almanac style tables, and the fix plotted on the chart. Three skill levels.
 - **Private by design:** no Google Play Services, no accounts, no tracking. Runs on GrapheneOS and LineageOS.
 
 ## Getting the app
@@ -42,11 +43,16 @@ Requirements: Android 14 (API 34) or newer. The build fails on purpose if any Go
 | Wave forecasts | NOAA NCEP (GLWU) | Public domain |
 | Buoy observations | NOAA National Data Buoy Center | Public domain |
 | Marinas, clubs, docks, anchorages | © OpenStreetMap contributors | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) |
+| Map engine | [MapLibre Native](https://maplibre.org) | BSD 2-Clause |
 | Almanac calculations (celestial trainer) | [Astronomy Engine](https://github.com/cosinekitty/astronomy) by Don Cross | MIT |
 | Star positions (celestial trainer) | Yale Bright Star Catalogue, 5th ed. | Public domain |
 | Constellation figures and names | [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn | BSD 3-Clause |
 
 Harbour data derived from OpenStreetMap is available under the ODbL.
+
+## About the name
+
+It is a personal, non-commercial project and isn't affiliated with, endorsed by or connected to any club, school, business or organization with a similar name.
 
 ## License
 

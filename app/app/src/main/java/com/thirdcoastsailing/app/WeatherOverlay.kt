@@ -385,8 +385,8 @@ fun WeatherPanel(
         else -> Foam
     }
     val stamp = when {
-        updating -> "updating…"
-        lastUpdateMs == 0L -> "never"
+        updating -> "Updating…"
+        lastUpdateMs == 0L -> "Never updated"
         else -> WeatherRepo.stamp(lastUpdateMs)
     }
 
@@ -394,7 +394,8 @@ fun WeatherPanel(
     fun UpdateLine() {
         HorizontalDivider(color = NavyLight, modifier = Modifier.padding(top = 4.dp, bottom = 3.dp))
         Row(Modifier.fillMaxWidth().clickable(onClick = onUpdate), verticalAlignment = Alignment.CenterVertically) {
-            Text("Updated ", color = Mist, fontSize = 10.5.sp)
+            // "Updated 14:05" normally; just "Updating…" or "Never updated" otherwise (not "Updated updating…")
+            if (!updating && lastUpdateMs != 0L) Text("Updated ", color = Mist, fontSize = 10.5.sp)
             Text(stamp, color = stampColor, fontSize = 10.5.sp, modifier = Modifier.weight(1f))
             Text("↻", color = SignalOrange, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }

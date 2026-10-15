@@ -152,7 +152,13 @@ private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
             val dot = at(rPolar * (target / vmax).toFloat(), windScreen)
             drawCircle(GNavy, 9.5f * k, dot)
             drawCircle(GOrange, 7f * k, dot)
-            text("target %.1f".format(target), dot + Offset(62f * k, -14f * k), 15f, GFoam)
+            // label beside the dot on the side toward the middle of the gauge, kept inside the gauge so it isn't cut off
+            val label = tm.measure("target %.1f".format(target), TextStyle(color = GFoam, fontSize = (15f * k).toSp(), fontWeight = FontWeight.Bold))
+            val lw = label.size.width.toFloat(); val lh = label.size.height.toFloat()
+            val side = if (dot.x > c.x) -1f else 1f
+            val lx = (dot.x + side * (lw / 2f + 14f * k)).coerceIn(lw / 2f + 4f * k, size.width - lw / 2f - 4f * k)
+            val ly = (dot.y - 14f * k).coerceIn(lh / 2f + 4f * k, size.height - lh / 2f - 4f * k)
+            drawText(label, topLeft = Offset(lx - lw / 2f, ly - lh / 2f))
         }
     }
 
@@ -175,7 +181,8 @@ private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
     val bt = Offset(c.x - bw / 2, c.y - mid - bh / 2)
     drawRoundRect(GNavy, bt, Size(bw, bh), androidx.compose.ui.geometry.CornerRadius(12f * k))
     drawRoundRect(GOrange, bt, Size(bw, bh), androidx.compose.ui.geometry.CornerRadius(12f * k), style = Stroke(3f * k))
-    text(d.headingDeg?.let { "%03d°".format(it.roundToInt() % 360) } ?: "---°", Offset(c.x, c.y - mid + 1f * k), 32f, GFoam)
+    // no course yet (no GPS fix, or not moving since the app started): a dash rather than "---°"
+    text(d.headingDeg?.let { "%03d°".format(it.roundToInt() % 360) } ?: "—", Offset(c.x, c.y - mid + 1f * k), 32f, GFoam)
     val ptr = Path().apply {
         moveTo(c.x - 9f * k, c.y - mid + bh / 2); lineTo(c.x + 9f * k, c.y - mid + bh / 2); lineTo(c.x, c.y - mid + bh / 2 + 10f * k); close()
     }
