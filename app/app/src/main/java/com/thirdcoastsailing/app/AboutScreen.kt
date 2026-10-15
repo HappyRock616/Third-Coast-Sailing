@@ -114,7 +114,7 @@ fun AboutScreen(version: String, onClose: () -> Unit) {
                     Text(what, color = Foam, fontSize = 14.sp)
                     Text("$who · $terms", color = if (url.isNotEmpty()) SignalOrange else Mist, fontSize = 12.sp)
                 }
-                Text("Harbour data derived from OpenStreetMap is available under the ODbL.", color = Mist, fontSize = 12.sp,
+                Text("Harbor data derived from OpenStreetMap is available under the ODbL.", color = Mist, fontSize = 12.sp,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }

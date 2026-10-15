@@ -25,9 +25,9 @@ import kotlin.math.sin
 /*
  * OpenGL ES 2.0 renderer for the 3D star finder (no 3D library).
  *
- *  1. Sky: one full-screen quad; the fragment shader works out the direction of each pixel and colours it with the
- *     stylised twilight model (SkyShade: blue day, horizon glow under the Sun, Belt of Venus, dark night, sea below
- *     the horizon). Same formula as SkyShade.colour on the CPU.
+ *  1. Sky: one full-screen quad; the fragment shader works out the direction of each pixel and colors it with the
+ *     stylized twilight model (SkyShade: blue day, horizon glow under the Sun, Belt of Venus, dark night, sea below
+ *     the horizon). Same formula as SkyShade.color on the CPU.
  *  2. Constellation lines and the horizon line, then stars and planets as round points, faded by the sky's
  *     limiting magnitude (stars come out as twilight deepens).
  *  3. The boat scene in the lower part of the screen, from its own camera: compass ring (fixed to north), the boat
@@ -365,7 +365,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
             #endif
         """
 
-        // ---- sky: per-pixel direction -> colour (same model as SkyShade.colour)
+        // ---- sky: per-pixel direction -> color (same model as SkyShade.color)
         private const val SKY_VS = """
             attribute vec2 aPos;
             varying vec2 vNdc;
@@ -431,7 +431,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
             }
         """
 
-        // ---- plain lines / triangles in one colour (constellations, horizon, compass ring, rigging)
+        // ---- plain lines / triangles in one color (constellations, horizon, compass ring, rigging)
         private const val LINE_VS = """
             attribute vec3 aDir; uniform mat4 uVP;
             void main() { gl_Position = uVP * vec4(aDir, 1.0); }
@@ -442,7 +442,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
             void main() { gl_FragColor = uCol; }
         """
 
-        // ---- the boat: per-vertex colour, soft lighting, hull decal (two layouts: starboard / port)
+        // ---- the boat: per-vertex color, soft lighting, hull decal (two layouts: starboard / port)
         private const val BOAT_VS = """
             attribute vec3 aPos; attribute vec3 aNorm; attribute vec3 aCol; attribute vec2 aUv; attribute float aFlag;
             uniform mat4 uMVP; uniform mat3 uNormal; uniform vec3 uLight;

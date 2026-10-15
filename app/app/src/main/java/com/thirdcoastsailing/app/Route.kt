@@ -123,7 +123,7 @@ class RouteStore(private val prefs: SharedPreferences) {
 
 /**
  * Route over the chart: orange dashed line from the start (boat, or the first point with no GPS) through the
- * numbered points, each leg labelled along the line with its distance and magnetic bearing.
+ * numbered points, each leg labeled along the line with its distance and magnetic bearing.
  * A calculated route is drawn as a solid teal line and the planned line fades behind it.
  */
 @Composable

@@ -24,7 +24,7 @@ import org.maplibre.android.maps.MapLibreMap
 
 /*
  * Trip track: a thin dashed line of where the boat has been since the menu toggle was switched on,
- * labelled with distance and elapsed recording time. Kept in memory only. Switching it off stops recording and
+ * labeled with distance and elapsed recording time. Kept in memory only. Switching it off stops recording and
  * the clock but keeps the line; the reset arrow in the menu clears it. The line is continuous: a gap (switched off,
  * phone asleep) is spanned by a straight line and its distance counts.
  * Points come from the 1-second GPS while the app is on screen, and from a fix every 5 minutes (TrackService) while

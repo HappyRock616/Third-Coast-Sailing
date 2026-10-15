@@ -165,7 +165,7 @@ data class PhonePose(val forward: V3, val up: V3) {
             )
         }
 
-        /** Smooth sensor jitter: normalised blend of two quaternions (t = share of the new one), shortest way round. */
+        /** Smooth sensor jitter: normalized blend of two quaternions (t = share of the new one), shortest way round. */
         fun blend(a: DoubleArray, b: DoubleArray, t: Double): DoubleArray {
             val dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]
             val s = if (dot < 0) -1.0 else 1.0
@@ -202,7 +202,7 @@ class FinderCameras(val pose: PhonePose, val widthPx: Int, val heightPx: Int, va
 
     /** Screen position of a sky direction. */
     fun projectSky(dir: V3): ScreenPt {
-        val c = skyViewProj.transform(dir, 0.0)    // direction: no translation (camera at the centre of the sky)
+        val c = skyViewProj.transform(dir, 0.0)    // direction: no translation (camera at the center of the sky)
         return toScreen(c, 0, heightPx, heightPx)
     }
 
@@ -246,9 +246,9 @@ class FinderCameras(val pose: PhonePose, val widthPx: Int, val heightPx: Int, va
 }
 
 /**
- * Stylised sky colours for the Sun's altitude (degrees): the uniforms for the sky shader. The approved look: blue
+ * Stylized sky colors for the Sun's altitude (degrees): the uniforms for the sky shader. The approved look: blue
  * day sky, an orange-to-red glow hugging the horizon under the Sun through twilight, the pink "Belt of Venus"
- * opposite the Sun just after sunset / before sunrise, and a near-black night sky. Colours are RGB 0..1.
+ * opposite the Sun just after sunset / before sunrise, and a near-black night sky. Colors are RGB 0..1.
  */
 data class SkyShade(
     val zenith: FloatArray,
@@ -300,7 +300,7 @@ data class SkyShade(
             return ys.last()
         }
 
-        /** Colour keyframes listed from high Sun to low Sun. */
+        /** Color keyframes listed from high Sun to low Sun. */
         private fun keys(k: List<Pair<Double, FloatArray>>, h: Double): FloatArray {
             val hc = min(max(h, k.last().first), k.first().first)
             for (i in 0 until k.size - 1) {
@@ -314,10 +314,10 @@ data class SkyShade(
         }
 
         /**
-         * The sky colour in one direction (CPU copy of the shader, for tests and previews).
+         * The sky color in one direction (CPU copy of the shader, for tests and previews).
          * Same formula as the GLSL in the renderer.
          */
-        fun colour(shade: SkyShade, viewAltDeg: Double, viewAzDeg: Double, sunAltDeg: Double, sunAzDeg: Double): DoubleArray {
+        fun color(shade: SkyShade, viewAltDeg: Double, viewAzDeg: Double, sunAltDeg: Double, sunAzDeg: Double): DoubleArray {
             fun sky(alt: Double): DoubleArray {
                 val t = exp(-max(alt, 0.0) / 14.0)
                 val col = DoubleArray(3) { shade.zenith[it] * (1 - t) + shade.horizon[it] * t }

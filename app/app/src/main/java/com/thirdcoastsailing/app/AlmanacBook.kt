@@ -66,7 +66,7 @@ import kotlin.math.abs
 import kotlin.math.floor
 
 /*
- * The almanac as a book: pages laid out like the printed Nautical Almanac (paper colour, serif type, hours in
+ * The almanac as a book: pages laid out like the printed Nautical Almanac (paper color, serif type, hours in
  * groups of six, the yellow increments pages), one UT day per page, with a search to jump straight to a page.
  *
  *  Sections: Sun & Moon · Aries & planets · Stars · Increments · Dip & refraction. ◀ ▶ turn the day.

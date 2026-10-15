@@ -19,10 +19,10 @@ data class LatLon(val lat: Double, val lon: Double)
 internal const val DEG = PI / 180.0
 internal const val RAD = 180.0 / PI
 
-/** Normalise an angle to [0, 360). */
+/** Normalize an angle to [0, 360). */
 fun norm360(a: Double): Double = ((a % 360.0) + 360.0) % 360.0
 
-/** Normalise an angle to (-180, 180]. */
+/** Normalize an angle to (-180, 180]. */
 fun norm180(a: Double): Double { val x = norm360(a); return if (x > 180.0) x - 360.0 else x }
 
 /** Point reached from `from` after `nm` nautical miles on a true bearing (great circle). */

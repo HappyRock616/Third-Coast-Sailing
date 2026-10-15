@@ -12,7 +12,7 @@ import java.util.zip.GZIPInputStream
  * so the lettering stays sharp.
  *
  * Model axes, feet: x toward the bow, y to port, z up; waterline at z = 0.
- * Vertex layout after decoding, 12 floats: position xyz, normal xyz, colour rgb, decal uv, decal flag
+ * Vertex layout after decoding, 12 floats: position xyz, normal xyz, color rgb, decal uv, decal flag
  * (0 = none, 1 = starboard layout = top half of the texture, 2 = port layout = bottom half).
  */
 class BoatMesh(

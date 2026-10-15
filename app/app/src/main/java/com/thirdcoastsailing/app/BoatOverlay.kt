@@ -55,7 +55,7 @@ class SpeedAverage(private val windowMs: Long = 15 * 60_000L) {
     }
 }
 
-/** Point reached from (lat, lon) after travelling distNm nautical miles on a true bearing (great circle). */
+/** Point reached from (lat, lon) after traveling distNm nautical miles on a true bearing (great circle). */
 fun destination(lat: Double, lon: Double, bearingDeg: Double, distNm: Double): LatLng {
     val d = distNm / 3440.065                         // earth radius in nautical miles
     val b = Math.toRadians(bearingDeg)

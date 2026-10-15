@@ -39,7 +39,7 @@ object ChartStyle {
     // Depth band edges in meters (NOAA charts carry metric depth areas): 6, 18, 30, 60 ft
     private val DEPTH_EDGES_M = listOf(1.8, 5.4, 9.1, 18.2)
 
-    // Margin (m) so an area starting exactly at the limit (7.3 m for 24 ft) isn't shaded through feet/metre rounding
+    // Margin (m) so an area starting exactly at the limit (7.3 m for 24 ft) isn't shaded through feet/meter rounding
     private const val LIMIT_MARGIN_M = 0.1
 
     /**
@@ -63,9 +63,9 @@ object ChartStyle {
                 .put("url", "pmtiles://file://${lake.pmtiles.absolutePath}"))
         }
         // Water for every lake first, then land and everything on top, so overlays slotted under the
-        // land layers (weather colour field) show on water only, whichever lakes are loaded
+        // land layers (weather color field) show on water only, whichever lakes are loaded
         for (lake in lakes) addWaterLayers(layers, "lake_${lake.id}", p, limitM)
-        for (lake in lakes) addLakeLayers(layers, "lake_${lake.id}", p)
+        for (lake in lakes) addLakeLayers(layers, "lake_${lake.id}", p, limitM)
 
         return JSONObject()
             .put("version", 8)
@@ -77,7 +77,7 @@ object ChartStyle {
 
     private fun addWaterLayers(layers: JSONArray, src: String, p: Palette, limitM: Double) {
         // Approximate depth (NCEI grid) underneath the charted data; charted depth areas draw on top
-        // Water shallower than the minimum depth gets the red-tinted colour in the same fill (no overlay layer,
+        // Water shallower than the minimum depth gets the red-tinted color in the same fill (no overlay layer,
         // so overlapping chart cells can't stack into darker patches or seams)
         layers.put(fill("${src}_bathy", src, "bathy_band", depthColor("dmin", p, limitM), opacity = 0.9))
         layers.put(fill("${src}_depth", src, "depth_area", depthColor("drval1", p, limitM)))
@@ -86,7 +86,7 @@ object ChartStyle {
     /** First land layer of the style: map overlays added below it draw on water only. */
     fun landAnchor(lakes: List<Lake>): String? = lakes.firstOrNull()?.let { "lake_${it.id}_land" }
 
-    private fun addLakeLayers(layers: JSONArray, src: String, p: Palette) {
+    private fun addLakeLayers(layers: JSONArray, src: String, p: Palette, limitM: Double) {
         layers.put(fill("${src}_land", src, "land", p.land))
         layers.put(line("${src}_coast", src, "coastline", p.coast, width = 0.8))
         layers.put(line("${src}_contour", src, "depth_contour", p.contour, width = 0.5, minzoom = 8.0))
@@ -101,7 +101,7 @@ object ChartStyle {
         layers.put(line("${src}_hazareaedge", src, "hazard_area", p.hazard, width = 1.2))
         layers.put(line("${src}_hazline", src, "hazard_line", p.hazard, width = 1.5))
         layers.put(circle("${src}_hazpt", src, "hazard_point", p.hazard, radius = 3.0, minzoom = 10.0))
-        // Harbors (orange, tappable). Buoys are a separate live layer coloured by their latest report (see Buoys.kt).
+        // Harbors (orange, tappable). Buoys are a separate live layer colored by their latest report (see Buoys.kt).
         layers.put(circle("${src}_harbor", src, "harbor", p.harbor, radius = 5.0, minzoom = 8.0, stroke = "#1B1F23"))
     }
 
@@ -110,7 +110,7 @@ object ChartStyle {
         (listOf(BUOY_LAYER) + lakes.map { "lake_${it.id}_harbor" }).toTypedArray()
 
     /**
-     * Fill colour by depth: red-tinted where the area's shallow edge is above the minimum depth,
+     * Fill color by depth: red-tinted where the area's shallow edge is above the minimum depth,
      * otherwise a step ramp where deeper water gets a darker blue.
      */
     private fun depthColor(field: String, p: Palette, limitM: Double): JSONArray {

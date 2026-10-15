@@ -503,7 +503,7 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
         for (line in w.lines) WorkRow(s, line, level, store, typed, readOnly,
             onAlmanac = if (level == SkillLevel.ADVANCED) null else almanacTarget(s.body, shot.timeMs, line.field)?.let { t -> { onAlmanac(t) } })
 
-        // ---- the line of position: a small plot to teach plotting; tap for the large, labelled one
+        // ---- the line of position: a small plot to teach plotting; tap for the large, labeled one
         val lop = w.lop
         if (lop != null) {
             val course = plotCourse(s.shots.filter { !it.hsDeg.isNaN() }, if (readOnly) null else gps)

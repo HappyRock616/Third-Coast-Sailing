@@ -12,9 +12,9 @@ import kotlin.math.min
 /**
  * Grid of navigable water over a lat/lon box, built from the lakes' routing files:
  *  1. approximate depth bands (NCEI): open where the shallow end of the band is at or below the depth limit
- *  2. charted depth areas, smaller-scale charts first so harbour charts win: open / blocked by the same rule
+ *  2. charted depth areas, smaller-scale charts first so harbor charts win: open / blocked by the same rule
  *  3. land, piers / breakwaters (shoreline construction areas) and hazard areas: always blocked
- *  4. small circles around the start and each route point: always open, so harbour starts and
+ *  4. small circles around the start and each route point: always open, so harbor starts and
  *     waypoints in narrow channels are reachable even when the grid is coarser than the channel
  * Anything outside every chart is blocked.
  */
@@ -47,7 +47,7 @@ class NavMask private constructor(
 
         /**
          * @param box lon_min, lat_min, lon_max, lat_max
-         * @param limitM depth limit in metres (shallower = blocked)
+         * @param limitM depth limit in meters (shallower = blocked)
          */
         fun build(gpkgs: List<File>, box: DoubleArray, limitM: Double, keepOpen: List<GeoPt>, cancel: () -> Boolean): NavMask {
             val midLat = (box[1] + box[3]) / 2
@@ -71,7 +71,7 @@ class NavMask private constructor(
                     }
                 }
                 // 0.1 m margin: an area starting exactly at the limit (7.3 m for 24 ft) counts as deep enough,
-                // matching the red shading on the chart (feet/metre rounding would otherwise block it)
+                // matching the red shading on the chart (feet/meter rounding would otherwise block it)
                 val edge = limitM - 0.1
                 layer("bathy_band", "dmin", null) { v -> if (v != null && v >= edge) OPEN else BLOCKED }
                 layer("depth_area", "drval1", "band") { v -> if (v == null) null else if (v >= edge) OPEN else BLOCKED }
@@ -86,7 +86,7 @@ class NavMask private constructor(
         }
     }
 
-    /** Paints polygons into the grid by scanlines (cell centres). */
+    /** Paints polygons into the grid by scanlines (cell centers). */
     private class Painter(val lat0: Double, val lon0: Double, val dLat: Double, val dLon: Double,
                           val nx: Int, val ny: Int, val cells: ByteArray) {
 

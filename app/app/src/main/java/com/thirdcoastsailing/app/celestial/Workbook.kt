@@ -352,7 +352,7 @@ object Workbook {
         if (body == SkyBody.Sun || body == SkyBody.Moon) {
             val base = if (body == SkyBody.Moon) now.sd * (1.0 + sin(uHa * DEG) * sin(now.hp / 60.0 * DEG)) else now.sd
             val sd = m1(when (s.limb) { Limb.LOWER -> base; Limb.UPPER -> -base; Limb.CENTER -> 0.0 })
-            val which = when (s.limb) { Limb.LOWER -> "lower limb: +SD"; Limb.UPPER -> "upper limb: −SD"; Limb.CENTER -> "centre: 0" }
+            val which = when (s.limb) { Limb.LOWER -> "lower limb: +SD"; Limb.UPPER -> "upper limb: −SD"; Limb.CENTER -> "center: 0" }
             uSd = add(Field.SEMI_DIAMETER, "Semi-diameter", sd, TOL_CORR, "SD ($which)", "= ${mins(sd)}")
         }
         val hoExp = r1(uHa + (uR + uPa + uSd) / 60.0)

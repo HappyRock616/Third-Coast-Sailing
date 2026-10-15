@@ -32,5 +32,5 @@ constellation_lines.csv, constellations.csv
 
 Almanac calculations
   Astronomy Engine by Don Cross (github.com/cosinekitty/astronomy), MIT License,
-  Copyright (c) 2019-2025 Don Cross. Full licence text at the top of
+  Copyright (c) 2019-2025 Don Cross. Full license text at the top of
   app/src/main/java/io/github/cosinekitty/astronomy/astronomy.kt.

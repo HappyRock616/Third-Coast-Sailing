@@ -21,7 +21,7 @@ import kotlin.math.sqrt
  * (GHA) and declination of the Sun, Moon, navigational planets and the 58 navigational stars, plus GHA Aries,
  * star SHA, horizontal parallax (HP), semi-diameter (SD) and magnitude.
  *
- * Positions come from Astronomy Engine (MIT licence, VSOP87 + NOVAS models, about 1 arc-minute or better), as
+ * Positions come from Astronomy Engine (MIT license, VSOP87 + NOVAS models, about 1 arc-minute or better), as
  * apparent geocentric coordinates on the true equator and equinox of date: the same quantities the printed
  * almanac tabulates. All times are UTC in milliseconds since 1970.
  */
@@ -131,7 +131,7 @@ object Almanac {
     }
 
     /**
-     * A star's direction (unit vector, J2000 axes) as seen from the Earth on the date: catalogue position moved by
+     * A star's direction (unit vector, J2000 axes) as seen from the Earth on the date: catalog position moved by
      * proper motion, then annual aberration from the Earth's orbital velocity (up to 20 arc-seconds). Stellar
      * parallax is ignored (under 1 arc-second for every navigational star).
      */
@@ -142,14 +142,14 @@ object Almanac {
         val v = baryState(Body.Earth, t)
         val bx = v.vx / C_AUDAY; val by = v.vy / C_AUDAY; val bz = v.vz / C_AUDAY
         val ub = ux * bx + uy * by + uz * bz
-        // first-order (classical) aberration: u' = u + beta - u (u . beta), renormalised
+        // first-order (classical) aberration: u' = u + beta - u (u . beta), renormalized
         var x = ux + bx - ux * ub; var y = uy + by - uy * ub; var z = uz + bz - uz * ub
         val n = sqrt(x * x + y * y + z * z); x /= n; y /= n; z /= n
         val far = 63_241.077 * 1000.0                        // 1000 light-years in AU (only the direction matters)
         return Vector(x * far, y * far, z * far, t)
     }
 
-    /** J2000 catalogue position moved by proper motion to the date (still J2000 orientation): ra hours, dec degrees. */
+    /** J2000 catalog position moved by proper motion to the date (still J2000 orientation): ra hours, dec degrees. */
     internal fun starPositionAtEpoch(s: NavStar, t: Time): Pair<Double, Double> {
         val years = t.tt / 365.25
         val dec = s.decJ2000 + s.pmDec * years / 3600.0

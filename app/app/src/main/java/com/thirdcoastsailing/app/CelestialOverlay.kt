@@ -26,8 +26,8 @@ import java.util.Locale
 
 /*
  * Celestial lines of position and the fix from the workbook, drawn over the chart (purple, so they're not mistaken
- * for the route or the trip track). Each line is labelled with the body and time; the fix is a circle with a dot.
- * Saved fixes (the trip's fix log) are joined by a dashed line, each leg labelled with its true bearing and distance.
+ * for the route or the trip track). Each line is labeled with the body and time; the fix is a circle with a dot.
+ * Saved fixes (the trip's fix log) are joined by a dashed line, each leg labeled with its true bearing and distance.
  * Tapping any fix opens the workbook; the workbook's reset arrow (↺) removes them all.
  */
 
@@ -57,7 +57,7 @@ fun CelestialOverlay(map: MapLibreMap?, tick: Int, plot: CelestialPlot?, night: 
             val t = measurer.measure("${l.bodyName} ${time.format(Date(l.timeMs))}", TextStyle(fontSize = 11.sp, color = ink, fontWeight = FontWeight.Medium))
             drawText(t, topLeft = pb + Offset(4.dp.toPx(), -t.size.height.toFloat()))
         }
-        // ---- fix log: saved fixes (and the current one) joined by a dashed line, each leg labelled bearing · distance
+        // ---- fix log: saved fixes (and the current one) joined by a dashed line, each leg labeled bearing · distance
         val pts = p.log.map { xy(it.position) }
         for (i in 1 until p.log.size) {
             val a0 = p.log[i - 1]; val a1 = p.log[i]

@@ -5,7 +5,7 @@ Offline Great Lakes chart viewer, weather and sail-routing app for Android, with
 **Where it works**
 
 - **Charts, weather, buoys and routing: the Great Lakes only** (and the inland lakes connected to them). The charts, wind and wave forecasts and buoy reports all come from US NOAA sources for the Great Lakes; other waters aren't covered and aren't planned.
-- **Celestial navigation trainer: anywhere in the world.** The almanac, star finder, sight planning and sight workbook are calculated for any position and any date, so you can practise anywhere, at sea or at home. Fixes are plotted on the chart where there's a Great Lakes chart; elsewhere the workbook gives the position in numbers.
+- **Celestial navigation trainer: anywhere in the world.** The almanac, star finder, sight planning and sight workbook are calculated for any position and any date, so you can practice anywhere, at sea or at home. Fixes are plotted on the chart where there's a Great Lakes chart; elsewhere the workbook gives the position in numbers.
 
 > **Not for navigation.** Official NOAA charts and notices govern. Use at your own risk.
 
@@ -19,10 +19,10 @@ Offline Great Lakes chart viewer, weather and sail-routing app for Android, with
 ## What it does
 
 - **Charts:** NOAA electronic charts for Superior, Michigan, Huron, Erie and Ontario (plus connected inland lakes), stored on the phone and usable with no signal. Depth shading, hazards, and water shallower than your boat's minimum depth shaded red, with one red line at that depth.
-- **Weather:** wind, gusts and waves from NOAA (NDFD and the GLWU wave model), downloaded by the phone directly — no server in between. Colour field, wind barbs, animated wave crests and a 48-hour forecast slider.
-- **Buoys:** NOAA NDBC stations coloured by wind speed, ringed for waves over 3 ft / 5 ft; tap for the latest report and a 24-hour graph.
+- **Weather:** wind, gusts and waves from NOAA (NDFD and the GLWU wave model), downloaded by the phone directly — no server in between. Color field, wind barbs, animated wave crests and a 48-hour forecast slider.
+- **Buoys:** NOAA NDBC stations colored by wind speed, ringed for waves over 3 ft / 5 ft; tap for the latest report and a 24-hour graph.
 - **Boat:** GPS position, course line with 1/2/3-hour marks, and a heading-up wind gauge with your polar.
-- **Routes:** lay in points, see leg distance and magnetic bearing, distance / VMG / time to destination, and calculate a weather-optimised route (isochrones, your polar at a cruise factor, tack penalty, depth limit).
+- **Routes:** lay in points, see leg distance and magnetic bearing, distance / VMG / time to destination, and calculate a weather-optimized route (isochrones, your polar at a cruise factor, tack penalty, depth limit).
 - **Celestial navigation trainer:** 3D star finder that turns with the phone, sight planning, a step-by-step sight workbook with every equation shown, printed-almanac style tables, and the fix plotted on the chart. Three skill levels.
 - **Private by design:** no Google Play Services, no accounts, no tracking. Runs on GrapheneOS and LineageOS.
 
@@ -53,7 +53,7 @@ Requirements: Android 14 (API 34) or newer. The build fails on purpose if any Go
 | Star positions (celestial trainer) | Yale Bright Star Catalogue, 5th ed. | Public domain |
 | Constellation figures and names | [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn | BSD 3-Clause |
 
-Harbour data derived from OpenStreetMap is available under the ODbL.
+Harbor data derived from OpenStreetMap is available under the ODbL.
 
 ## About the name
 

@@ -103,17 +103,17 @@ class WxFrame(
     }
 }
 
-// Wind colour scale (knots): blue → green → yellow → orange → red at 25+
+// Wind color scale (knots): blue → green → yellow → orange → red at 25+
 private val windStops = listOf(
     0.0 to Color(0xFF3B6FB6), 8.0 to Color(0xFF3DBE6B), 14.0 to Color(0xFFF2D028),
     20.0 to Color(0xFFF28C28), 25.0 to Color(0xFFE5484D),
 )
-const val FIELD_OPACITY = 0.45f              // colour field transparency on the chart
+const val FIELD_OPACITY = 0.45f              // color field transparency on the chart
 
 private val BarbNavy = Color(0xFF0F2742)
 private val BarbEdge = Color(0xFFF4F1EA)
 
-// Wave crest colours: under 2 ft, 2-4 ft, 4-6 ft, 6 ft and up
+// Wave crest colors: under 2 ft, 2-4 ft, 4-6 ft, 6 ft and up
 private val WaveLow = Color(0xFFE6F2FF)
 private val WaveMid = Color(0xFF7FD3F0)
 private val WaveHigh = Color(0xFFF2C14E)
@@ -122,7 +122,7 @@ private val WaveBig = Color(0xFFE5484D)
 private const val WAVE_FRAME_MS = 100L      // wave animation step: about 10 updates a second
 private const val WAVE_MIN_ZOOM = 7.0      // waves stop animating (and are drawn still) when zoomed out past this
 
-/** Colour for a wind speed in knots, from the scale above. */
+/** Color for a wind speed in knots, from the scale above. */
 fun windColor(kn: Double): Color {
     if (kn <= windStops.first().first) return windStops.first().second
     for (i in 1 until windStops.size) {
@@ -141,9 +141,9 @@ private fun waveColor(ft: Double) = when {
     ft < 2 -> WaveLow; ft < 4 -> WaveMid; ft < 6 -> WaveHigh; else -> WaveBig
 }
 
-// ---------------------------------------------------------------------------------------- colour field image
+// ---------------------------------------------------------------------------------------- color field image
 
-/** Colour field as an image with its lat/lon corners, for a MapLibre image source (so it pans and zooms with the chart). */
+/** Color field as an image with its lat/lon corners, for a MapLibre image source (so it pans and zooms with the chart). */
 class FieldImage(val bitmap: Bitmap, val quad: LatLngQuad)
 
 private fun mercY(lat: Double) = ln(tan(PI / 4 + Math.toRadians(lat) / 2))
@@ -217,7 +217,7 @@ private fun geoGrid(m: MapLibreMap, wPx: Float, hPx: Float, spacingPx: Float, ha
 /**
  * Wind barbs and animated wave crests over the chart. Each mark is pinned to a lat/lon, so it moves with every pan,
  * zoom and rotation; the set of marks is re-spaced when the camera comes to rest (idleTick).
- * The wind colour field is not drawn here: it is a map layer (see buildFieldImage), so it moves with the chart natively.
+ * The wind color field is not drawn here: it is a map layer (see buildFieldImage), so it moves with the chart natively.
  * @param tick changes on every camera move (redraw); idleTick changes when the camera stops (re-space the marks)
  */
 @Composable
@@ -325,7 +325,7 @@ private fun DrawScope.drawBarb(p: Offset, fromScreenDeg: Float, kn: Double) {
 
 /**
  * Two short crest lines across the direction of travel, drifting the way the waves move and fading in and out
- * as they cycle. Length, thickness and colour scale with height. t = seconds (0 = still).
+ * as they cycle. Length, thickness and color scale with height. t = seconds (0 = still).
  */
 private fun DrawScope.drawCrests(at: Offset, s: GeoSite, mapBearing: Double, t: Double) {
     val heightFt = s.a
@@ -360,8 +360,8 @@ private fun DrawScope.drawCrests(at: Offset, s: GeoSite, mapBearing: Double, t: 
 // ---------------------------------------------------------------------------------------- bottom weather panel
 
 /**
- * Weather boxes along the bottom of the screen: a Wind box (colour scale, forecast time slider, last update)
- * and a Waves box (crest colour key, wave model run). Only the boxes for switched-on layers show.
+ * Weather boxes along the bottom of the screen: a Wind box (color scale, forecast time slider, last update)
+ * and a Waves box (crest color key, wave model run). Only the boxes for switched-on layers show.
  * The forecast slider lives in the first box; the "Updated … ↻" line in the first box forces one update when tapped.
  * Offline mode = orange border. The update time turns orange after 6 h and red after 12 h.
  */

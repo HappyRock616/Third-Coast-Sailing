@@ -139,7 +139,7 @@ private const val CRUISE_FACTOR = 0.85       // routing: fraction of polar speed
 private const val TACK_PENALTY_MIN = 15.0    // routing: time lost per tack or gybe
 private const val MAX_ROUTE_POINTS = 6        // the app is for rough passage planning, not detailed routes
 private const val HOLD_MS = 450L             // hold on a route point this long (without moving) to drag it
-private const val WX_SOURCE = "wx_field"     // map source + layer for the wind / gust colour field
+private const val WX_SOURCE = "wx_field"     // map source + layer for the wind / gust color field
 private const val WX_LAYER = "wx_field_layer"
 
 /** One lake row in the menu's Charts list. progress = 0..1 while downloading, else null. */
@@ -207,7 +207,7 @@ private fun App() {
     var showCelestial by remember { mutableStateOf(false) }
     val celPlot = remember(celestial.state) { celestialPlot(celestial.state) }
     var removeLake by remember { mutableStateOf<Lake?>(null) }
-    // Weather: layer toggles (wind and gust colour fields are linked so only one is on), forecast time, update state
+    // Weather: layer toggles (wind and gust color fields are linked so only one is on), forecast time, update state
     val weather = remember { WeatherRepo(context) }
     var wxColor by remember { mutableStateOf(prefs.getString("wxColor", "none") ?: "none") }   // "wind", "gust" or "none"
     var wxBarbs by remember { mutableStateOf(prefs.getBoolean("wxBarbs", false)) }
@@ -226,7 +226,7 @@ private fun App() {
     var calcResult by remember { mutableStateOf<RouteResult?>(null) }
     var calcState by remember { mutableStateOf(CalcState.IDLE) }
     val calcCancel = remember { AtomicBoolean(false) }
-    // Buoys: stations from the chart packages, coloured by NOAA's latest reports (refreshed with weather)
+    // Buoys: stations from the chart packages, colored by NOAA's latest reports (refreshed with weather)
     val buoyRepo = remember { BuoyRepo(context) }
     var buoyVersion by remember { mutableStateOf(0) }
     var buoyStations by remember { mutableStateOf<List<BuoyStation>>(emptyList()) }
@@ -440,7 +440,7 @@ private fun App() {
         val f = fix
         val center = m.cameraPosition.target?.let { GeoPt(it.latitude, it.longitude) }
         val from = routePts.lastOrNull() ?: routeStart ?: center ?: return
-        if (routePts.isEmpty() && routeStart == null) { setRoute(listOf(from)); return }   // no GPS: first point at screen centre
+        if (routePts.isEmpty() && routeStart == null) { setRoute(listOf(from)); return }   // no GPS: first point at screen center
         val prev = if (routePts.size >= 2) routePts[routePts.size - 2] else if (routePts.size == 1) routeStart else null
         val brg = when {
             prev != null -> bearingDeg(prev, from)
@@ -861,14 +861,14 @@ private fun MenuSheet(
 
             MenuDivider()
             MenuHeader("Weather")
-            // Wind and gust colour fields are linked: turning one on turns the other off
-            SwitchRow("Wind speed", "Coloured wind field over the chart", wxColor == "wind") { onWxColor(if (it) "wind" else "none") }
+            // Wind and gust color fields are linked: turning one on turns the other off
+            SwitchRow("Wind speed", "Colored wind field over the chart", wxColor == "wind") { onWxColor(if (it) "wind" else "none") }
             Spacer(Modifier.height(8.dp))
-            SwitchRow("Gusts", "Coloured gust field (replaces wind speed)", wxColor == "gust") { onWxColor(if (it) "gust" else "none") }
+            SwitchRow("Gusts", "Colored gust field (replaces wind speed)", wxColor == "gust") { onWxColor(if (it) "gust" else "none") }
             Spacer(Modifier.height(8.dp))
             SwitchRow("Wind barbs", "Half feather 5 kt · feather 10 kt · pennant 50 kt", wxBarbs, onWxBarbs)
             Spacer(Modifier.height(8.dp))
-            SwitchRow("Waves", "Animated wave crests, coloured by height", wxWaves, onWxWaves)
+            SwitchRow("Waves", "Animated wave crests, colored by height", wxWaves, onWxWaves)
 
             MenuDivider()
             MenuHeader("Display")
@@ -1184,7 +1184,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         centered = true
     }
 
-    // Wind / gust colour field as a map image layer under the land, so it moves with the chart and tints water only
+    // Wind / gust color field as a map image layer under the land, so it moves with the chart and tints water only
     LaunchedEffect(style, frame, layers.colorKind, lakes) {
         val s = style ?: return@LaunchedEffect
         val src = when (layers.colorKind) { Wx.WIND_SPEED -> frame?.speed; Wx.GUST -> frame?.gust; else -> null }

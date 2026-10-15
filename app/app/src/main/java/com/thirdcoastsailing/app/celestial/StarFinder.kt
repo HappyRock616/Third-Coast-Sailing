@@ -15,8 +15,8 @@ import kotlin.math.sin
  *  - stars.csv: every star down to magnitude 4.5 (about 900), Yale Bright Star Catalogue 5 (public domain)
  *  - constellation_lines.csv, constellations.csv: stick figures and names, d3-celestial (BSD 3-Clause)
  *
- * The view is a "looking up" disc: zenith in the centre, horizon at radius 1, the direction you face at the top
- * (azimuthal equidistant: distance from the centre is proportional to 90° minus altitude). Navigational stars,
+ * The view is a "looking up" disc: zenith in the center, horizon at radius 1, the direction you face at the top
+ * (azimuthal equidistant: distance from the center is proportional to 90° minus altitude). Navigational stars,
  * planets, Sun and Moon come from the almanac (full accuracy); the background stars and lines use a quick
  * precession-only conversion (good to about 1 arc-minute, plenty for a picture).
  */
@@ -25,7 +25,7 @@ data class CatalogStar(val raDeg: Double, val decDeg: Double, val mag: Double, v
 data class ConstellationLine(val abbr: String, val rank: Int, val points: List<Pair<Double, Double>>)  // (ra, dec) degrees
 data class ConstellationName(val abbr: String, val name: String, val rank: Int, val raDeg: Double, val decDeg: Double)
 
-/** The star finder's catalogue, parsed once from the three CSV assets. */
+/** The star finder's catalog, parsed once from the three CSV assets. */
 class StarCatalog(
     val stars: List<CatalogStar>,
     val lines: List<ConstellationLine>,
@@ -106,7 +106,7 @@ object StarFinder {
 
     /**
      * The sky from `pos` at `ms`, with `headingDeg` (the direction you're facing) at the top.
-     * @param maxMag      faintest background star to include (4.5 = everything in the catalogue)
+     * @param maxMag      faintest background star to include (4.5 = everything in the catalog)
      * @param allConstellationNames draw every constellation's name, not just those with navigational stars
      */
     fun view(

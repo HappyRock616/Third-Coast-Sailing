@@ -74,8 +74,8 @@ import kotlin.math.sin
  *
  *  LopInsetRow    small plot at the end of each sight's reduction: assumed position (AP), the dashed bearing toward
  *                 the body (Zn) with an arrowhead and ★, the intercept in orange, the line of position at right
- *                 angles, and the boat at its GPS / DR position on its course. Text and a colour key beside it.
- *                 Tap to enlarge into LopPlotDialog: the same plot labelled, with a scale and the four plotting steps.
+ *                 angles, and the boat at its GPS / DR position on its course. Text and a color key beside it.
+ *                 Tap to enlarge into LopPlotDialog: the same plot labeled, with a scale and the four plotting steps.
  *  FixPlot        at the end of the workbook: every line of position (advanced to the fix time), an arrow from the
  *                 fix toward each body at its Zn, the 95% circle, the GPS (or DR) position and the boat on its course.
  *
@@ -86,7 +86,7 @@ private val PAPER = Color(0xFFECF1F5)
 private val INK = Color(0xFF0F2742)
 private val BLUE = Color(0xFF286ED2)
 private val PURPLE = Color(0xFF6A3FB5)
-private val BODY_COLOURS = listOf(Color(0xFF148C78), BLUE, Color(0xFFC84682), Color(0xFFB07A10), Color(0xFF5A8F29), Color(0xFF8A4FC8))
+private val BODY_COLORS = listOf(Color(0xFF148C78), BLUE, Color(0xFFC84682), Color(0xFFB07A10), Color(0xFF5A8F29), Color(0xFF8A4FC8))
 
 /** Course over ground for the plot: from the shots' own positions if the boat moved, else the live GPS course. */
 fun plotCourse(shots: List<Shot>, gps: BoatFix?): Double? {
@@ -103,7 +103,7 @@ private class Local(val o: LatLon) {
 /** Unit vector (east, north) along a true bearing. */
 private fun dir(brgDeg: Double) = Offset(sin(Math.toRadians(brgDeg)).toFloat(), cos(Math.toRadians(brgDeg)).toFloat())
 
-/** Maps the local frame to the canvas: `c` (nm) at the canvas centre, `s` px per nm, north up. */
+/** Maps the local frame to the canvas: `c` (nm) at the canvas center, `s` px per nm, north up. */
 private class View(val c: Offset, val s: Float, val size: Size) {
     fun px(p: Offset) = Offset(size.width / 2f + (p.x - c.x) * s, size.height / 2f - (p.y - c.y) * s)
     fun inside(p: Offset, marginPx: Float) = p.x in marginPx..(size.width - marginPx) && p.y in marginPx..(size.height - marginPx)
@@ -141,7 +141,7 @@ private fun DrawScope.north(m: TextMeasurer, size: TextUnit) {
     arrow(Offset(cx, y0 + 12.dp.toPx()), Offset(cx, y0), INK, 1.5.dp.toPx(), 4.dp.toPx())
 }
 
-/** Text with a paper-coloured backing so it reads over lines; kept inside the canvas. */
+/** Text with a paper-colored backing so it reads over lines; kept inside the canvas. */
 private fun DrawScope.label(m: TextMeasurer, text: String, at: Offset, col: Color, size: TextUnit, bold: Boolean = false) {
     val t = m.measure(text, TextStyle(fontSize = size, color = col, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal))
     val pad = 2.dp.toPx()
@@ -229,7 +229,7 @@ fun LopPlot(lop: WorkLop, course: Double?, big: Boolean, modifier: Modifier = Mo
     }
 }
 
-/** The small plot with its text and colour key, at the end of a sight's reduction. Tapping opens the large plot. */
+/** The small plot with its text and color key, at the end of a sight's reduction. Tapping opens the large plot. */
 @Composable
 fun LopInsetRow(lop: WorkLop, course: Double?, onEnlarge: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(top = 8.dp).clickable(onClick = onEnlarge), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -248,7 +248,7 @@ fun LopInsetRow(lop: WorkLop, course: Double?, onEnlarge: () -> Unit) {
     }
 }
 
-/** One row of the colour key: a short line sample and its meaning. */
+/** One row of the color key: a short line sample and its meaning. */
 @Composable
 private fun KeyRow(col: Color, dashed: Boolean, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,7 +260,7 @@ private fun KeyRow(col: Color, dashed: Boolean, text: String) {
     }
 }
 
-/** The enlarged sight plot, labelled, with the four plotting steps worked for this sight. */
+/** The enlarged sight plot, labeled, with the four plotting steps worked for this sight. */
 @Composable
 fun LopPlotDialog(lop: WorkLop, course: Double?, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -309,12 +309,12 @@ fun FixPlot(f: WorkFix, course: Double?, modifier: Modifier = Modifier) {
                 }
                 // each line of position (advanced to the fix time), then the arrows toward each body
                 for ((i, l) in f.lops.withIndex()) {
-                    val col = BODY_COLOURS[i % BODY_COLOURS.size]
+                    val col = BODY_COLORS[i % BODY_COLORS.size]
                     val p = loc.en(l.footPoint); val along = dir(l.znDeg + 90.0)
                     drawLine(col, v.px(p - along * far), v.px(p + along * far), 2.5.dp.toPx())
                 }
                 for ((i, l) in f.lops.withIndex()) {
-                    val col = BODY_COLOURS[i % BODY_COLOURS.size]
+                    val col = BODY_COLORS[i % BODY_COLORS.size]
                     val u = dir(l.znDeg)
                     val tip = v.px(u * (half * 0.62f))
                     arrow(v.px(Offset.Zero), tip, col, 1.8.dp.toPx(), 7.dp.toPx())

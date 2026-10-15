@@ -102,7 +102,7 @@ import kotlin.math.sin
  *  - ✕ (top left) or Back returns to the workbook.
  */
 
-/** Star finder catalogue, loaded once from assets. */
+/** Star finder catalog, loaded once from assets. */
 object FinderCatalog {
     @Volatile private var cached: StarCatalog? = null
     fun load(context: Context): StarCatalog = cached ?: synchronized(this) {
@@ -382,7 +382,7 @@ private fun DrawScope.drawTargetArrow(cam: FinderCameras, o: Sky3DObject, k: Flo
         drawPath(head, orange)
         return
     }
-    // off screen: direction on screen from the centre toward the body (flipped when it is behind the phone)
+    // off screen: direction on screen from the center toward the body (flipped when it is behind the phone)
     val cx = size.width / 2; val cy = size.height * 0.35f
     var dx = p.x - cx; var dy = p.y - cy
     if (!p.inFront) { dx = -dx; dy = -dy }

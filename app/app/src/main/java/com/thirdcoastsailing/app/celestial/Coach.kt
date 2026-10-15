@@ -71,7 +71,7 @@ object SextantProcedure {
         "sextant_step_touch_moon",
     )
     val touchStar = SextantStep(
-        "touch_star", "Star centred on the horizon",
+        "touch_star", "Star centered on the horizon",
         "Stars and planets are points: put the dot right on the horizon line at the bottom of the swing.",
         "sextant_step_touch_star",
     )

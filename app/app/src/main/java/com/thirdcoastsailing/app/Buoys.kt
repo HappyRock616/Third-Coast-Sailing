@@ -49,7 +49,7 @@ data class BuoyObs(
 
 const val BUOY_SOURCE = "buoys_live"
 const val BUOY_LAYER = "buoys_live_layer"
-private const val STALE_MS = 2 * 3_600_000L                 // no report for 2 h = grey marker
+private const val STALE_MS = 2 * 3_600_000L                 // no report for 2 h = gray marker
 private const val HISTORY_BYTES = 25_000                     // newest ~24 h of a station's 10-minute file
 
 /**
@@ -189,11 +189,11 @@ class BuoyRepo(context: Context) {
             return out
         }
 
-        /** Hex colour of a wind speed on the overlay scale. */
+        /** Hex color of a wind speed on the overlay scale. */
         private fun hex(c: Color) = "#%02X%02X%02X".format((c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
 
         /**
-         * Map features for the buoy layer. Fill = wind speed (grey when no wind report in the last 2 h);
+         * Map features for the buoy layer. Fill = wind speed (gray when no wind report in the last 2 h);
          * ring = yellow for waves over 3 ft, red over 5 ft, otherwise a thin dark edge.
          */
         fun features(stations: List<BuoyStation>, obs: Map<String, BuoyObs>, nowMs: Long): FeatureCollection =
