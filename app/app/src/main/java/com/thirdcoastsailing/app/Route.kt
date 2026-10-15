@@ -67,6 +67,15 @@ val RouteTeal = Color(0xFF19C3B3)                      // calculated route line
 private const val EARTH_NM = 3440.065
 
 /** Great-circle distance in nautical miles. */
+/** Point reached from `from` after `nm` nautical miles on a true bearing (great circle). */
+fun destination(from: GeoPt, bearingDeg: Double, nm: Double): GeoPt {
+    val d = nm / EARTH_NM; val th = Math.toRadians(bearingDeg)
+    val p1 = Math.toRadians(from.lat); val l1 = Math.toRadians(from.lon)
+    val p2 = asin(sin(p1) * cos(d) + cos(p1) * sin(d) * cos(th))
+    val l2 = l1 + atan2(sin(th) * sin(d) * cos(p1), cos(d) - sin(p1) * sin(p2))
+    return GeoPt(Math.toDegrees(p2), ((Math.toDegrees(l2) + 540.0) % 360.0) - 180.0)
+}
+
 fun distNm(a: GeoPt, b: GeoPt): Double {
     val p1 = Math.toRadians(a.lat); val p2 = Math.toRadians(b.lat)
     val dp = p2 - p1; val dl = Math.toRadians(b.lon - a.lon)
