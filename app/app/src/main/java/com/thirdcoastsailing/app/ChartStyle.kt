@@ -101,8 +101,10 @@ object ChartStyle {
         layers.put(line("${src}_hazareaedge", src, "hazard_area", p.hazard, width = 1.2))
         layers.put(line("${src}_hazline", src, "hazard_line", p.hazard, width = 1.5))
         layers.put(circle("${src}_hazpt", src, "hazard_point", p.hazard, radius = 3.0, minzoom = 10.0))
-        // Harbors (orange, tappable). Buoys are a separate live layer colored by their latest report (see Buoys.kt).
-        layers.put(circle("${src}_harbor", src, "harbor", p.harbor, radius = 5.0, minzoom = 8.0, stroke = "#1B1F23"))
+        // Harbors (orange anchor tile, tappable; see marinaBitmap). Buoys are a separate live layer colored by their latest report (see Buoys.kt).
+        layers.put(JSONObject().put("id", "${src}_harbor").put("type", "symbol").put("source", src).put("source-layer", "harbor")
+            .put("minzoom", 8.0).put("layout", JSONObject()
+                .put("icon-image", MARINA_ICON).put("icon-allow-overlap", true).put("icon-ignore-placement", true)))
     }
 
     /** Layer ids that open an info card when tapped. */
@@ -143,4 +145,30 @@ object ChartStyle {
             .put("circle-color", color).put("circle-radius", radius).also {
                 if (stroke != null) it.put("circle-stroke-color", stroke).put("circle-stroke-width", 1.0)
             })
+
+    /** Style image name of the marina symbol (added with the style, see marinaBitmap). */
+    const val MARINA_ICON = "marina"
+
+    /**
+     * Marina symbol on the chart: an orange rounded tile with a navy anchor and a dark edge, so marinas never look
+     * like buoys (which are round). `density` = screen px per dp; the tile is 20 dp.
+     */
+    fun marinaBitmap(density: Float): android.graphics.Bitmap {
+        val s = (20 * density).toInt().coerceAtLeast(16)
+        val b = android.graphics.Bitmap.createBitmap(s, s, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        val k = s / 30f                                              // drawn on a 30 x 30 grid
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val r = android.graphics.RectF(1.5f * k, 1.5f * k, 28.5f * k, 28.5f * k)
+        p.color = 0xFFF28C28.toInt(); p.style = android.graphics.Paint.Style.FILL; c.drawRoundRect(r, 6 * k, 6 * k, p)
+        p.color = 0xFF1B1F23.toInt(); p.style = android.graphics.Paint.Style.STROKE; p.strokeWidth = 1.6f * k
+        c.drawRoundRect(r, 6 * k, 6 * k, p)
+        // anchor: ring, shank, stock, curved arms
+        p.color = 0xFF0F2742.toInt(); p.strokeWidth = 2.6f * k; p.strokeCap = android.graphics.Paint.Cap.ROUND
+        c.drawCircle(15 * k, 7.5f * k, 2.2f * k, p)
+        c.drawLine(15 * k, 9.7f * k, 15 * k, 24 * k, p)
+        c.drawLine(10.5f * k, 12.5f * k, 19.5f * k, 12.5f * k, p)
+        c.drawArc(android.graphics.RectF(7.5f * k, 12 * k, 22.5f * k, 24.5f * k), 20f, 140f, false, p)
+        return b
+    }
 }

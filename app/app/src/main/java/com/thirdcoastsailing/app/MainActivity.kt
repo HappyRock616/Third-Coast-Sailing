@@ -790,17 +790,19 @@ private fun MenuSheet(
     onWxColor: (String) -> Unit, onWxBarbs: (Boolean) -> Unit, onWxWaves: (Boolean) -> Unit,
     gps: GpsInfo, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
 ) {
-    ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 340.dp)) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+    var showCharts by remember { mutableStateOf(false) }
+    ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 300.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp)) {
+            // ---- logo and name, in the app's colors
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.tcs_logo), null,
-                    Modifier.size(64.dp).clip(CircleShape).border(2.dp, SignalOrange, CircleShape))
+                    Modifier.size(58.dp).clip(CircleShape).border(2.dp, SignalOrange, CircleShape))
                 Column(Modifier.padding(start = 12.dp)) {
-                    Text("Third Coast Sailing", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Foam)
-                    Text("Great Lakes charts & weather", fontSize = 12.sp, color = Mist)
+                    Text("THIRD COAST", fontSize = 21.sp, fontWeight = FontWeight.Black, color = SignalOrange, letterSpacing = 1.5.sp)
+                    Text("S A I L I N G", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Foam, letterSpacing = 2.sp)
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
             MenuHeader("GPS")
             Column(
@@ -819,83 +821,61 @@ private fun MenuSheet(
                     }
                     f == null -> {
                         Text("Searching for a fix…", color = Foam, fontSize = 15.sp)
-                        Text("Satellites ${gps.sats.first} used / ${gps.sats.second} seen", color = Mist, fontSize = 12.5.sp)
+                        Text("Sats ${gps.sats.first}/${gps.sats.second}", color = Mist, fontSize = 12.5.sp)
                     }
                     else -> {
                         Text(latLonText(f.lat, f.lon), color = Foam, fontSize = 16.sp)
-                        Text("COG %s · SOG %s · avg %s".format(
+                        Text("COG %s  SOG %s  avg %s".format(
                             f.cogDeg?.let { "%03.0f°T".format(it) } ?: "—",
                             f.sogKn?.let { "%.1f kn".format(it) } ?: "—",
                             gps.avgSogKn?.let { "%.1f kn".format(it) } ?: "—"), color = Mist, fontSize = 12.5.sp)
                         val age = ((System.currentTimeMillis() - f.time) / 1000).coerceAtLeast(0)
-                        Text("Satellites ${gps.sats.first} used / ${gps.sats.second} seen · fix ${age} s ago",
-                            color = Mist, fontSize = 12.5.sp)
+                        Text("Sats ${gps.sats.first}/${gps.sats.second} · ${age} s", color = Mist, fontSize = 12.5.sp)
                     }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
             // Trip track: the switch starts/stops recording; the reset arrow (shown once there is a track) clears it when held
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Trip track", color = Foam, fontSize = 15.sp)
-                    Text("Dashed line of where you've been, with distance and time", color = Mist, fontSize = 12.sp)
-                }
+            IconSwitchRow(MenuIcon.TRACK, "Track", tripOn, onTrip) {
                 if (hasTrack) HoldToResetArrow(onReset = onTripReset)        // hold 1.2 s to clear
-                Switch(checked = tripOn, onCheckedChange = onTrip)
-            }
-
-            MenuDivider()
-            MenuHeader("Boat")
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NavyLight)
-                    .clickable(onClick = onBoats).padding(12.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Boat & Polars", color = Foam, fontSize = 15.sp)
-                    Text("Active: $boatName", color = Mist, fontSize = 12.sp)
-                }
-                Text("›", color = SignalOrange, fontSize = 22.sp)
-            }
-
-            MenuDivider()
-            MenuHeader("Celestial")
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NavyLight)
-                    .clickable(onClick = onCelestial).padding(12.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Celestial navigation trainer", color = Foam, fontSize = 15.sp)
-                    Text("Star finder, sight workbook, almanac", color = Mist, fontSize = 12.sp)
-                }
-                Text("›", color = SignalOrange, fontSize = 22.sp)
             }
 
             MenuDivider()
             MenuHeader("Weather")
             // Wind and gust color fields are linked: turning one on turns the other off
-            SwitchRow("Wind speed", "Colored wind field over the chart", wxColor == "wind") { onWxColor(if (it) "wind" else "none") }
-            Spacer(Modifier.height(8.dp))
-            SwitchRow("Gusts", "Colored gust field (replaces wind speed)", wxColor == "gust") { onWxColor(if (it) "gust" else "none") }
-            Spacer(Modifier.height(8.dp))
-            SwitchRow("Wind barbs", "Half feather 5 kt · feather 10 kt · pennant 50 kt", wxBarbs, onWxBarbs)
-            Spacer(Modifier.height(8.dp))
-            SwitchRow("Waves", "Animated wave crests, colored by height", wxWaves, onWxWaves)
+            IconSwitchRow(MenuIcon.WIND, "Wind", wxColor == "wind", { onWxColor(if (it) "wind" else "none") })
+            IconSwitchRow(MenuIcon.GUST, "Gusts", wxColor == "gust", { onWxColor(if (it) "gust" else "none") })
+            IconSwitchRow(MenuIcon.BARBS, "Barbs", wxBarbs, onWxBarbs)
+            IconSwitchRow(MenuIcon.WAVES, "Waves", wxWaves, onWxWaves)
 
             MenuDivider()
             MenuHeader("Display")
-            SwitchRow("Night display", "Dark chart for night / cabin use", night, onNight)
-            Spacer(Modifier.height(8.dp))
-            SwitchRow("Wind gauge", "Compass, wind and polar over the chart (pinch to size, drag to move)", gaugeOn, onGauge)
+            IconSwitchRow(MenuIcon.NIGHT, "Night", night, onNight)
+            IconSwitchRow(MenuIcon.GAUGE, "Gauge", gaugeOn, onGauge)
+            IconSwitchRow(MenuIcon.OFFLINE, "Offline", offline, onOffline)
 
             MenuDivider()
-            MenuHeader("Connection")
-            SwitchRow("Offline mode", "Pause automatic weather downloads (tap the Weather box to update once)", offline, onOffline)
+            MenuHeader("Key")
+            ChartKey()
 
             MenuDivider()
-            MenuHeader("Charts")
+            MenuButton(MenuIcon.BOAT, "Boat", boatName, onClick = onBoats)
+            MenuButton(MenuIcon.SEXTANT, "Celestial", onClick = onCelestial)
+            MenuButton(MenuIcon.CHARTS, "Charts", if (lakeRows.any { it.update }) "update" else null, onClick = { showCharts = true })
+            MenuButton(MenuIcon.INFO, "About", "v$APP_VERSION", onClick = onAbout)
+        }
+    }
+
+    // ---- Charts: download, update and remove lakes (its own screen, to keep the menu short)
+    if (showCharts) androidx.compose.ui.window.Dialog(onDismissRequest = { showCharts = false },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxSize().background(Navy).safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MenuIconView(MenuIcon.CHARTS, Modifier.size(28.dp))
+                Text("Charts", color = Foam, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp).weight(1f))
+                TextButton(onClick = { showCharts = false }) { Text("Done ✓", color = SignalOrange, fontWeight = FontWeight.Bold) }
+            }
+            Spacer(Modifier.height(10.dp))
             // Disclaimer banner, always shown with the chart downloads
             Text(
                 "Not for navigation · Reference use only",
@@ -935,17 +915,6 @@ private fun MenuSheet(
             if (catalogMsg.isNotEmpty()) Text(catalogMsg, color = Mist, fontSize = 11.5.sp, modifier = Modifier.padding(top = 4.dp))
             TextButton(onClick = onImport) { Text("Import from a folder…", color = Mist, fontSize = 12.sp) }
 
-            MenuDivider()
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onAbout).padding(vertical = 6.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("About & credits", color = Foam, fontSize = 15.sp)
-                    Text("Version $APP_VERSION · NOAA chart data governs.", color = Mist, fontSize = 11.sp)
-                }
-                Text("›", color = SignalOrange, fontSize = 22.sp)
-            }
         }
     }
 }
@@ -1185,7 +1154,9 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
     // (Re)build the style whenever the lake set, day/night or the boat's minimum depth changes
     LaunchedEffect(map, lakes, night, depthLimitFt) {
         val m = map ?: return@LaunchedEffect
-        m.setStyle(Style.Builder().fromJson(ChartStyle.build(lakes, night, depthLimitFt))) { s -> style = s; tick++ }
+        val marina = ChartStyle.marinaBitmap(context.resources.displayMetrics.density)
+        m.setStyle(Style.Builder().fromJson(ChartStyle.build(lakes, night, depthLimitFt))
+            .withImage(ChartStyle.MARINA_ICON, marina)) { s -> style = s; tick++ }
     }
 
     // Center on the first fix, and whenever the center button is pressed: boat centered, north up, default zoom
