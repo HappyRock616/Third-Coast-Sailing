@@ -84,6 +84,24 @@ data class SkyView(
     val sunAltDeg: Double,              // < -12: dark; -12..-6 nautical twilight; -6..0 civil twilight
 )
 
+/** An object in the 3D star finder (altitude / true azimuth in degrees). */
+data class Sky3DObject(
+    val kind: SkyObjectKind, val name: String?, val navNumber: Int?,
+    val altDeg: Double, val azDeg: Double, val mag: Double, val body: SkyBody?,
+)
+
+/** A constellation stick-figure segment, ends as altitude / azimuth. */
+data class Sky3DSegment(val abbr: String, val alt1: Double, val az1: Double, val alt2: Double, val az2: Double)
+
+/** A constellation name; `nav` = contains a navigational star (drawn brighter). */
+data class Sky3DName(val name: String, val nav: Boolean, val altDeg: Double, val azDeg: Double)
+
+data class Sky3D(
+    val timeMs: Long, val position: LatLon,
+    val objects: List<Sky3DObject>, val segments: List<Sky3DSegment>, val names: List<Sky3DName>,
+    val sunAltDeg: Double, val sunAzDeg: Double,
+)
+
 object StarFinder {
 
     /**
@@ -147,6 +165,49 @@ object StarFinder {
             projectAny(0.0, az, headingDeg).let { labels += SkyLabel(SkyLabelKind.CARDINAL, name, it.first * 1.06, it.second * 1.06) }
         }
         return SkyView(ms, pos, headingDeg, objects.sortedByDescending { it.mag }, segments, labels, sunAlt)
+    }
+
+    /**
+     * The sky for the 3D star finder: every object and constellation figure as altitude / azimuth (true), at one
+     * place and time. Objects are faint first so bright ones are drawn on top. Things a little below the horizon
+     * are kept (they come up as time passes; the renderer hides what's below).
+     */
+    fun sky3d(catalog: StarCatalog, pos: LatLon, ms: Long, maxMag: Double = 4.5): Sky3D {
+        val conv = Converter(pos, ms)
+        val objects = mutableListOf<Sky3DObject>()
+        for (s in catalog.stars) {
+            if (s.mag > maxMag || catalog.isNavStar(s)) continue
+            val (alt, az) = conv.altAz(s.raDeg, s.decDeg)
+            if (alt < -5.0) continue
+            objects += Sky3DObject(SkyObjectKind.STAR, null, null, alt, az, s.mag, null)
+        }
+        var sunAlt = -90.0; var sunAz = 0.0
+        for (b in SkyBody.all) {
+            val e = Almanac.entry(b, ms)
+            val h = SightReduction.hcZn(pos, e.gha, e.dec)
+            if (b == SkyBody.Sun) { sunAlt = h.hcDeg; sunAz = h.znDeg }
+            val kind = when (b) {
+                SkyBody.Sun -> SkyObjectKind.SUN
+                SkyBody.Moon -> SkyObjectKind.MOON
+                is SkyBody.Planet -> SkyObjectKind.PLANET
+                is SkyBody.Star -> SkyObjectKind.NAV_STAR
+            }
+            objects += Sky3DObject(kind, b.name, (b as? SkyBody.Star)?.star?.number, h.hcDeg, h.znDeg, e.mag, b)
+        }
+        val segments = mutableListOf<Sky3DSegment>()
+        for (line in catalog.lines) {
+            var prev: Pair<Double, Double>? = null
+            for ((ra, dec) in line.points) {
+                val p = conv.altAz(ra, dec)
+                if (prev != null && (p.first > -2.0 || prev.first > -2.0)) segments += Sky3DSegment(line.abbr, prev.first, prev.second, p.first, p.second)
+                prev = p
+            }
+        }
+        val names = catalog.names.map { n ->
+            val (alt, az) = conv.altAz(n.raDeg, n.decDeg)
+            Sky3DName(n.name, n.abbr in catalog.navConstellations, alt, az)
+        }
+        return Sky3D(ms, pos, objects.sortedByDescending { it.mag }, segments, names, sunAlt, sunAz)
     }
 
     /** Disc position for an altitude/azimuth, or null below the horizon. */

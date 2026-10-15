@@ -67,6 +67,44 @@ class CelestialTest {
         assertNotNull(plan.sun.noon)
     }
 
+    @Test fun workbookFixFindsTheTruePosition() {
+        val truth = LatLon(43.0, -86.9)
+        val dr = travel(truth, 300.0, 8.0)
+        val set = WorkbookSettings(SkillLevel.BEGINNER, 9.0, 2.0)
+        fun sight(id: Long, name: String, t: Long): WorkbookSight {
+            val b = SkyBody.byName(name)!!
+            val hc = SightReduction.altAz(b, truth, t).hcDeg
+            val probe = SightInput(b, t, hc, defaultLimb(b), 2.0, 9.0)
+            var hs = hc
+            repeat(10) { hs += hc - SightReduction.correct(probe.copy(hsDeg = hs), Almanac.entry(b, t)).hoDeg }
+            return WorkbookSight(id, b, defaultLimb(b), listOf(Shot(t, hs, dr)))
+        }
+        val works = listOf(sight(1, "Markab", ms - 240_000), sight(2, "Polaris", ms - 120_000), sight(3, "Rasalhague", ms))
+            .map { Workbook.work(it, set) }
+        val fix = Workbook.fix(works.mapNotNull { it.lop })
+        assertNotNull(fix)
+        assertTrue("workbook fix within 0.3 nm (table rounding)", distanceNm(fix!!.position, truth) < 0.3)
+    }
+
+    @Test fun advancedFlagsOnlyTheWrongLine() {
+        val b = SkyBody.byName("Vega")!!
+        val s = WorkbookSight(1, b, Limb.CENTER, listOf(Shot(ms, 50.0, LatLon(43.0, -86.9))))
+        val right = Workbook.work(s, WorkbookSettings(SkillLevel.BEGINNER))
+        val typed = right.lines.associate { it.field to it.expected }.toMutableMap()
+        typed[Field.SHA] = typed[Field.SHA]!! + 1.0 / 60.0                  // 1' wrong
+        val adv = Workbook.work(s.copy(entries = typed), WorkbookSettings(SkillLevel.ADVANCED))
+        assertEquals(Check.WRONG, adv.line(Field.SHA)!!.check)
+        assertEquals(Check.OK, adv.line(Field.DIP)!!.check)
+    }
+
+    @Test fun starFinderPointsWhereThePhonePoints() {
+        val cam = FinderCameras(PhonePose.look(255.0, 18.0), 720, 1440, 70.0, 255.0)
+        val c = cam.projectSky(V3.altAz(18.0, 255.0))
+        assertEquals(360.0, c.x.toDouble(), 0.5); assertEquals(720.0, c.y.toDouble(), 0.5)
+        val s = Math.sqrt(0.5)                                               // phone upright, facing magnetic north
+        assertEquals(10.0, PhonePose.fromQuaternion(s, 0.0, 0.0, s, 0, 10.0).azDeg, 1e-6)
+    }
+
     @Test fun traditionalAssumedPositionGivesWholeLha() {
         val ap = AlmanacTables.traditionalAssumedPosition(LatLon(43.37, -86.74), 123.456)
         assertEquals(43.0, ap.lat, 1e-9)

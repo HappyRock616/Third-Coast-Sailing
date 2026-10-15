@@ -202,6 +202,10 @@ private fun App() {
     var sats by remember { mutableStateOf(0 to 0) }
     var info by remember { mutableStateOf<Info?>(null) }
     var showBoats by remember { mutableStateOf(false) }
+    // Celestial trainer: saved sights; their lines of position and fix are drawn on the chart
+    val celestial = remember { CelestialStore(context) }
+    var showCelestial by remember { mutableStateOf(false) }
+    val celPlot = remember(celestial.state) { celestialPlot(celestial.state) }
     var removeLake by remember { mutableStateOf<Lake?>(null) }
     // Weather: layer toggles (wind and gust colour fields are linked so only one is on), forecast time, update state
     val weather = remember { WeatherRepo(context) }
@@ -511,6 +515,7 @@ private fun App() {
                 onUpdateLake = { id -> catalog.firstOrNull { it.id == id }?.let { startDownloads(listOf(it)) } },
                 onCheckCharts = { checkCharts() },
                 onBoats = { scope.launch { drawer.close() }; showBoats = true },
+                onCelestial = { scope.launch { drawer.close() }; showCelestial = true },
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
                 gaugeOn = gaugeOn,
@@ -548,7 +553,11 @@ private fun App() {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
                 visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
-                onTap = { false },
+                celPlot,
+                // tapping the celestial fix opens the workbook
+                onTap = { ll ->
+                    if (tapsCelestialFix(mapRef, celPlot, ll, 28f * context.resources.displayMetrics.density)) { showCelestial = true; true } else false
+                },
                 onInfo = { info = it },
                 onMap = { mapRef = it },
                 onMovePoint = { i, p -> if (i in routePts.indices) setRoute(routePts.toMutableList().also { it[i] = p }) },
@@ -633,6 +642,8 @@ private fun App() {
             info?.let { i -> InfoCard(i, Modifier.align(Alignment.BottomEnd), buoyObs, buoyRepo, offline, clock) { info = null } }
         }
     }
+
+    if (showCelestial) CelestialScreen(celestial, fix) { showCelestial = false }
 
     if (showBoats) BoatScreen(boatStore) {
         showBoats = false
@@ -747,6 +758,7 @@ private fun MenuSheet(
     lakeRows: List<LakeRow>, catalogMsg: String, checking: Boolean,
     onImport: () -> Unit, onLakeCheck: (String, Boolean) -> Unit, onUpdateLake: (String) -> Unit, onCheckCharts: () -> Unit,
     onBoats: () -> Unit,
+    onCelestial: () -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
     tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
@@ -819,6 +831,20 @@ private fun MenuSheet(
                 Column(Modifier.weight(1f)) {
                     Text("Boat & Polars", color = Foam, fontSize = 15.sp)
                     Text("Active: $boatName", color = Mist, fontSize = 12.sp)
+                }
+                Text("›", color = SignalOrange, fontSize = 22.sp)
+            }
+
+            MenuDivider()
+            MenuHeader("Celestial")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(NavyLight)
+                    .clickable(onClick = onCelestial).padding(12.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Celestial navigation trainer", color = Foam, fontSize = 15.sp)
+                    Text("Star finder, sight workbook, almanac", color = Mist, fontSize = 12.sp)
                 }
                 Text("›", color = SignalOrange, fontSize = 22.sp)
             }
@@ -1000,7 +1026,8 @@ private fun toInfo(f: Feature, layerId: String): Info =
 @Composable
 private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, track: List<GeoPt>, trackText: String?, trackLive: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
                      frame: WxFrame?, layers: WxLayers, routeStart: GeoPt?, routePts: List<GeoPt>, calc: RouteResult?,
-                     buoys: FeatureCollection, selected: LatLng?, onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit,
+                     buoys: FeatureCollection, selected: LatLng?, celestial: CelestialPlot?,
+                     onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit,
                      onMap: (MapLibreMap) -> Unit, onMovePoint: (Int, GeoPt) -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -1185,6 +1212,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         WeatherOverlay(map, tick, idleTick, frame, layers)
         RouteOverlay(map, tick, routeStart, routePts, calc, night)
         TrackOverlay(map, tick, track, if (trackLive) fix else null, trackText, night)
+        CelestialOverlay(map, tick, celestial, night)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
     }
