@@ -27,7 +27,8 @@ import org.maplibre.android.maps.MapLibreMap
  * labelled with distance and elapsed recording time. Kept in memory only. Switching it off stops recording and
  * the clock but keeps the line; the reset arrow in the menu clears it. The line is continuous: a gap (switched off,
  * phone asleep) is spanned by a straight line and its distance counts.
- * Points are recorded while the app is open (GPS stops when the app is in the background).
+ * Points are recorded every second's fix while the app is on screen, and every 5 minutes (TrackService) while
+ * it is in the background or the screen is off.
  */
 
 /** Minimum spacing between recorded points (m), so GPS jitter doesn't add distance. */

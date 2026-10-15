@@ -10,6 +10,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -191,6 +192,7 @@ private fun App() {
     var tripRunStartMs by remember { mutableStateOf(0L) }       // when the current recording stretch began
     var tripElapsedBeforeMs by remember { mutableStateOf(0L) }  // recording time from earlier stretches
     var tripNowMs by remember { mutableStateOf(0L) }
+    var trackLastFixMs by remember { mutableStateOf(0L) }       // time of the newest recorded fix
     var centerRequest by remember { mutableStateOf(0) }
     // Wind gauge: on/off from the menu, position and size from drag / pinch (remembered)
     var gaugeOn by remember { mutableStateOf(prefs.getBoolean("gauge", false)) }
@@ -242,6 +244,8 @@ private fun App() {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED)
     }
+    // Notification permission (Android 13+), asked when Trip track is first switched on, so its notification shows
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasLocation = it[Manifest.permission.ACCESS_FINE_LOCATION] == true
     }
@@ -388,13 +392,21 @@ private fun App() {
 
     // Trip track: add the fix as a point once the boat has moved far enough (only while recording).
     // The step from the last point always counts, so a gap is spanned by a straight line and its distance included.
-    LaunchedEffect(fix, tripOn) {
-        val f = fix ?: return@LaunchedEffect
-        if (!tripOn) return@LaunchedEffect
-        val d = trackStep(trackPts.lastOrNull(), f) ?: return@LaunchedEffect
+    fun recordFix(f: BoatFix) {
+        if (f.time <= trackLastFixMs) return                  // older than what's already on the line
+        val d = trackStep(trackPts.lastOrNull(), f) ?: return
         trackPts.add(GeoPt(f.lat, f.lon))
         trackNm += d
+        trackLastFixMs = f.time
     }
+    LaunchedEffect(fix, tripOn) {
+        if (!tripOn) return@LaunchedEffect
+        // first any 5-minute fixes taken while the app was in the background (oldest first), then the live one
+        BackgroundTrack.drain().sortedBy { it.time }.forEach { recordFix(it) }
+        fix?.let { recordFix(it) }
+    }
+    // Background sampling runs only while the trip track records; stop it if the app's screen goes away
+    DisposableEffect(Unit) { onDispose { TrackService.stop(context) } }
     // Trip clock: refresh every minute while recording
     LaunchedEffect(tripOn) {
         while (tripOn) { tripNowMs = System.currentTimeMillis(); delay(60_000) }
@@ -505,13 +517,21 @@ private fun App() {
                 tripOn = tripOn, hasTrack = trackPts.isNotEmpty(),
                 onTrip = { on ->
                     val now = System.currentTimeMillis()
-                    if (on) tripRunStartMs = now                                       // clock resumes
-                    else tripElapsedBeforeMs += (now - tripRunStartMs).coerceAtLeast(0)   // clock stops, line stays
+                    if (on) {
+                        tripRunStartMs = now                                           // clock resumes
+                        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        TrackService.start(context)                                    // 5-min fixes in the background
+                    } else {
+                        tripElapsedBeforeMs += (now - tripRunStartMs).coerceAtLeast(0)  // clock stops, line stays
+                        TrackService.stop(context)
+                    }
                     tripNowMs = now
                     tripOn = on
                 },
                 onTripReset = {
-                    trackPts.clear(); trackNm = 0.0
+                    trackPts.clear(); trackNm = 0.0; trackLastFixMs = 0L; BackgroundTrack.drain()
                     tripElapsedBeforeMs = 0L; tripRunStartMs = System.currentTimeMillis(); tripNowMs = tripRunStartMs
                 },
                 onGauge = { gaugeOn = it; prefs.edit().putBoolean("gauge", it).apply() },
