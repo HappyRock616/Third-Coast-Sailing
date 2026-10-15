@@ -1,8 +1,12 @@
 package com.thirdcoastsailing.app
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -11,6 +15,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -19,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thirdcoastsailing.app.ui.theme.Foam
 import com.thirdcoastsailing.app.ui.theme.Navy
+import com.thirdcoastsailing.app.ui.theme.SignalOrange
+import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 
@@ -110,5 +117,42 @@ fun TrackOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, boat: BoatFi
         val layout = measurer.measure(label, TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
         drawText(layout, color = if (night) Foam else Color.Black,
             topLeft = end + Offset(14.dp.toPx(), -layout.size.height - 10.dp.toPx()))
+    }
+}
+
+/** How long the trip track's reset arrow must be held to clear the track (ms). */
+const val TRACK_RESET_HOLD_MS = 1200
+
+/**
+ * The trip track's reset arrow (↺): hold it for TRACK_RESET_HOLD_MS to clear the track, so a stray tap can't wipe it.
+ * An orange ring fills around the arrow while held; letting go early cancels. The phone buzzes when it clears.
+ */
+@Composable
+fun HoldToResetArrow(onReset: () -> Unit) {
+    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val view = androidx.compose.ui.platform.LocalView.current
+    val reset by androidx.compose.runtime.rememberUpdatedState(onReset)
+    androidx.compose.foundation.layout.Box(
+        Modifier.size(48.dp).pointerInput(Unit) {
+            detectTapGestures(onPress = {
+                val job = scope.launch {
+                    progress.snapTo(0f)
+                    progress.animateTo(1f, androidx.compose.animation.core.tween(TRACK_RESET_HOLD_MS, easing = androidx.compose.animation.core.LinearEasing))
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    reset()
+                    progress.snapTo(0f)
+                }
+                tryAwaitRelease()
+                if (job.isActive) { job.cancel(); scope.launch { progress.snapTo(0f) } }
+            })
+        },
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Canvas(Modifier.size(36.dp)) {
+            val p = progress.value
+            if (p > 0f) drawArc(SignalOrange, -90f, 360f * p, false, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+        }
+        androidx.compose.material3.Text("↺", color = SignalOrange, fontSize = 24.sp)
     }
 }

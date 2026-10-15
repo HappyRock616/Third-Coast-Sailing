@@ -835,13 +835,13 @@ private fun MenuSheet(
             }
 
             Spacer(Modifier.height(8.dp))
-            // Trip track: the switch starts/stops recording; the reset arrow (shown once there is a track) clears it
+            // Trip track: the switch starts/stops recording; the reset arrow (shown once there is a track) clears it when held
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) {
                     Text("Trip track", color = Foam, fontSize = 15.sp)
                     Text("Dashed line of where you've been, with distance and time", color = Mist, fontSize = 12.sp)
                 }
-                if (hasTrack) TextButton(onClick = onTripReset) { Text("↺", color = SignalOrange, fontSize = 24.sp) }
+                if (hasTrack) HoldToResetArrow(onReset = onTripReset)        // hold 1.2 s to clear
                 Switch(checked = tripOn, onCheckedChange = onTrip)
             }
 
