@@ -38,16 +38,43 @@ private const val TRACK_STEP_M = 15.0
 private const val TRACK_SLOW_KN = 0.3f
 private const val TRACK_SLOW_STEP_M = 50.0
 
+/** A jump is impossible when it implies more than twice the reported speed plus this margin (kn)... */
+private const val JUMP_MARGIN_KN = 5.0
+/** ...with this floor (kn), and this speed assumed when the GPS reports none. */
+private const val JUMP_FLOOR_KN = 15.0
+private const val JUMP_NO_SOG_KN = 30.0
+/** After this many impossible jumps in a row the new position is believed (the GPS has really moved on, e.g. after a gap). */
+const val TRACK_JUMP_ACCEPT_AFTER = 3
+
+/** What to do with a fix for the trip track. */
+sealed interface TrackDecision {
+    /** Add it as the next point; `nm` is the distance from the last point. */
+    data class Add(val nm: Double) : TrackDecision
+    /** Not far enough from the last point yet. */
+    data object TooClose : TrackDecision
+    /** Impossible jump from the last point (GPS glitch): leave it off the track. */
+    data object Jump : TrackDecision
+}
+
 /**
- * Distance (nm) to add if this fix should become the next track point, or null to skip it.
- * The first fix of a trip always becomes a point (returns 0.0).
+ * Whether this fix becomes the next track point. The first fix of a trip always does. A fix is a jump (rejected) when
+ * getting there from the last point would need far more speed than the GPS reports; the boat marker and navigation
+ * still use every fix, only the track skips it.
+ * @param lastMs time of the last track point; `jumpsInRow` impossible jumps just before this one
  */
-fun trackStep(last: GeoPt?, fix: BoatFix): Double? {
-    if (last == null) return 0.0
+fun trackStep(last: GeoPt?, lastMs: Long, fix: BoatFix, jumpsInRow: Int = 0): TrackDecision {
+    if (last == null) return TrackDecision.Add(0.0)
     val d = distNm(last, GeoPt(fix.lat, fix.lon))
     val m = d * 1852.0
     val slow = fix.sogKn != null && fix.sogKn < TRACK_SLOW_KN
-    return if (m >= (if (slow) TRACK_SLOW_STEP_M else TRACK_STEP_M)) d else null
+    if (m < (if (slow) TRACK_SLOW_STEP_M else TRACK_STEP_M)) return TrackDecision.TooClose
+    val hours = (fix.time - lastMs) / 3_600_000.0
+    if (hours > 0 && jumpsInRow < TRACK_JUMP_ACCEPT_AFTER) {
+        val sog = fix.sogKn?.toDouble() ?: JUMP_NO_SOG_KN
+        val allowed = maxOf(2 * sog + JUMP_MARGIN_KN, JUMP_FLOOR_KN)
+        if (d / hours > allowed) return TrackDecision.Jump
+    }
+    return TrackDecision.Add(d)
 }
 
 /** Label next to the track, e.g. "12.4 nm · 1:23". */

@@ -56,11 +56,8 @@ class BoatLocation(
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper())
             lm.registerGnssStatusCallback(context.mainExecutor, gnss)
         }
-        // Network location only exists on some de-Googled phones (e.g. with a location provider app installed)
-        if (LocationManager.NETWORK_PROVIDER in lm.allProviders &&
-            runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)) {
-            lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 0f, listener, Looper.getMainLooper())
-        }
+        // GPS only: no network (cell / Wi-Fi) location. It is rough (often 100 m+ off), useless offshore, and mixed
+        // in with GPS it made the trip track zigzag.
     }
 
     fun stop() {

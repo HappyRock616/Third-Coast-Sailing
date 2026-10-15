@@ -193,6 +193,7 @@ private fun App() {
     var tripElapsedBeforeMs by remember { mutableStateOf(0L) }  // recording time from earlier stretches
     var tripNowMs by remember { mutableStateOf(0L) }
     var trackLastFixMs by remember { mutableStateOf(0L) }       // time of the newest recorded fix
+    var trackJumps by remember { mutableStateOf(0) }            // impossible jumps in a row (kept off the track)
     var centerRequest by remember { mutableStateOf(0) }
     // Wind gauge: on/off from the menu, position and size from drag / pinch (remembered)
     var gaugeOn by remember { mutableStateOf(prefs.getBoolean("gauge", false)) }
@@ -401,10 +402,17 @@ private fun App() {
     // The step from the last point always counts, so a gap is spanned by a straight line and its distance included.
     fun recordFix(f: BoatFix) {
         if (f.time <= trackLastFixMs) return                  // older than what's already on the line
-        val d = trackStep(trackPts.lastOrNull(), f) ?: return
-        trackPts.add(GeoPt(f.lat, f.lon))
-        trackNm += d
-        trackLastFixMs = f.time
+        // impossible jumps (GPS glitches) stay off the line; a few in a row means the GPS really moved on, so accept
+        when (val step = trackStep(trackPts.lastOrNull(), trackLastFixMs, f, trackJumps)) {
+            is TrackDecision.Jump -> { trackJumps++; return }
+            is TrackDecision.TooClose -> { trackJumps = 0; return }
+            is TrackDecision.Add -> {
+                trackJumps = 0
+                trackPts.add(GeoPt(f.lat, f.lon))
+                trackNm += step.nm
+                trackLastFixMs = f.time
+            }
+        }
     }
     LaunchedEffect(fix, tripOn) {
         if (!tripOn) return@LaunchedEffect
@@ -540,7 +548,7 @@ private fun App() {
                     tripOn = on
                 },
                 onTripReset = {
-                    trackPts.clear(); trackNm = 0.0; trackLastFixMs = 0L; BackgroundTrack.drain()
+                    trackPts.clear(); trackNm = 0.0; trackLastFixMs = 0L; trackJumps = 0; BackgroundTrack.drain()
                     tripElapsedBeforeMs = 0L; tripRunStartMs = System.currentTimeMillis(); tripNowMs = tripRunStartMs
                 },
                 onGauge = { gaugeOn = it; prefs.edit().putBoolean("gauge", it).apply() },
