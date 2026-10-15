@@ -18,8 +18,11 @@ enum class SkillLevel(val title: String, val description: String) {
     ADVANCED("Advanced", "Tables and calculator only; fix plotted on the chart"),
 }
 
-/** One step of using the sextant. `graphic` is the drawable resource name of its picture. */
-data class SextantStep(val id: String, val title: String, val text: String, val graphic: String)
+/**
+ * One step of using the sextant. `graphic` is the drawable resource name of its picture; `graphic2` an optional
+ * second picture (a close-up) shown beside it. Paragraphs in `text` are separated by blank lines.
+ */
+data class SextantStep(val id: String, val title: String, val text: String, val graphic: String, val graphic2: String? = null)
 
 object SextantProcedure {
 
@@ -65,31 +68,36 @@ object SextantProcedure {
         "Put the bright edge of the Moon on the horizon: the lower limb if the bottom is lit, otherwise the upper " +
             "limb (choose the matching limb in the app). Avoid sights when the Moon's horns point up and down, and " +
             "beware of a false horizon from moonlight on the water at night.",
-        "sextant_step_touch",
+        "sextant_step_touch_moon",
     )
     val touchStar = SextantStep(
         "touch_star", "Star centred on the horizon",
         "Stars and planets are points: put the dot right on the horizon line at the bottom of the swing.",
-        "sextant_step_touch",
+        "sextant_step_touch_star",
     )
     val mark = SextantStep(
         "mark", "Mark the time",
-        "The instant it touches, tap MARK (or say \"mark\" to a helper). The app records the time to the second; " +
-            "every 4 seconds of error moves your position up to 1 nautical mile.",
-        "sextant_step_mark",
+        "The instant the body touches the horizon, tap MARK TIME in the workbook (or say \"mark\" to a helper who " +
+            "taps it). It writes the time, to the second, into that shot's time box. You can also type a time from " +
+            "your watch, or correct the one marked.\n\n" +
+            "Every 4 seconds of error can move your position up to 1 nautical mile.",
+        "sextant_step_mark_button",
     )
     val read = SextantStep(
         "read", "Read the sextant",
-        "Degrees from the index arm against the arc, minutes from the micrometer drum, tenths from the small " +
-            "vernier next to the drum. Example: arc 34°, drum 22', vernier 0.4' = 34°22.4'. Check you haven't " +
-            "misread a degree (39°58' not 40°58').",
-        "sextant_step_read",
+        "1. Degrees: on the arc, the whole degree at or just below the index arm's arrow. Example: 34°.\n\n" +
+            "2. Minutes: on the micrometer drum, the minute mark at or just below the index line. Example: 22'.\n\n" +
+            "3. Tenths: on the small vernier beside the drum, find the one line that lines up exactly with a drum " +
+            "line. Its number is the tenths. Example: 4 = 0.4'.\n\n" +
+            "Add them up: 34° + 22' + 0.4' = 34°22.4'. Type it as 34 22.4. Check you haven't misread a degree " +
+            "(39°58' not 40°58').",
+        "sextant_step_read", "sextant_step_read_drum",
     )
     val repeat = SextantStep(
         "repeat", "Take 3 to 5 sights",
         "Repeat the sight 3 to 5 times a minute or so apart. The app averages them and drops any that don't fit " +
             "the trend, which is far more accurate than one sight.",
-        "sextant_step_mark",
+        "sextant_step_repeat",
     )
 
     /** The steps for a body, in order. Index error once per session (first time only). */

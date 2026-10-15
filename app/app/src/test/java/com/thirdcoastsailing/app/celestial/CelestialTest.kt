@@ -97,6 +97,20 @@ class CelestialTest {
         assertEquals(Check.OK, adv.line(Field.DIP)!!.check)
     }
 
+    @Test fun droppedShotIsExplainedAndTypedTimesRead() {
+        val p = LatLon(43.0, -86.9)
+        val shots = listOf(Shot(ms, 40.0, p), Shot(ms + 60_000, 40.2, p), Shot(ms + 120_000, 40.4 + 5.0 / 60.0, p), Shot(ms + 180_000, 40.6, p))
+        val kept = Workbook.keptShots(shots)
+        assertEquals(3, kept.size)
+        val r = Workbook.residuals(shots)[2]!!
+        assertEquals(5.0, r, 0.3)
+        assertTrue(Workbook.dropNote(r).startsWith("5.0′ higher"))
+        val edt = -4 * 3_600_000L                                           // 19:46:12 EDT on 17 Oct = 23:46:12 UT
+        assertEquals(ms + 12_000, Workbook.parseTimeOfDay("19:46:12", ms, edt))
+        assertEquals(ms + 12_000, Workbook.parseTimeOfDay("194612", ms, edt))
+        assertEquals(null, Workbook.parseTimeOfDay("25:00", ms, edt))
+    }
+
     @Test fun starFinderPointsWhereThePhonePoints() {
         val cam = FinderCameras(PhonePose.look(255.0, 18.0), 720, 1440, 70.0, 255.0)
         val c = cam.projectSky(V3.altAz(18.0, 255.0))

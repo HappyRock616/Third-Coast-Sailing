@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -127,10 +128,12 @@ fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
     val plot = remember(st) { celestialPlot(st) }
     var tab by remember { mutableStateOf(1) }
     var finder by remember { mutableStateOf<FinderRequest?>(null) }
+    var guide by remember { mutableStateOf<Pair<SkyBody, String?>?>(null) }      // body, preset / bearing note
+    var bookTarget by remember { mutableStateOf<AlmanacTarget?>(null) }
     val gpsPos = gps?.let { LatLon(it.lat, it.lon) }
     val position = gpsPos ?: st.manualDr ?: LatLon(DEFAULT_LAT, DEFAULT_LON)
 
-    Dialog(onDismissRequest = { if (finder != null) finder = null else onClose() },
+    Dialog(onDismissRequest = { if (finder != null) finder = null else if (guide != null) guide = null else onClose() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(NavyDeep)) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -161,13 +164,21 @@ fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
                     when (tab) {
                         0 -> PlanTab(set.level, position, gpsPos != null, set.heightOfEyeFt,
                             onFind = { b -> finder = FinderRequest(b, null, pickToAdd = false) },
-                            onAdd = { b -> store.addSight(b); tab = 1 })
+                            onAdd = { b -> store.addSight(b); tab = 1 },
+                            onGuide = { b, note -> guide = b to note })
                         1 -> WorkbookTab(store, plot, gps, position, gpsPos != null,
                             onFind = { b, id -> finder = FinderRequest(b, id, pickToAdd = false) },
-                            onPickNew = { finder = FinderRequest(null, null, pickToAdd = true) })
-                        else -> AlmanacTab()
+                            onPickNew = { finder = FinderRequest(null, null, pickToAdd = true) },
+                            onGuide = { b -> guide = b to presetNote(b, position) },
+                            onAlmanac = { t -> bookTarget = t; tab = 2 })
+                        else -> AlmanacBook(bookTarget, st.sights)
                     }
                 }
+            }
+
+            // ---- sextant guide over the tabs; ✕ / Back come back here
+            guide?.let { (b, note) ->
+                SightGuide(b, includeIndexError = st.sights.none { it.shots.isNotEmpty() }, note = note, onClose = { guide = null })
             }
 
             // ---- star finder over everything; ✕ / Back come back here
@@ -204,7 +215,7 @@ private fun nextSuggested(level: SkillLevel, pos: LatLon): SkyBody? = runCatchin
 
 @Composable
 private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, heightOfEyeFt: Double,
-                    onFind: (SkyBody) -> Unit, onAdd: (SkyBody) -> Unit) {
+                    onFind: (SkyBody) -> Unit, onAdd: (SkyBody) -> Unit, onGuide: (SkyBody, String?) -> Unit) {
     val day = localDayStart(System.currentTimeMillis())
     val key = "%.1f %.1f".format(pos.lat, pos.lon)
     val guidance by produceState<Guidance?>(null, level, key, day, heightOfEyeFt) {
@@ -232,7 +243,7 @@ private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, heightOfEyeF
         val g = guidance
         if (g == null) { Text("Planning today's sights…", color = Mist); return@Column }
         if (g.suggestions.isEmpty()) Text("No good sights found for today here.", color = Mist)
-        for (s in g.suggestions) SuggestionCard(s, level, onFind, onAdd)
+        for (s in g.suggestions) SuggestionCard(s, level, onFind, onAdd, onGuide)
         if (g.tips.isNotEmpty()) Card {
             Text("Tips", color = Foam, fontWeight = FontWeight.Bold)
             for (t in g.tips) Text("• $t", color = Mist, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
@@ -240,11 +251,9 @@ private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, heightOfEyeF
     }
 }
 
-@SuppressLint("DiscouragedApi")
 @Composable
-private fun SuggestionCard(s: Suggestion, level: SkillLevel, onFind: (SkyBody) -> Unit, onAdd: (SkyBody) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+private fun SuggestionCard(s: Suggestion, level: SkillLevel, onFind: (SkyBody) -> Unit, onAdd: (SkyBody) -> Unit,
+                           onGuide: (SkyBody, String?) -> Unit) {
     Card {
         Text(hhmm(s.target.timeMs), color = SignalOrange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Text(s.headline, color = Foam, fontSize = 15.sp)
@@ -252,28 +261,25 @@ private fun SuggestionCard(s: Suggestion, level: SkillLevel, onFind: (SkyBody) -
             OutlinedButton(onClick = { onFind(s.target.body) }) { Text("Find in sky", color = SignalOrange) }
             OutlinedButton(onClick = { onAdd(s.target.body) }) { Text("Add to workbook", color = SignalOrange) }
         }
-        if (level == SkillLevel.BEGINNER && s.steps.isNotEmpty()) {
-            TextButton(onClick = { open = !open }) { Text(if (open) "Hide the steps ▴" else "How to take this sight ▾", color = SignalOrange) }
-            if (open) for ((i, step) in s.steps.withIndex()) {
-                Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
-                    val id = context.resources.getIdentifier(step.graphic, "drawable", context.packageName)
-                    if (id != 0) Image(painterResource(id), contentDescription = step.title,
-                        modifier = Modifier.size(84.dp).background(Navy, RoundedCornerShape(8.dp)).padding(4.dp))
-                    Column(Modifier.padding(start = 10.dp)) {
-                        Text("${i + 1}. ${step.title}", color = Foam, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(step.text, color = Mist, fontSize = 13.sp)
-                    }
-                }
-            }
-        }
+        // BEGINNER: the step-by-step guide, one step per screen
+        if (level == SkillLevel.BEGINNER) TextButton(onClick = {
+            onGuide(s.target.body, "preset %.0f°, face %03.0f° %s".format(s.target.altitudeDeg, s.target.azimuthDeg, Coach.compassPoint(s.target.azimuthDeg)))
+        }) { Text("How to take this sight ›", color = SignalOrange) }
     }
 }
+
+/** "preset 32°, face 140° SE" for a body right now (for the guide's heading). */
+private fun presetNote(b: SkyBody, pos: LatLon): String? = runCatching {
+    val h = com.thirdcoastsailing.app.celestial.SightReduction.altAz(b, pos, System.currentTimeMillis())
+    if (h.hcDeg < 0) "below the horizon now" else "now about %.0f°, face %03.0f° %s".format(h.hcDeg, h.znDeg, Coach.compassPoint(h.znDeg))
+}.getOrNull()
 
 // ==================================================================== Workbook
 
 @Composable
 private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix?, position: LatLon, isGps: Boolean,
-                        onFind: (SkyBody, Long) -> Unit, onPickNew: () -> Unit) {
+                        onFind: (SkyBody, Long) -> Unit, onPickNew: () -> Unit,
+                        onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit) {
     val st = store.state
     val set = st.settings
     var confirmClear by remember { mutableStateOf(false) }
@@ -336,7 +342,7 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
                 SkillLevel.BEGINNER -> "Add a sight to start: pick one from the Plan tab, tap ★ Sky and touch a star, or use + Add sight."
                 else -> "No sights yet. + Add sight, or ★ Sky to pick a body."
             }, color = Mist, fontSize = 13.sp)
-        for (w in plot.works) SightCard(w, set.level, gps, position, store, typed, onFind)
+        for (w in plot.works) SightCard(w, set.level, gps, position, store, typed, onFind, onGuide, onAlmanac)
 
         // ---- add a sight
         Box {
@@ -383,12 +389,14 @@ private fun EyeDropdown(current: Double, onPick: (Double) -> Unit) {
 
 @Composable
 private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: LatLon, store: CelestialStore,
-                      typed: MutableMap<String, String>, onFind: (SkyBody, Long) -> Unit) {
+                      typed: MutableMap<String, String>, onFind: (SkyBody, Long) -> Unit,
+                      onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit) {
     val s = w.sight
     var showExtract by remember(s.id) { mutableStateOf(false) }
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(s.body.name, color = Foam, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (level != SkillLevel.ADVANCED) TextButton(onClick = { onGuide(s.body) }) { Text("Guide", color = SignalOrange) }
             TextButton(onClick = { onFind(s.body, s.id) }) { Text("★ Find", color = SignalOrange) }
             TextButton(onClick = { store.removeSight(s.id) }) { Text("Remove", color = Mist, fontSize = 12.sp) }
         }
@@ -398,61 +406,139 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
                 label = { Text(if (l == Limb.LOWER) "Lower limb" else "Upper limb") })
         }
 
-        // ---- shots: MARK records the time and position; then type what the sextant reads
-        if (level == SkillLevel.BEGINNER && s.shots.isEmpty())
-            Text("Tap MARK the instant the ${if (s.body.kind == com.thirdcoastsailing.app.celestial.BodyKind.STAR) "star" else s.body.name} touches the horizon, then type the sextant reading (degrees and minutes, e.g. 38 25.8). Take 3 to 5.",
-                color = Mist, fontSize = 12.sp)
-        for ((i, sh) in s.shots.withIndex()) Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(hhmmss(sh.timeMs), color = Mist, fontFamily = FontFamily.Monospace, fontSize = 13.sp, modifier = Modifier.width(78.dp))
-            val key = "${s.id}:shot:$i:${sh.timeMs}"
-            Box(Modifier.weight(1f)) {
-                TypedBox("Hs  (38 25.8)", typed[key] ?: if (sh.hsDeg.isNaN()) "" else Workbook.format(sh.hsDeg, FieldKind.ALTITUDE), Check.AUTO) { t ->
-                    typed[key] = t
-                    val v = Workbook.parse(t, FieldKind.ALTITUDE)
-                    store.updateSight(s.id) { x -> x.copy(shots = x.shots.mapIndexed { j, o -> if (j == i) o.copy(hsDeg = v ?: Double.NaN) else o }) }
+        // ---- shots taken: time, sextant reading, kept (✓) or dropped (struck through, with why)
+        val valid = s.shots.filter { !it.hsDeg.isNaN() }
+        val kept = Workbook.keptShots(valid)
+        val res = Workbook.residuals(valid)
+        for ((i, sh) in s.shots.withIndex()) {
+            val vi = valid.indexOf(sh)
+            val used = vi >= 0 && sh in kept
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${i + 1}", color = Mist, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(22.dp))
+                val strike = if (used) TextDecoration.None else TextDecoration.LineThrough
+                Text(hhmmss(sh.timeMs), color = if (used) Foam else Mist, fontFamily = FontFamily.Monospace, fontSize = 14.sp,
+                    textDecoration = strike, modifier = Modifier.width(92.dp))
+                Text(if (sh.hsDeg.isNaN()) "—" else Workbook.format(sh.hsDeg, FieldKind.ALTITUDE), color = if (used) Foam else Mist,
+                    fontFamily = FontFamily.Monospace, fontSize = 14.sp, textDecoration = strike, modifier = Modifier.weight(1f))
+                if (used) Text("✓", color = Color(0xFF6FCF97), fontWeight = FontWeight.Bold)
+                TextButton(onClick = { store.updateSight(s.id) { x -> x.copy(shots = x.shots.filterIndexed { j, _ -> j != i }) } }) {
+                    Text("✕", color = Mist)
                 }
             }
-            TextButton(onClick = { store.updateSight(s.id) { x -> x.copy(shots = x.shots.filterIndexed { j, _ -> j != i }) } }) {
-                Text("✕", color = Mist)
-            }
+            val r = if (vi >= 0) res.getOrNull(vi) else null
+            if (!used && r != null) Text(Workbook.dropNote(r), color = Alarm, fontSize = 12.sp, modifier = Modifier.padding(start = 22.dp))
         }
-        Button(
-            onClick = {
-                val now = System.currentTimeMillis()
-                val dr = gps?.let { LatLon(it.lat, it.lon) } ?: position
-                store.updateSight(s.id) { it.copy(shots = it.shots + Shot(now, Double.NaN, dr)) }
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = SignalOrange, contentColor = Navy),
-            modifier = Modifier.padding(top = 4.dp),
-        ) { Text("MARK", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+
+        // ---- the next shot, always ready: MARK TIME writes the time into its box; either box can be typed
+        NextShot(s, typed, gps, position, store, beginner = level == SkillLevel.BEGINNER)
 
         val shot = w.shot ?: return@Card
-        Text("Using ${w.shotsUsed} of ${s.shots.count { !it.hsDeg.isNaN() }} shots: ${hhmmss(shot.timeMs)} (UT ${utc(shot.timeMs)}), Hs ${Workbook.format(shot.hsDeg, FieldKind.ALTITUDE)}",
+        Text("Using ${w.shotsUsed} of ${valid.size} shots: ${hhmmss(shot.timeMs)} (UT ${utc(shot.timeMs)}), Hs ${Workbook.format(shot.hsDeg, FieldKind.ALTITUDE)}",
             color = Mist, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
 
-        // ---- where the almanac numbers came from
+        // ---- where the almanac numbers came from, and a way into the book at that page
+        val bookTarget = almanacTarget(s.body, shot.timeMs, com.thirdcoastsailing.app.celestial.Field.GHA_HOUR)
         when (level) {
             SkillLevel.BEGINNER -> {
-                TextButton(onClick = { showExtract = !showExtract }) {
-                    Text(if (showExtract) "From the almanac ▴" else "From the almanac ▾", color = SignalOrange)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { showExtract = !showExtract }, modifier = Modifier.weight(1f)) {
+                        Text(if (showExtract) "From the almanac ▴" else "From the almanac ▾", color = SignalOrange)
+                    }
+                    if (showExtract && bookTarget != null) TextButton(onClick = { onAlmanac(bookTarget) }) { Text("Open the page ›", color = SignalOrange) }
                 }
                 if (showExtract) Extract(w)
             }
-            SkillLevel.INTERMEDIATE -> Extract(w)
-            SkillLevel.ADVANCED -> Text("Work each line from the Almanac tab. Wrong lines are outlined red.", color = Mist, fontSize = 12.sp)
+            SkillLevel.INTERMEDIATE -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("From the almanac", color = SignalOrange, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    if (bookTarget != null) TextButton(onClick = { onAlmanac(bookTarget) }) { Text("Open the page ›", color = SignalOrange) }
+                }
+                Extract(w)
+            }
+            SkillLevel.ADVANCED -> Text("Work each line from the Almanac tab.", color = Mist, fontSize = 12.sp)
         }
         HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 6.dp))
 
         // ---- the working, line by line
-        for (line in w.lines) WorkRow(s, line, level, store, typed)
+        for (line in w.lines) WorkRow(s, line, level, store, typed,
+            onAlmanac = if (level == SkillLevel.ADVANCED) null else almanacTarget(s.body, shot.timeMs, line.field)?.let { t -> { onAlmanac(t) } })
 
         val lop = w.lop
         if (lop != null) Text(
             "Line of position: Zn %05.1f°, %.1f nm %s".format(lop.znDeg, kotlin.math.abs(lop.interceptNm), if (lop.interceptNm >= 0) "toward" else "away"),
             color = Foam, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
         else if (level == SkillLevel.ADVANCED) Text("Fill in every line to plot this sight.", color = Mist, fontSize = 12.sp)
-        if (level == SkillLevel.ADVANCED && w.errors > 0)
-            Text("${w.errors} line${if (w.errors > 1) "s" else ""} to check", color = Alarm, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/**
+ * The next shot's entry, always shown under the shots taken: "Shot n", a large MARK TIME · SHOT n button that writes
+ * the time (to the second) into the time box, the time box and the angle box (either can be typed by hand), and
+ * Enter ✓ to save the shot. After Enter the boxes clear for the next shot.
+ */
+@Composable
+private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: BoatFix?, position: LatLon,
+                     store: CelestialStore, beginner: Boolean) {
+    val n = s.shots.size + 1
+    val kTime = "${s.id}:next:time"; val kHs = "${s.id}:next:hs"; val kMs = "${s.id}:next:ms"
+    val timeText = typed[kTime] ?: ""
+    val hsText = typed[kHs] ?: ""
+    val markedMs = typed[kMs]?.toLongOrNull()
+    var problem by remember(s.id, n) { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp).background(Navy, RoundedCornerShape(14.dp))
+            .border(2.dp, SignalOrange, RoundedCornerShape(14.dp)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Shot $n", color = SignalOrange, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("  MARK TIME fills the time; either box can be typed", color = Mist, fontSize = 12.sp)
+        }
+        if (beginner && s.shots.isEmpty()) Text(
+            "Tap MARK TIME the instant the ${if (s.body.kind == com.thirdcoastsailing.app.celestial.BodyKind.STAR) "star" else s.body.name} touches the horizon, then type the sextant reading (degrees and minutes, e.g. 38 25.8). Take 3 to 5.",
+            color = Mist, fontSize = 12.sp)
+        Button(
+            onClick = {
+                val now = System.currentTimeMillis()
+                typed[kMs] = now.toString(); typed[kTime] = hhmmss(now); problem = ""
+            },
+            colors = if (markedMs == null) ButtonDefaults.buttonColors(containerColor = SignalOrange, contentColor = Navy)
+            else ButtonDefaults.outlinedButtonColors(contentColor = SignalOrange),
+            border = if (markedMs == null) null else androidx.compose.foundation.BorderStroke(2.dp, SignalOrange),
+            shape = RoundedCornerShape(40.dp),
+            modifier = Modifier.fillMaxWidth().height(64.dp),
+        ) {
+            Text(if (markedMs == null) "MARK TIME · SHOT $n" else "Marked ${hhmmss(markedMs)} · tap to re-mark",
+                fontWeight = FontWeight.Bold, fontSize = if (markedMs == null) 20.sp else 16.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(120.dp)) {
+                TypedBox("hh:mm:ss", timeText, Check.AUTO) { t -> typed[kTime] = t; problem = "" }
+            }
+            Box(Modifier.weight(1f)) {
+                TypedBox("angle 48 34.4", hsText, Check.AUTO) { t -> typed[kHs] = t; problem = "" }
+            }
+            Button(
+                onClick = {
+                    val now = System.currentTimeMillis()
+                    // the marked instant (to the millisecond) unless the time box was changed by hand
+                    val t = if (markedMs != null && timeText == hhmmss(markedMs)) markedMs
+                    else Workbook.parseTimeOfDay(timeText, now, TimeZone.getDefault().getOffset(now).toLong())
+                    val hs = Workbook.parse(hsText, FieldKind.ALTITUDE)
+                    when {
+                        t == null -> problem = "Type the time as 19:46:12, or tap MARK TIME."
+                        hs == null || hs < 0.0 || hs > 90.0 -> problem = "Type the sextant reading as degrees and minutes, e.g. 48 34.4."
+                        else -> {
+                            val dr = gps?.let { LatLon(it.lat, it.lon) } ?: position
+                            store.updateSight(s.id) { x -> x.copy(shots = (x.shots + Shot(t, hs, dr)).sortedBy { it.timeMs }) }
+                            typed.remove(kTime); typed.remove(kHs); typed.remove(kMs); problem = ""
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = SignalOrange, contentColor = Navy),
+            ) { Text("Enter ✓", fontWeight = FontWeight.Bold) }
+        }
+        if (problem.isNotEmpty()) Text(problem, color = Alarm, fontSize = 12.sp)
     }
 }
 
@@ -463,16 +549,23 @@ private fun Extract(w: SightWork) {
     }
 }
 
-/** One line of working: label and value (or, ADVANCED, a box to type it), the equation, and the numbers. */
+/**
+ * One line of working: label and value (or, ADVANCED, a box to type it), the equation, and the numbers.
+ * ADVANCED: a wrong line is struck through and outlined red, with no explanation. `onAlmanac` (not ADVANCED) opens
+ * the almanac book at the row this line's value came from.
+ */
 @Composable
-private fun WorkRow(s: WorkbookSight, line: WorkLine, level: SkillLevel, store: CelestialStore, typed: MutableMap<String, String>) {
+private fun WorkRow(s: WorkbookSight, line: WorkLine, level: SkillLevel, store: CelestialStore, typed: MutableMap<String, String>,
+                    onAlmanac: (() -> Unit)?) {
     val kind = line.field.kind()
     Column(Modifier.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(line.label, color = Foam, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            if (level != SkillLevel.ADVANCED)
+            if (level != SkillLevel.ADVANCED) {
                 Text(Workbook.format(line.expected, kind), color = Foam, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            else {
+                if (onAlmanac != null) Text(" ›", color = SignalOrange, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable(onClick = onAlmanac).padding(horizontal = 6.dp))
+            } else {
                 val key = "${s.id}:${line.field.name}"
                 Box(Modifier.widthIn(min = 150.dp, max = 180.dp)) {
                     TypedBox(hintFor(kind), typed[key] ?: s.entries[line.field]?.let { Workbook.format(it, kind) } ?: "", line.check) { t ->
@@ -485,8 +578,6 @@ private fun WorkRow(s: WorkbookSight, line: WorkLine, level: SkillLevel, store: 
         }
         Text(line.formula, color = Mist, fontSize = 12.sp)
         if (level != SkillLevel.ADVANCED) Text(line.worked, color = Mist, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        if (level == SkillLevel.ADVANCED && line.check == Check.WRONG) Text("Check this line" + if (line.hint.isNotEmpty()) " (${line.hint})" else "",
-            color = Alarm, fontSize = 12.sp)
     }
 }
 
@@ -514,82 +605,6 @@ private fun FixCard(plot: CelestialPlot) {
         Text("At ${hhmmss(f.timeMs)} from ${f.lops.size} lines · they cross within %.1f nm".format(f.residualNm), color = Mist, fontSize = 13.sp)
         Text("%.1f nm %s of the GPS / DR position".format(f.offsetNm, Coach.compassPoint(f.offsetBearing)), color = SignalOrange, fontSize = 14.sp)
         Text("Shown on the chart. ↺ above clears it.", color = Mist, fontSize = 12.sp)
-    }
-}
-
-// ==================================================================== Almanac
-
-private enum class AlmanacView(val title: String) {
-    SUN_ARIES("Sun & Aries"), MOON("Moon"), PLANETS("Planets"), STARS("Stars"), INCREMENTS("Increments"), DIP("Dip"), REFRACTION("Refraction")
-}
-
-@Composable
-private fun AlmanacTab() {
-    var dayOffset by remember { mutableStateOf(0) }
-    var view by remember { mutableStateOf(AlmanacView.SUN_ARIES) }
-    var minute by remember { mutableStateOf(0) }
-    var planet by remember { mutableStateOf("Venus") }
-    val dayStart = utcDayStart(System.currentTimeMillis()) + dayOffset * 86_400_000L
-    val page by produceState<DailyPage?>(null, dayStart) {
-        value = null
-        value = withContext(Dispatchers.Default) { runCatching { AlmanacTables.dailyPage(dayStart) }.getOrNull() }
-    }
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { dayOffset-- }) { Text("◀", color = SignalOrange) }
-            Text(dateUtc(dayStart) + " (UT)", color = Foam, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-            TextButton(onClick = { dayOffset++ }) { Text("▶", color = SignalOrange) }
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (v in AlmanacView.entries) FilterChip(selected = view == v, onClick = { view = v }, label = { Text(v.title) })
-        }
-        Spacer(Modifier.height(8.dp))
-        val rows: List<String> = when (view) {
-            AlmanacView.INCREMENTS -> buildList {
-                add("Increments for ${minute}m   (s · Sun/planets · Aries · Moon)")
-                for (r in AlmanacTables.increments(minute)) add("%02d   %s   %s   %s".format(r.second, Workbook.ang(r.sunPlanets), Workbook.ang(r.aries), Workbook.ang(r.moon)))
-            }
-            AlmanacView.DIP -> listOf("Height of eye (ft) → dip") +
-                AlmanacTables.dipTable().map { (h, d) -> "%4.0f ft   %s".format(h, Workbook.mins(Workbook.m1(d))) }
-            AlmanacView.REFRACTION -> listOf("Apparent altitude → refraction (10 °C, 1010 mb)") +
-                AlmanacTables.refractionTable().map { (a, r) -> "%4.0f°   %s".format(a, Workbook.mins(-Workbook.m1(r))) }
-            else -> {
-                val p = page
-                if (p == null) listOf("Working…") else when (view) {
-                    AlmanacView.SUN_ARIES -> buildList {
-                        add("UT   GHA ♈        Sun GHA       Sun Dec")
-                        for (h in p.hours) add("%02d   %-12s  %-12s  %s".format(h.hourUtc, Workbook.ang(h.ghaAries), Workbook.ang(h.sunGha), Workbook.decText(h.sunDec)))
-                        add("Sun SD %.1f′   d %s".format(p.sunSd, Workbook.mins(Workbook.m1(p.sunD))))
-                    }
-                    AlmanacView.MOON -> buildList {
-                        add("UT   GHA           v      Dec           d      HP")
-                        for (h in p.hours) add("%02d   %-12s  %5.1f  %-12s  %5.1f  %.1f".format(h.hourUtc, Workbook.ang(h.moonGha), h.moonV,
-                            Workbook.decText(h.moonDec), h.moonD, h.moonHp))
-                        add("Moon SD %.1f′   age %.1f days   %.0f%% lit".format(p.moonSd, p.moonAgeDays, p.moonIllumPct))
-                    }
-                    AlmanacView.PLANETS -> buildList {
-                        add("$planet   v %s   d %s".format(Workbook.mins(Workbook.m1(p.planetV[planet] ?: 0.0)), Workbook.mins(Workbook.m1(p.planetD[planet] ?: 0.0))))
-                        add("UT   GHA           Dec")
-                        for (h in p.hours) h.planets[planet]?.let { (g, d) -> add("%02d   %-12s  %s".format(h.hourUtc, Workbook.ang(g), Workbook.decText(d))) }
-                    }
-                    else -> buildList {
-                        add(" #  Star             SHA           Dec")
-                        for (s in p.stars) add("%2d  %-15s  %-12s  %s".format(s.number, s.name, Workbook.ang(s.sha), Workbook.decText(s.dec)))
-                    }
-                }
-            }
-        }
-        if (view == AlmanacView.INCREMENTS) Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { minute = (minute + 59) % 60 }) { Text("− minute", color = SignalOrange) }
-            TextButton(onClick = { minute = (minute + 1) % 60 }) { Text("+ minute", color = SignalOrange) }
-        }
-        if (view == AlmanacView.PLANETS) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (n in listOf("Venus", "Mars", "Jupiter", "Saturn")) FilterChip(selected = planet == n, onClick = { planet = n }, label = { Text(n) })
-        }
-        Column(Modifier.weight(1f).fillMaxWidth().background(Navy, RoundedCornerShape(8.dp))
-            .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(8.dp)) {
-            for (r in rows) Text(r, color = Foam, fontFamily = FontFamily.Monospace, fontSize = 12.sp, softWrap = false)
-        }
     }
 }
 
@@ -627,7 +642,8 @@ private fun TypedBox(hint: String, text: String, check: Check, onChange: (String
         value = text, onValueChange = onChange, singleLine = true,
         placeholder = { Text(hint, fontSize = 12.sp, color = Mist) },
         isError = check == Check.WRONG,
-        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Foam),
+        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Foam,
+            textDecoration = if (check == Check.WRONG) TextDecoration.LineThrough else TextDecoration.None),
         colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = outline, focusedBorderColor = if (check == Check.WRONG) Alarm else SignalOrange,
             errorBorderColor = Alarm),
         trailingIcon = { if (check == Check.OK) Text("✓", color = ok) },

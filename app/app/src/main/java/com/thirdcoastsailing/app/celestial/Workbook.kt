@@ -193,7 +193,8 @@ object Workbook {
                 else -> Check.WRONG
             }
             val v = t ?: expected
-            lines += WorkLine(f, label, if (adv) t else expected, expected, formula, worked, check, hint)
+            val clean = worked.replace("+ −", "− ").replace("+ +", "+ ")          // "+ −1.5′" reads "− 1.5′"
+            lines += WorkLine(f, label, if (adv) t else expected, expected, formula, clean, check, hint)
             return v
         }
 
@@ -406,6 +407,50 @@ object Workbook {
         val slope = if (sxx > 1e-9) tx.indices.sumOf { (tx[it] - mt) * (hy[it] - mh) } / sxx else 0.0
         val kept = shots.filterIndexed { i, s -> abs((s.hsDeg - (mh + slope * (tx[i] - mt))) * 60.0) <= rejectMin }
         return kept.ifEmpty { shots }
+    }
+
+    /**
+     * For each shot, how far (arc-minutes, + above) it is from the straight line through the shots that are kept;
+     * null with fewer than 3 shots. Used to explain a dropped shot.
+     */
+    fun residuals(shots: List<Shot>): List<Double?> {
+        val kept = keptShots(shots)
+        if (shots.size < 3 || kept.size < 2) return shots.map { null }
+        val t0 = kept.first().timeMs
+        val tx = kept.map { (it.timeMs - t0) / 60_000.0 }; val hy = kept.map { it.hsDeg }
+        val mt = tx.average(); val mh = hy.average()
+        val sxx = tx.sumOf { (it - mt) * (it - mt) }
+        val slope = if (sxx > 1e-9) tx.indices.sumOf { (tx[it] - mt) * (hy[it] - mh) } / sxx else 0.0
+        return shots.map { s -> (s.hsDeg - (mh + slope * ((s.timeMs - t0) / 60_000.0 - mt))) * 60.0 }
+    }
+
+    /** One sentence saying why a shot was dropped, from its distance off the trend (arc-minutes, + above). */
+    fun dropNote(residualMin: Double): String =
+        if (residualMin > 0) "%.1f′ higher than the line through your other shots, likely a misread drum or the body held above the horizon, so it isn't used.".format(residualMin)
+        else "%.1f′ lower than the line through your other shots, likely a misread drum or the body dipped below the horizon, so it isn't used.".format(-residualMin)
+
+    /**
+     * A typed time of day (local), "19:46:12", "19:46" or "194612", as UTC ms on the day of `nearMs`, taking the
+     * day before if that puts it more than 12 hours in the future. Null if it can't be read.
+     */
+    fun parseTimeOfDay(text: String, nearMs: Long, utcOffsetMs: Long): Long? {
+        val t = text.trim()
+        val parts = if (t.contains(':')) t.split(':') else when (t.length) {
+            6 -> listOf(t.substring(0, 2), t.substring(2, 4), t.substring(4, 6))
+            4 -> listOf(t.substring(0, 2), t.substring(2, 4))
+            else -> return null
+        }
+        if (parts.size !in 2..3) return null
+        val h = parts[0].toIntOrNull() ?: return null
+        val m = parts[1].toIntOrNull() ?: return null
+        val sec = if (parts.size == 3) parts[2].toDoubleOrNull() ?: return null else 0.0
+        if (h !in 0..23 || m !in 0..59 || sec < 0 || sec >= 60) return null
+        val day = 86_400_000L
+        val localNear = nearMs + utcOffsetMs
+        val midnight = localNear - Math.floorMod(localNear, day)
+        var local = midnight + h * 3_600_000L + m * 60_000L + (sec * 1000).toLong()
+        if (local - localNear > day / 2) local -= day
+        return local - utcOffsetMs
     }
 
     // ---------------------------------------------------------------- fix

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sextant step picture for the celestial trainer (generated; edit make_gfx.py, not this file) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp" android:viewportWidth="96" android:viewportHeight="96">
+    <path android:pathData="M18,0 H78 A18,18 0 0 1 96,18 V78 A18,18 0 0 1 78,96 H18 A18,18 0 0 1 0,78 V18 A18,18 0 0 1 18,0 Z"
+        android:fillColor="#0F2742" />
+    <path android:pathData="M14.00,80.00 L84.00,80.00"
+        android:strokeColor="#2C5078"
+        android:strokeWidth="1.5" />
+    <path android:pathData="M14.00,80.00 L14.00,18.00"
+        android:strokeColor="#2C5078"
+        android:strokeWidth="1.5" />
+    <path android:pathData="M16.00,68.00 L19.45,65.97 M22.03,64.45 L25.48,62.42 M28.07,60.90 L31.51,58.87 M34.10,57.35 L37.55,55.32 M40.13,53.80 L43.58,51.78 M46.17,50.25 L49.62,48.23 M52.20,46.71 L55.65,44.68 M58.23,43.16 L61.68,41.13 M64.27,39.61 L67.72,37.58 M70.30,36.06 L73.75,34.03 M76.34,32.51 L79.78,30.48 M82.37,28.96 L84.00,28.00"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+    <path android:pathData="M17.80,64.00 a4.20,4.20 0 1,0 8.40,0 a4.20,4.20 0 1,0 -8.40,0 Z"
+        android:fillColor="#F4F1EA" />
+    <path android:pathData="M31.80,56.00 a4.20,4.20 0 1,0 8.40,0 a4.20,4.20 0 1,0 -8.40,0 Z"
+        android:fillColor="#F4F1EA" />
+    <path android:pathData="M59.80,41.00 a4.20,4.20 0 1,0 8.40,0 a4.20,4.20 0 1,0 -8.40,0 Z"
+        android:fillColor="#F4F1EA" />
+    <path android:pathData="M73.80,33.00 a4.20,4.20 0 1,0 8.40,0 a4.20,4.20 0 1,0 -8.40,0 Z"
+        android:fillColor="#F4F1EA" />
+    <path android:pathData="M45.80,34.00 a4.20,4.20 0 1,0 8.40,0 a4.20,4.20 0 1,0 -8.40,0 Z"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="1.6"
+        android:strokeAlpha="0.8" />
+    <path android:pathData="M45.00,29.00 L55.00,39.00 M55.00,29.00 L45.00,39.00"
+        android:strokeColor="#FF5A4F"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+    <path android:pathData="M61,62 H81 A3,3 0 0 1 84,65 V73 A3,3 0 0 1 81,76 H61 A3,3 0 0 1 58,73 V65 A3,3 0 0 1 61,62 Z"
+        android:fillColor="#0A1B2E"
+        android:strokeColor="#AFC2D6"
+        android:strokeWidth="1.2" />
+    <path android:pathData="M63.00,69.00 L79.00,69.00"
+        android:strokeColor="#F28C28"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round" />
+</vector>
