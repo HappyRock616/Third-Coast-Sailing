@@ -84,6 +84,12 @@ class CelestialTest {
         val fix = Workbook.fix(works.mapNotNull { it.lop })
         assertNotNull(fix)
         assertTrue("workbook fix within 0.3 nm (table rounding)", distanceNm(fix!!.position, truth) < 0.3)
+        // uncertainty: perfect sights -> the typical 1' sight error; 3 well-spread lines -> geometry about 1.2
+        val u = fix.uncertainty!!
+        assertEquals(1.0, u.sigmaNm, 1e-9)
+        assertTrue(u.geometry in 1.1..2.0)
+        assertEquals(2.0 * u.sigmaNm * u.geometry, u.radius95Nm, 1e-9)
+        assertTrue(fix.offsetNm > 7.0 && fix.drIsGps)                       // DR was set 8 nm off
     }
 
     @Test fun advancedFlagsOnlyTheWrongLine() {

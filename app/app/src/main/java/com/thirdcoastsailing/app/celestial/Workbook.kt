@@ -27,8 +27,11 @@ import kotlin.math.sqrt
  * Pure Kotlin (no Android) so it can be tested on a PC.
  */
 
-/** One reading of the sextant: the instant "mark" was pressed, the altitude read, and where the boat was. */
-data class Shot(val timeMs: Long, val hsDeg: Double, val dr: LatLon)
+/**
+ * One reading of the sextant: the instant "mark" was pressed, the altitude read, and where the boat was
+ * (`gps` = that position came from GPS; false = a typed DR position).
+ */
+data class Shot(val timeMs: Long, val hsDeg: Double, val dr: LatLon, val gps: Boolean = true)
 
 /** Lines of the workbook. Advanced users type one value per line. */
 enum class Field {
@@ -135,6 +138,7 @@ data class WorkLop(
     val znDeg: Double,
     val interceptNm: Double,
     val dr: LatLon,                        // boat position at the sight (for advancing to the fix time)
+    val drIsGps: Boolean = true,
 ) {
     val footPoint: LatLon get() = travel(assumed, znDeg, interceptNm)
     fun segment(halfLengthNm: Double = 10.0): Pair<LatLon, LatLon> =
@@ -148,10 +152,34 @@ data class WorkFix(
     val lops: List<WorkLop>,               // as advanced to the fix time
     val residualNm: Double,                // size of the "cocked hat"
     val drAtFix: LatLon,                   // boat position (GPS or DR) at the fix time
+    val drIsGps: Boolean = true,
+    val uncertainty: FixUncertainty? = null,
 ) {
     /** How far the fix is from where the boat really was (GPS), or from the DR. */
     val offsetNm: Double get() = distanceNm(position, drAtFix)
+    /** True bearing from the GPS / DR position to the fix. */
     val offsetBearing: Double get() = bearing(drAtFix, position)
+}
+
+/**
+ * How sure the fix is, as a circle around it that should hold the true position about 95% of the time.
+ *
+ *   s  = spread of the lines about the fix = √(Σr² ÷ (n − 2))      (only with 3 or more lines; r = each line's miss)
+ *   σ  = sight error used = the larger of s and 1.0′               (1′ is typical for a hand-held sextant at sea)
+ *   G  = geometry factor = √(trace (AᵀA)⁻¹), A = rows (sin Zn, cos Zn)   (3 lines 120° apart: 1.15; worse as
+ *        the lines get closer to parallel)
+ *   R  = 2 × σ × G                                                 (2 drms ≈ 95%)
+ * Minutes of arc and nautical miles are the same thing here.
+ */
+data class FixUncertainty(
+    val lines: Int,
+    val sumSqNm2: Double,
+    val spreadNm: Double?,          // s, null with only 2 lines (two lines always meet exactly)
+    val sigmaNm: Double,            // σ
+    val geometry: Double,           // G
+    val radius95Nm: Double,         // R
+) {
+    companion object { const val TYPICAL_SIGHT_ERROR_NM = 1.0 }
 }
 
 object Workbook {
@@ -357,7 +385,7 @@ object Workbook {
 
         // ADVANCED: plot only once every line has been typed
         val complete = !adv || lines.all { it.value != null }
-        val lop = if (complete) WorkLop(body.name, t, LatLon(uApLat, uApLon), uZn, uA, dr) else null
+        val lop = if (complete) WorkLop(body.name, t, LatLon(uApLat, uApLon), uZn, uA, dr, shot.gps) else null
         return SightWork(s, shot, used, lines, extract, lop)
     }
 
@@ -391,8 +419,8 @@ object Workbook {
         val kept = keptShots(shots)
         val t = kept.map { it.timeMs }.average().toLong()
         val hs = kept.map { it.hsDeg }.average()
-        val dr = kept.minBy { abs(it.timeMs - t) }.dr
-        return Shot(t, hs, dr)
+        val near = kept.minBy { abs(it.timeMs - t) }
+        return Shot(t, hs, near.dr, near.gps)
     }
 
     private fun usedShots(shots: List<Shot>) = keptShots(shots).size
@@ -479,9 +507,16 @@ object Workbook {
         if (det < 0.03 * adv.size * adv.size) return null
         val x = (b1 * a22 - b2 * a12) / det
         val y = (a11 * b2 - a12 * b1) / det
-        val rms = sqrt(rows.sumOf { (nx, ny, c) -> val r = nx * x + ny * y - c; r * r } / rows.size)
+        val sumSq = rows.sumOf { (nx, ny, c) -> val r = nx * x + ny * y - c; r * r }
+        val rms = sqrt(sumSq / rows.size)
+        // uncertainty: sight error from the spread of the lines (or the typical 1′), times the geometry factor
+        val n = rows.size
+        val spread = if (n >= 3) sqrt(sumSq / (n - 2)) else null
+        val sigma = maxOf(spread ?: 0.0, FixUncertainty.TYPICAL_SIGHT_ERROR_NM)
+        val gdop = sqrt((a11 + a22) / det)
+        val unc = FixUncertainty(n, sumSq, spread, sigma, gdop, 2.0 * sigma * gdop)
         val pos = LatLon(ref.lat + y / 60.0, norm180(ref.lon + x / 60.0 / cos(ref.lat * DEG)))
-        return WorkFix(pos, last.timeMs, adv, rms, last.dr)
+        return WorkFix(pos, last.timeMs, adv, rms, last.dr, last.drIsGps, unc)
     }
 
     // ---------------------------------------------------------------- typing values (ADVANCED)

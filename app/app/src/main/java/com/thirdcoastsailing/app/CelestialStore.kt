@@ -38,7 +38,7 @@ data class CelestialState(
 data class SavedFix(val timeMs: Long, val position: LatLon, val settings: WorkbookSettings, val sights: List<WorkbookSight>)
 
 /** A point on the celestial fix log drawn on the chart. `saved` = false for the current, not yet saved, fix. */
-data class LogFix(val timeMs: Long, val position: LatLon, val saved: Boolean)
+data class LogFix(val timeMs: Long, val position: LatLon, val saved: Boolean, val radius95Nm: Double? = null)
 
 /**
  * What the workbook works out from the state: each sight's working, the lines of position, the fix, and the fix
@@ -50,7 +50,8 @@ fun celestialPlot(s: CelestialState): CelestialPlot {
     val works = s.sights.map { runCatching { Workbook.work(it, s.settings) }.getOrNull() ?: SightWork(it, null, 0, emptyList(), emptyList(), null) }
     val lops = works.mapNotNull { it.lop }
     val fix = runCatching { Workbook.fix(lops) }.getOrNull()
-    val log = s.saved.map { LogFix(it.timeMs, it.position, true) } + listOfNotNull(fix?.let { LogFix(it.timeMs, it.position, false) })
+    val log = s.saved.map { f -> LogFix(f.timeMs, f.position, true, runCatching { savedPlot(f).fix?.uncertainty?.radius95Nm }.getOrNull()) } +
+        listOfNotNull(fix?.let { LogFix(it.timeMs, it.position, false, it.uncertainty?.radius95Nm) })
     return CelestialPlot(works, lops, fix, log)
 }
 
@@ -130,7 +131,7 @@ class CelestialStore(context: Context) {
                 put("shots", JSONArray().apply {
                     for (sh in w.shots) put(JSONArray().put(sh.timeMs)
                         .put(if (sh.hsDeg.isNaN()) JSONObject.NULL else sh.hsDeg)     // JSON can't hold NaN
-                        .put(sh.dr.lat).put(sh.dr.lon))
+                        .put(sh.dr.lat).put(sh.dr.lon).put(sh.gps))
                 })
                 put("entries", JSONObject().apply { for ((f, v) in w.entries) put(f.name, v) })
             })
@@ -142,7 +143,7 @@ class CelestialStore(context: Context) {
             val sh = so.optJSONArray("shots") ?: JSONArray()
             val shots = (0 until sh.length()).map { j ->
                 val a = sh.getJSONArray(j)
-                Shot(a.getLong(0), if (a.isNull(1)) Double.NaN else a.getDouble(1), LatLon(a.getDouble(2), a.getDouble(3)))
+                Shot(a.getLong(0), if (a.isNull(1)) Double.NaN else a.getDouble(1), LatLon(a.getDouble(2), a.getDouble(3)), a.optBoolean(4, true))
             }
             val eo = so.optJSONObject("entries")
             val entries = mutableMapOf<Field, Double>()

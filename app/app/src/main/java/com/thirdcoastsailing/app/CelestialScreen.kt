@@ -565,7 +565,7 @@ private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: B
                         hs == null || hs < 0.0 || hs > 90.0 -> problem = "Type the sextant reading as degrees and minutes, e.g. 48 34.4."
                         else -> {
                             val dr = gps?.let { LatLon(it.lat, it.lon) } ?: position
-                            store.updateSight(s.id) { x -> x.copy(shots = (x.shots + Shot(t, hs, dr)).sortedBy { it.timeMs }) }
+                            store.updateSight(s.id) { x -> x.copy(shots = (x.shots + Shot(t, hs, dr, gps != null)).sortedBy { it.timeMs }) }
                             typed.remove(kTime); typed.remove(kHs); typed.remove(kMs); problem = ""
                         }
                     }
@@ -643,7 +643,39 @@ private fun FixCard(plot: CelestialPlot, onSave: (() -> Unit)?) {
         }
         Text("Fix  ${formatLat(f.position.lat)}  ${formatLon(f.position.lon)}", color = Foam, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Text("At ${hhmmss(f.timeMs)} from ${f.lops.size} lines · they cross within %.1f nm".format(f.residualNm), color = Mist, fontSize = 13.sp)
-        Text("%.1f nm %s of the GPS / DR position".format(f.offsetNm, Coach.compassPoint(f.offsetBearing)), color = SignalOrange, fontSize = 14.sp)
+
+        // ---- how sure: the circle drawn round the fix on the chart, with the working
+        val u = f.uncertainty
+        if (u != null) {
+            HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 6.dp))
+            Text("How sure is this fix?", color = Foam, fontWeight = FontWeight.Bold)
+            val mono = FontFamily.Monospace
+            if (u.spreadNm != null) {
+                Text("Spread of the lines  s = √(Σr² ÷ (n − 2))", color = Mist, fontSize = 12.sp)
+                Text("  = √(%.2f ÷ %d) = %.1f′".format(u.sumSqNm2, u.lines - 2, u.spreadNm), color = Mist, fontFamily = mono, fontSize = 12.sp)
+            } else Text("Two lines always meet exactly, so their spread can't be measured; a third body would show it.", color = Mist, fontSize = 12.sp)
+            Text("Sight error used  σ = the larger of s and 1.0′ (typical for a hand-held sextant)", color = Mist, fontSize = 12.sp)
+            Text("  = %.1f′".format(u.sigmaNm), color = Mist, fontFamily = mono, fontSize = 12.sp)
+            Text("Geometry  G = √(trace (AᵀA)⁻¹), from the lines' bearings (3 lines 120° apart: 1.15; bigger as they get closer to parallel)",
+                color = Mist, fontSize = 12.sp)
+            Text("  = %.2f".format(u.geometry), color = Mist, fontFamily = mono, fontSize = 12.sp)
+            Text("Radius (about 95%)  R = 2 × σ × G", color = Mist, fontSize = 12.sp)
+            Text("  = 2 × %.1f × %.2f = %.1f nm".format(u.sigmaNm, u.geometry, u.radius95Nm), color = Foam, fontFamily = mono, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Drawn as a circle round the fix on the chart.", color = Mist, fontSize = 12.sp)
+        }
+
+        // ---- error against the GPS (or the typed DR when there was no GPS)
+        HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 6.dp))
+        if (f.drIsGps) {
+            Text("Error compared with GPS", color = Foam, fontWeight = FontWeight.Bold)
+            Text("%.1f nm · GPS position to fix %03.0f°T".format(f.offsetNm, f.offsetBearing), color = SignalOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            if (u != null) Text(if (f.offsetNm <= u.radius95Nm) "Inside the %.1f nm circle: as good as the sights allow.".format(u.radius95Nm)
+                else "Outside the %.1f nm circle: worth checking the time, the readings and the working.".format(u.radius95Nm),
+                color = Mist, fontSize = 12.sp)
+        } else {
+            Text("No GPS at the time: compared with your typed DR", color = Foam, fontWeight = FontWeight.Bold)
+            Text("%.1f nm · DR to fix %03.0f°T".format(f.offsetNm, f.offsetBearing), color = SignalOrange, fontSize = 15.sp)
+        }
         if (onSave != null) {
             Text("Shown on the chart. Save it to keep it in the fix log and start the next workbook.", color = Mist, fontSize = 12.sp)
             Button(onClick = onSave, colors = ButtonDefaults.buttonColors(containerColor = SignalOrange, contentColor = Navy),

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.thirdcoastsailing.app.celestial.LatLon
 import com.thirdcoastsailing.app.celestial.bearing
 import com.thirdcoastsailing.app.celestial.distanceNm
+import com.thirdcoastsailing.app.celestial.travel
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import java.text.SimpleDateFormat
@@ -74,6 +75,16 @@ fun CelestialOverlay(map: MapLibreMap?, tick: Int, plot: CelestialPlot?, night: 
             drawCircle(ink, 1.8.dp.toPx(), c)
             val t = measurer.measure(time.format(Date(lf.timeMs)), TextStyle(fontSize = 11.sp, color = ink, fontWeight = FontWeight.Bold))
             drawText(t, topLeft = c + Offset(9.dp.toPx(), 2.dp.toPx()))
+        }
+
+        // ---- uncertainty circles (about 95%) round each fix
+        for ((i, lf) in p.log.withIndex()) {
+            val r = lf.radius95Nm ?: continue
+            val edge = xy(travel(lf.position, 0.0, r))
+            val rpx = kotlin.math.hypot(edge.x - pts[i].x, edge.y - pts[i].y)
+            drawCircle(ink.copy(alpha = if (lf.saved) 0.08f else 0.12f), rpx, pts[i])
+            drawCircle(ink.copy(alpha = if (lf.saved) 0.5f else 0.8f), rpx, pts[i], style = Stroke(1.5.dp.toPx(),
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))))
         }
 
         p.fix?.let { f ->
