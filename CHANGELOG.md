@@ -49,7 +49,7 @@
 - **Smaller app.** The APK now carries the map engine only for ARM phones and tablets (64- and 32-bit), dropping the two x86 emulator copies: about 27 MB smaller (74 MB → about 47 MB). The app no longer installs on x86 emulators or Intel Chromebooks.
 
 ### Fixed
-- Trip track zigzags and starbursts. The app now uses GPS only: rough network (cell / Wi-Fi) positions, which were mixed in every 5 seconds, are no longer used. The track also leaves out impossible jumps (a fix that would need far more than twice the GPS speed to reach); after three in a row the new position is accepted, so a real move after a GPS gap still shows. The boat and navigation still use every GPS fix.
+- Trip track zigzags and starbursts. The app now uses GPS only: rough network (cell / Wi-Fi) positions, which were mixed in every 5 seconds, are no longer used. The track also leaves out impossible jumps (a fix that would need far more than twice the GPS speed to reach); after three in a row the new position is accepted, so a real move after a GPS gap still shows. The boat and navigation still use every GPS fix. Each track point is the moving average of the last 3 GPS fixes, which takes out the remaining wobble.
 - Wind / gust color showed as blocks over land when zoomed out or panned away from the downloaded lakes. The color is now drawn only where the Great Lakes wave model has water, so it stays on the lakes at every zoom.
 - Wave crests now drift at every zoom (they used to stop moving when zoomed out past about one lake). Same battery use: the number of crests depends on screen spacing, not zoom.
 - Star finder: the 3D boat never appeared. The Android build stores the gzipped boat model unpacked under a shorter name, so the app couldn't find it; it now loads either form.

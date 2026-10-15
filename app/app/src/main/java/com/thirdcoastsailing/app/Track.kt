@@ -43,6 +43,8 @@ private const val JUMP_MARGIN_KN = 5.0
 /** ...with this floor (kn), and this speed assumed when the GPS reports none. */
 private const val JUMP_FLOOR_KN = 15.0
 private const val JUMP_NO_SOG_KN = 30.0
+/** Track points are the moving average of the last 3 fixes; a gap longer than this (ms) starts the average fresh. */
+const val TRACK_AVG_GAP_MS = 30_000L
 /** After this many impossible jumps in a row the new position is believed (the GPS has really moved on, e.g. after a gap). */
 const val TRACK_JUMP_ACCEPT_AFTER = 3
 
