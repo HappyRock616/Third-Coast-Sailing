@@ -45,7 +45,7 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
  */
 
 /** The menu's icons, each drawn on a 24 x 24 grid. */
-enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, NIGHT, GAUGE, OFFLINE, BOAT, SEXTANT, CHARTS, INFO }
+enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, NIGHT, GAUGE, OFFLINE, BOAT, SEXTANT, CHARTS, INFO, ANCHOR }
 
 // Wind color stops (knots), the same scale as the map field and the buoy fill
 private val KEY_WIND = listOf(0 to Color(0xFF3B6FB6), 8 to Color(0xFF3DBE6B), 14 to Color(0xFFF2D028),
@@ -124,6 +124,12 @@ private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
                 lineTo(22f * k, 19f * k); lineTo(16f * k, 21f * k); lineTo(8f * k, 19f * k); lineTo(2f * k, 21f * k); close()
             }, Foam, style = Stroke(1.8f * k))
             drawLine(Foam, o(8f, 3f), o(8f, 19f), 1.5f * k); drawLine(Foam, o(16f, 5f), o(16f, 21f), 1.5f * k)
+        }
+        MenuIcon.ANCHOR -> {
+            drawCircle(Foam, 2.4f * k, o(12f, 4.5f), style = Stroke(1.8f * k))
+            drawLine(Foam, o(12f, 7f), o(12f, 21f), w, StrokeCap.Round)
+            drawLine(Foam, o(7f, 10f), o(17f, 10f), w, StrokeCap.Round)
+            drawArc(SignalOrange, 15f, 150f, false, o(3.5f, 9.5f), Size(17f * k, 12.5f * k), style = line)
         }
         MenuIcon.INFO -> {
             drawCircle(Foam, 10f * k, o(12f, 12f), style = line)

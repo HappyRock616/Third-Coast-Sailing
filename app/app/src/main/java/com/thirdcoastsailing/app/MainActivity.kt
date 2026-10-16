@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import androidx.activity.ComponentActivity
@@ -126,6 +127,16 @@ class MainActivity : ComponentActivity() {
         MapLibre.getInstance(this)          // offline map engine; no API key, no Google services
         enableEdgeToEdge()
         setContent { ThirdCoastSailingTheme { App() } }
+    }
+
+    /** While the anchor alarm sounds, either volume button silences it for 15 minutes (with the app on screen). */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val volume = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (volume && AnchorWatch.state.alarming) {
+            if (event.action == KeyEvent.ACTION_DOWN) AnchorService.silence(this)
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 }
 
@@ -300,6 +311,8 @@ private fun App() {
     // First launch: the not-for-navigation notice must be accepted before anything else (then the lake picker)
     var showDisclaimer by remember { mutableStateOf(!prefs.getBoolean("disclaimerAccepted", false)) }
     var showAbout by remember { mutableStateOf(false) }
+    var showAnchor by remember { mutableStateOf(false) }
+    remember { AnchorWatch.load(context) }                      // saved anchor point survives a restart
     val dlQueue = remember { Channel<CatalogLake>(Channel.UNLIMITED) }
     // One download at a time, in the order requested
     LaunchedEffect(Unit) {
@@ -534,6 +547,16 @@ private fun App() {
                 onBoats = { scope.launch { drawer.close() }; showBoats = true },
                 onCelestial = { scope.launch { drawer.close() }; showCelestial = true },
                 onAbout = { scope.launch { drawer.close() }; showAbout = true },
+                onAnchorOpen = { scope.launch { drawer.close() }; showAnchor = true },
+                onAnchorToggle = { on ->
+                    if (on) {
+                        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        // no saved anchor and no GPS yet: open the setup screen, which waits for a fix
+                        if (!AnchorWatch.arm(context, fix)) { scope.launch { drawer.close() }; showAnchor = true }
+                    } else AnchorWatch.disarm(context)
+                },
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
                 gaugeOn = gaugeOn,
@@ -615,6 +638,10 @@ private fun App() {
                     modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(start = 78.dp, top = 10.dp, end = 10.dp))
             }
 
+            // Anchor watch: large yellow box with distance and bearing to the anchor (red border and "Alarm Silence" in an alarm)
+            AnchorBanner(Modifier.align(Alignment.TopCenter).safeDrawingPadding()
+                .padding(start = 78.dp, end = 10.dp, top = if (routePts.isNotEmpty()) 120.dp else 10.dp))
+
             // Wind / heading gauge (transparent, over the chart)
             if (gaugeOn) WindGauge(
                 data = GaugeData(
@@ -669,6 +696,7 @@ private fun App() {
     }
 
     if (showAbout) AboutScreen(APP_VERSION) { showAbout = false }
+    if (showAnchor) AnchorScreen(fix) { showAnchor = false }
 
     // First launch: accept the disclaimer, then pick lakes to download
     if (showDisclaimer) FirstLaunchDisclaimer {
@@ -783,6 +811,7 @@ private fun MenuSheet(
     onBoats: () -> Unit,
     onCelestial: () -> Unit,
     onAbout: () -> Unit,
+    onAnchorOpen: () -> Unit, onAnchorToggle: (Boolean) -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
     tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
@@ -859,6 +888,7 @@ private fun MenuSheet(
             ChartKey()
 
             MenuDivider()
+            AnchorMenuRow(onOpen = onAnchorOpen, onToggle = onAnchorToggle)
             MenuButton(MenuIcon.BOAT, "Boat", boatName, onClick = onBoats)
             MenuButton(MenuIcon.SEXTANT, "Celestial", onClick = onCelestial)
             MenuButton(MenuIcon.CHARTS, "Charts", if (lakeRows.any { it.update }) "update" else null, onClick = { showCharts = true })
@@ -1217,6 +1247,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         RouteOverlay(map, tick, routeStart, routePts, calc, night)
         TrackOverlay(map, tick, track, if (trackLive) fix else null, trackText, night)
         CelestialOverlay(map, tick, celestial, night)
+        AnchorOverlay(map, tick, night)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
     }
