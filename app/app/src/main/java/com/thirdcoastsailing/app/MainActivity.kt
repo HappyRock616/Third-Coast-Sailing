@@ -313,6 +313,7 @@ private fun App() {
     var showAbout by remember { mutableStateOf(false) }
     var showAnchor by remember { mutableStateOf(false) }
     remember { AnchorWatch.load(context) }                      // saved anchor point survives a restart
+    remember { MobWatch.load(context) }                         // a MOB mark stays until it is reset
     val dlQueue = remember { Channel<CatalogLake>(Channel.UNLIMITED) }
     // One download at a time, in the order requested
     LaunchedEffect(Unit) {
@@ -528,6 +529,23 @@ private fun App() {
         forecastWind = withContext(Dispatchers.IO) { runCatching { weather.wind(System.currentTimeMillis(), f.lat, f.lon) }.getOrNull() }
     }
 
+    // ---- man overboard: mark the boat's position, clear the chart (gauge stays), keep bearing and distance to the pin
+    fun activateMob() {
+        val f = fix ?: run { status = "MOB: no GPS fix yet"; return }
+        MobWatch.activate(context, f)
+        wxColor = "none"; prefs.edit().putString("wxColor", "none").apply()
+        wxBarbs = false; prefs.edit().putBoolean("wxBarbs", false).apply()
+        wxWaves = false; prefs.edit().putBoolean("wxWaves", false).apply()
+        setRoute(emptyList())                                  // also cancels any weather routing
+        scope.launch { drawer.close() }
+    }
+    // forecast wind at the pin for the drift triangle, refreshed with the weather and every hour
+    LaunchedEffect(MobWatch.state.pin, wxVersion, clock / HOUR_MS) {
+        val pin = MobWatch.state.pin ?: return@LaunchedEffect
+        val w = withContext(Dispatchers.IO) { runCatching { weather.wind(System.currentTimeMillis(), pin.lat, pin.lon) }.getOrNull() }
+        MobWatch.setWind(context, w)
+    }
+
     ModalNavigationDrawer(
         drawerState = drawer,
         gesturesEnabled = drawer.isOpen,          // keep swipes for panning the chart
@@ -548,6 +566,7 @@ private fun App() {
                 onCelestial = { scope.launch { drawer.close() }; showCelestial = true },
                 onAbout = { scope.launch { drawer.close() }; showAbout = true },
                 onAnchorOpen = { scope.launch { drawer.close() }; showAnchor = true },
+                onMob = { activateMob() }, onMobReset = { MobWatch.reset(context) },
                 onAnchorToggle = { on ->
                     if (on) {
                         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
@@ -638,9 +657,17 @@ private fun App() {
                     modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(start = 78.dp, top = 10.dp, end = 10.dp))
             }
 
+            // Man overboard: the same MOB box across the top of the chart (hold 5 s to reset)
+            if (MobWatch.state.active) MobBox(fix, onActivate = {}, onReset = { MobWatch.reset(context) }, large = true,
+                modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(start = 78.dp, end = 10.dp, top = 10.dp))
+
             // Anchor watch: large yellow box with distance and bearing to the anchor (red border and "Alarm Silence" in an alarm)
             AnchorBanner(Modifier.align(Alignment.TopCenter).safeDrawingPadding()
-                .padding(start = 78.dp, end = 10.dp, top = if (routePts.isNotEmpty()) 120.dp else 10.dp))
+                .padding(start = 78.dp, end = 10.dp, top = when {
+                    MobWatch.state.active -> 110.dp
+                    routePts.isNotEmpty() -> 120.dp
+                    else -> 10.dp
+                }))
 
             // Wind / heading gauge (transparent, over the chart)
             if (gaugeOn) WindGauge(
@@ -812,6 +839,7 @@ private fun MenuSheet(
     onCelestial: () -> Unit,
     onAbout: () -> Unit,
     onAnchorOpen: () -> Unit, onAnchorToggle: (Boolean) -> Unit,
+    onMob: () -> Unit, onMobReset: () -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
     tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
@@ -822,6 +850,10 @@ private fun MenuSheet(
     var showCharts by remember { mutableStateOf(false) }
     ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 300.dp)) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp)) {
+            // ---- man overboard, first thing in the menu
+            MobBox(gps.fix, onActivate = onMob, onReset = onMobReset)
+            Spacer(Modifier.height(14.dp))
+
             // ---- logo and name, in the app's colors
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.tcs_logo), null,
@@ -1248,6 +1280,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         TrackOverlay(map, tick, track, if (trackLive) fix else null, trackText, night)
         CelestialOverlay(map, tick, celestial, night)
         AnchorOverlay(map, tick, night)
+        MobOverlay(map, tick, fix)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
     }
