@@ -298,6 +298,27 @@ private fun App() {
         val f = fix ?: return@LaunchedEffect
         depthFt = withContext(Dispatchers.IO) { runCatching { depthLookup.depthFt(f.lat, f.lon) }.getOrNull() }
     }
+    // Crash warning: red broken-boat mark on the first too-shallow water ahead (current heading) and on the route
+    val courseAvg = remember { CourseAverager() }
+    LaunchedEffect(fix) { fix?.let { courseAvg.add(it) } }
+    val latestFix by rememberUpdatedState(fix)
+    val latestLimit by rememberUpdatedState(depthLimitFt)
+    LaunchedEffect(Unit) {
+        while (true) {                                          // every 5 s: cheap, it stops at the first hit
+            val f = latestFix
+            CrashWatch.ahead = if (f == null) null else withContext(Dispatchers.IO) {
+                runCatching { CrashWatch.scanAhead(depthLookup, f, courseAvg.cog(), latestLimit) }.getOrNull()
+            }
+            delay(5_000)
+        }
+    }
+    // the route is checked when it changes, the limit changes, or the boat has moved about 100 m
+    LaunchedEffect(routePts, depthLimitFt, lakes, fix?.lat?.let { (it * 1000).roundToInt() }, fix?.lon?.let { (it * 1000).roundToInt() }) {
+        val start = fix?.let { GeoPt(it.lat, it.lon) }
+        CrashWatch.onRoute = withContext(Dispatchers.IO) {
+            runCatching { CrashWatch.scanRoute(depthLookup, start, routePts, depthLimitFt) }.getOrNull()
+        }
+    }
     val activePolar = remember(activeBoat) { activeBoat?.let { runCatching { boatStore.polar(it) }.getOrNull() } }
 
     // ---- chart downloads from the GitHub "charts" release
@@ -1281,6 +1302,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         CelestialOverlay(map, tick, celestial, night)
         AnchorOverlay(map, tick, night)
         MobOverlay(map, tick, fix)
+        CrashOverlay(map, tick)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
     }
