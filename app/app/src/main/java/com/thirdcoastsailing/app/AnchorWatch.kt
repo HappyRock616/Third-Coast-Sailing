@@ -250,7 +250,7 @@ class AnchorService : Service() {
 
     private val lm by lazy { getSystemService(Context.LOCATION_SERVICE) as LocationManager }
     private val alarms by lazy { getSystemService(AlarmManager::class.java) }
-    private var bell: ShipsBell? = null
+    private var bell: ThirdCoastShipsBell? = null
     private var wake: PowerManager.WakeLock? = null
     private var lastFixMs = 0L
 
@@ -316,7 +316,7 @@ class AnchorService : Service() {
         AnchorWatch.update(this) { it.copy(alarming = true) }
         wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ThirdCoast:anchor").apply { acquire(AnchorWatch.SNOOZE_MS) }
-        bell = ShipsBell(this).also { it.start() }
+        bell = ThirdCoastShipsBell(this).also { it.start() }
     }
 
     private fun stopAlarm() {
@@ -393,11 +393,11 @@ class AnchorService : Service() {
 // ============================================================================ the bell
 
 /**
- * A ship's bell, made in code (no sound file): each strike is a sum of bell partials with their own decays, struck
+ * "Third Coast Ships Bell": the anchor alarm sound, made in code (no sound file): each strike is a sum of bell partials with their own decays, struck
  * twice close together ("two bells") then a pause, looped. Played on the alarm channel at full alarm volume (put
  * back afterwards), with vibration in time with the strikes.
  */
-private class ShipsBell(private val context: Context) {
+private class ThirdCoastShipsBell(private val context: Context) {
     private var track: AudioTrack? = null
     private val audio = context.getSystemService(AudioManager::class.java)
     private val vibrator = context.getSystemService(VibratorManager::class.java)?.defaultVibrator
