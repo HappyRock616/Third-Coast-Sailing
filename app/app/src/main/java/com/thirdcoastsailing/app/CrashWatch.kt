@@ -43,6 +43,7 @@ object CrashWatch {
     private const val MIN_NM = 0.5
     private const val MAX_NM = 5.0
     private const val MIN_SOG_KN = 1.0
+    const val AHEAD_EVERY_MS = 20_000L         // heading check interval (power: 20 s is plenty at sailing speed)
     private const val STEP_M = 50.0               // sample spacing along each line
     private const val WEDGE_DEG = 5.0             // course ± this
     private const val LIMIT_MARGIN_M = 0.1        // same margin as the chart shading (ChartStyle)
@@ -142,39 +143,61 @@ fun CrashOverlay(map: MapLibreMap?, tick: Int) {
 }
 
 private val CRASH_RED = Color(0xFFD62828)
-private val CRASH_DARK = Color(0xFF6E0E0E)
+private val CRASH_FILL = Color.White.copy(alpha = 0.92f)
 
-/** Red cartoon sailboat broken in half, centered at `c`; `k` = px per dp (about 34 dp wide). */
-fun DrawScope.drawBrokenBoat(c: Offset, k: Float) {
-    val st = Stroke(1.6f * k, join = StrokeJoin.Round, cap = StrokeCap.Round)
-    // bow half, tipped up to the left, with a jagged break edge
-    rotate(-18f, pivot = c + Offset(-3f * k, 6f * k)) {
-        val bow = Path().apply {
-            moveTo(c.x - 17f * k, c.y + 1f * k)                     // bow tip
-            lineTo(c.x - 2f * k, c.y + 1f * k)
-            lineTo(c.x + 0f * k, c.y + 4f * k); lineTo(c.x - 3f * k, c.y + 6f * k); lineTo(c.x - 1f * k, c.y + 9f * k)  // break
-            lineTo(c.x - 11f * k, c.y + 9f * k)
+/**
+ * Crash mark: a cartoon line drawing of a little sailboat snapped in two, sinking into two wavy water lines.
+ * Red rounded strokes with white fill inside the hull pieces and sail, so it reads on red shading and blue water.
+ * Drawn on a 40 x 40 grid centered at (20, 22); `k` = px per grid unit (1.2 dp gives about a 48 dp mark).
+ */
+fun DrawScope.drawBrokenBoat(c: Offset, dp: Float) {
+    val k = 1.2f * dp
+    fun o(x: Float, y: Float) = Offset(c.x + (x - 20f) * k, c.y + (y - 22f) * k)
+    val st = Stroke(1.5f * k, join = StrokeJoin.Round, cap = StrokeCap.Round)
+    fun shape(fill: Boolean, build: Path.() -> Unit) {
+        val p = Path().apply(build)
+        if (fill) drawPath(p, CRASH_FILL)
+        drawPath(p, CRASH_RED, style = st)
+    }
+    // bow half (with mast and sail), tipped nose-up to the left about its break
+    rotate(-24f, pivot = o(17f, 24f)) {
+        shape(true) {
+            moveTo(o(6f, 20f).x, o(6f, 20f).y)
+            quadraticTo(o(8f, 27f).x, o(8f, 27f).y, o(17f, 27f).x, o(17f, 27f).y)               // curved bottom
+            lineTo(o(18.5f, 24f).x, o(18.5f, 24f).y); lineTo(o(16.5f, 22.5f).x, o(16.5f, 22.5f).y)  // jagged break
+            lineTo(o(18.5f, 20.5f).x, o(18.5f, 20.5f).y); lineTo(o(17f, 19f).x, o(17f, 19f).y)
+            close()                                                                           // deck line
+        }
+        drawLine(CRASH_RED, o(12f, 19f), o(12f, 5f), 1.5f * k, cap = StrokeCap.Round)          // mast
+        shape(true) {
+            moveTo(o(12.6f, 6f).x, o(12.6f, 6f).y)
+            quadraticTo(o(17.5f, 11f).x, o(17.5f, 11f).y, o(16.5f, 17.5f).x, o(16.5f, 17.5f).y)   // sail
+            lineTo(o(12.6f, 17.5f).x, o(12.6f, 17.5f).y); close()
+        }
+        shape(false) { moveTo(o(12f, 5f).x, o(12f, 5f).y); lineTo(o(9f, 6.2f).x, o(9f, 6.2f).y); lineTo(o(12f, 7.2f).x, o(12f, 7.2f).y) }  // flag
+    }
+    // stern half, tipped stern-up to the right
+    rotate(22f, pivot = o(23f, 24f)) {
+        shape(true) {
+            moveTo(o(22f, 19f).x, o(22f, 19f).y)
+            lineTo(o(20.5f, 20.5f).x, o(20.5f, 20.5f).y); lineTo(o(22.5f, 22.5f).x, o(22.5f, 22.5f).y)  // jagged break
+            lineTo(o(20.5f, 24f).x, o(20.5f, 24f).y); lineTo(o(21f, 27f).x, o(21f, 27f).y)
+            quadraticTo(o(30f, 27f).x, o(30f, 27f).y, o(33f, 19f).x, o(33f, 19f).y)               // curved bottom to transom
             close()
         }
-        drawPath(bow, CRASH_RED); drawPath(bow, CRASH_DARK, style = st)
-        // broken mast stub and sail scrap
-        drawLine(CRASH_DARK, c + Offset(-7f * k, 1f * k), c + Offset(-7f * k, -9f * k), 1.8f * k, cap = StrokeCap.Round)
-        val sail = Path().apply { moveTo(c.x - 6f * k, c.y - 9f * k); lineTo(c.x - 1f * k, c.y - 1f * k); lineTo(c.x - 6f * k, c.y - 1f * k); close() }
-        drawPath(sail, Color.White); drawPath(sail, CRASH_DARK, style = st)
     }
-    // stern half, tipped up to the right
-    rotate(20f, pivot = c + Offset(5f * k, 6f * k)) {
-        val stern = Path().apply {
-            moveTo(c.x + 3f * k, c.y + 1f * k)
-            lineTo(c.x + 16f * k, c.y + 1f * k)                    // transom top
-            lineTo(c.x + 14f * k, c.y + 9f * k)
-            lineTo(c.x + 4f * k, c.y + 9f * k); lineTo(c.x + 6f * k, c.y + 6f * k); lineTo(c.x + 3f * k, c.y + 4f * k)   // break
-            close()
+    // splash marks over the break
+    for ((a, b) in listOf(o(18.5f, 15f) to o(17.5f, 12.5f), o(20f, 14.5f) to o(20f, 11.5f), o(21.5f, 15f) to o(22.5f, 12.5f)))
+        drawLine(CRASH_RED, a, b, 1.5f * k, cap = StrokeCap.Round)
+    // two wavy water lines
+    fun wave(y: Float, x0: Float, x1: Float) {
+        val p = Path(); var x = x0; var first = true
+        while (x <= x1) {
+            val pt = o(x, y + 0.9f * sin((x - x0) / 7f * 2f * Math.PI.toFloat()))
+            if (first) { p.moveTo(pt.x, pt.y); first = false } else p.lineTo(pt.x, pt.y)
+            x += 0.5f
         }
-        drawPath(stern, CRASH_RED); drawPath(stern, CRASH_DARK, style = st)
+        drawPath(p, CRASH_RED, style = st)
     }
-    // splash / rock under the break
-    drawLine(CRASH_DARK, c + Offset(-14f * k, 13f * k), c + Offset(14f * k, 13f * k), 1.6f * k, cap = StrokeCap.Round)
-    drawLine(CRASH_DARK, c + Offset(-3f * k, 12f * k), c + Offset(1f * k, 9f * k), 1.4f * k, cap = StrokeCap.Round)
-    drawLine(CRASH_DARK, c + Offset(4f * k, 12f * k), c + Offset(2f * k, 9f * k), 1.4f * k, cap = StrokeCap.Round)
+    wave(29.5f, 3f, 37f); wave(34f, 8f, 32f)
 }

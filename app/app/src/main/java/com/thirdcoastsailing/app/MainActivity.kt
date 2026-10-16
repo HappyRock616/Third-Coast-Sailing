@@ -304,12 +304,12 @@ private fun App() {
     val latestFix by rememberUpdatedState(fix)
     val latestLimit by rememberUpdatedState(depthLimitFt)
     LaunchedEffect(Unit) {
-        while (true) {                                          // every 5 s: cheap, it stops at the first hit
+        while (true) {                                          // every 20 s, to save power; it stops at the first hit
             val f = latestFix
             CrashWatch.ahead = if (f == null) null else withContext(Dispatchers.IO) {
                 runCatching { CrashWatch.scanAhead(depthLookup, f, courseAvg.cog(), latestLimit) }.getOrNull()
             }
-            delay(5_000)
+            delay(CrashWatch.AHEAD_EVERY_MS)
         }
     }
     // the route is checked when it changes, the limit changes, or the boat has moved about 100 m
