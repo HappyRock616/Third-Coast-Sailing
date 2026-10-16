@@ -24,6 +24,8 @@ Offline Great Lakes chart viewer, weather and sail-routing app for Android, with
 - **Boat:** GPS position, course line with 1/2/3-hour marks, and a heading-up wind gauge with your polar.
 - **Routes:** lay in points, see leg distance and magnetic bearing, distance / VMG / time to destination, and calculate a weather-optimized route (isochrones, your polar at a cruise factor, tack penalty, depth limit).
 - **Celestial navigation trainer:** 3D star finder that turns with the phone, sight planning, a step-by-step sight workbook with every equation shown, printed-almanac style tables, and the fix plotted on the chart. Three skill levels.
+- **Anchor watch:** drop or offset the anchor, bold red alarm circle, swing trace, and the Third Coast Ships Bell (with vibration) if you drag or lose GPS. Runs all night with the screen off.
+- **MOB (man overboard):** one tap marks the spot, clears the chart, and shows bearing, distance and time in the water. An orange drift triangle grows downwind from the mark using US Coast Guard person-in-water leeway figures (see below).
 - **Private by design:** no Google Play Services, no accounts, no tracking. Runs on GrapheneOS and LineageOS.
 
 ## Getting the app
@@ -52,8 +54,15 @@ Requirements: Android 14 (API 34) or newer. The build fails on purpose if any Go
 | Almanac calculations (celestial trainer) | [Astronomy Engine](https://github.com/cosinekitty/astronomy) by Don Cross | MIT |
 | Star positions (celestial trainer) | Yale Bright Star Catalogue, 5th ed. | Public domain |
 | Constellation figures and names | [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn | BSD 3-Clause |
+| MOB drift (person-in-water leeway) | US Coast Guard R&D Center leeway studies: Allen & Plourde (1999), *Review of Leeway: Field Experiments and Implementation*, CG-D-08-99; Allen (2005), *Leeway Divergence*. Values as tabulated in [OpenDrift](https://github.com/OpenDrift/opendrift/blob/master/opendrift/models/OBJECTPROP.DAT) | US Government work, public domain |
 
 Harbor data derived from OpenStreetMap is available under the ODbL.
+
+### How the MOB drift triangle is worked out
+
+A person in the water is pushed downwind by the wind ("leeway"). The US Coast Guard measured this in field trials and uses the results in search planning. The app uses the coefficients for **"Person-in-water (PIW), unknown state (mean values)"**: downwind leeway = **0.96 %** of the 10 m wind speed, crosswind leeway = **±0.54 %** of the wind speed (both with zero offset). The triangle's tip is at the MOB mark; it points downwind (the forecast wind at the mark, refreshed hourly); its length is 0.96 % × wind × time since the mark and its half-width at the far end is 0.54 % × wind × time. Example: 15 kn of wind, 12 minutes → about 175 ft long and ±98 ft wide.
+
+Limits: the studies show large scatter around these averages (standard deviation about 12 cm/s, roughly 0.2 kn, downwind), so the triangle is a best estimate of where to look first, not a boundary. Surface current is not included (the app has no current data), and the wind is a forecast, not a measurement. Use it to start a search, and call the Coast Guard (VHF 16) at once.
 
 ## About the name
 

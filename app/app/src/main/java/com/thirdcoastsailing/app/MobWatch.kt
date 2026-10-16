@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -145,21 +146,27 @@ private val MOB_RED = Color(0xFFD62828)         // border, pin, line
 private val MOB_DARK = Color(0xFF7A1010)        // text, hold-progress shade
 private val DRIFT_ORANGE = Color(0xFFF28C28)
 
-/** "214°T · 0.42 nm · 7 min" from the boat to the pin, or what's known. */
-private fun mobLine(s: MobWatch.State, boat: BoatFix?, nowMs: Long): String {
+/** "214°T · 0.42 nm" from the boat to the pin, or "No GPS". */
+private fun mobLine(s: MobWatch.State, boat: BoatFix?): String {
     val pin = s.pin ?: return ""
-    val min = ((nowMs - s.timeMs) / 60_000).coerceAtLeast(0)
-    val elapsed = if (min < 60) "$min min" else "%d:%02d".format(min / 60, min % 60)
-    if (boat == null) return "No GPS · $elapsed"
+    if (boat == null) return "No GPS"
     val from = LatLon(boat.lat, boat.lon); val to = LatLon(pin.lat, pin.lon)
     val nm = distanceNm(from, to)
     val dist = if (nm < 0.1) "%d ft".format((nm * 6076.12).roundToInt()) else "%.2f nm".format(nm)
-    return "%03.0f°T · %s · %s".format(bearing(from, to), dist, elapsed)
+    return "%03.0f°T · %s".format(bearing(from, to), dist)
+}
+
+/** Time in the water, counting up: "12:34", or "1:02:34" after an hour. */
+private fun mobTimer(s: MobWatch.State, nowMs: Long): String {
+    val sec = ((nowMs - s.timeMs) / 1000).coerceAtLeast(0)
+    val h = sec / 3600; val m = (sec / 60) % 60; val ss = sec % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, ss) else "%d:%02d".format(m, ss)
 }
 
 /**
- * The MOB box: used at the top of the menu and across the top of the chart. Not active: "MOB" — one tap marks it.
- * Active: bearing, distance and time to the pin, with "hold to reset" (5 s; a darker shade fills across while held).
+ * The MOB box: in the menu (compact, the same height as the Boat button, just above the GPS box) and across the top
+ * of the chart (large). Not active: "MOB" — one tap marks it. Active: a timer counting up the time in the water,
+ * bearing and distance to the pin, and "hold 5 s to reset" (a darker shade fills across while held).
  */
 @Composable
 fun MobBox(boat: BoatFix?, onActivate: () -> Unit, onReset: () -> Unit, modifier: Modifier = Modifier, large: Boolean = false) {
@@ -171,7 +178,7 @@ fun MobBox(boat: BoatFix?, onActivate: () -> Unit, onReset: () -> Unit, modifier
     val reset by rememberUpdatedState(onReset)
     val active by rememberUpdatedState(s.active)
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(s.active) { while (s.active) { now = System.currentTimeMillis(); delay(10_000) } }
+    LaunchedEffect(s.active) { while (s.active) { now = System.currentTimeMillis(); delay(1_000) } }   // timer ticks each second
     val shape = RoundedCornerShape(12.dp)
     Box(
         modifier.fillMaxWidth().clip(shape).background(MOB_SOFT, shape).border(4.dp, MOB_RED, shape)
@@ -198,14 +205,28 @@ fun MobBox(boat: BoatFix?, onActivate: () -> Unit, onReset: () -> Unit, modifier
             val p = progress.value
             if (p > 0f) drawRect(MOB_DARK.copy(alpha = 0.35f), size = Size(size.width * p, size.height))
         }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = if (large) 10.dp else 8.dp)) {
-            Canvas(Modifier.size(if (large) 30.dp else 26.dp)) { drawLifebuoy() }
+        if (large) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            // chart banner: MOB and the timer large, then bearing and distance
+            Canvas(Modifier.size(30.dp)) { drawLifebuoy() }
             Column(Modifier.padding(start = 10.dp)) {
-                Text("MOB", color = MOB_DARK, fontSize = if (large) 22.sp else 20.sp, fontWeight = FontWeight.Black)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text("MOB", color = MOB_DARK, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    if (s.active) Text("  " + mobTimer(s, now), color = MOB_DARK, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                }
                 if (s.active) {
-                    Text(mobLine(s, boat, now), color = MOB_DARK, fontSize = if (large) 17.sp else 14.sp, fontWeight = FontWeight.Bold)
+                    Text(mobLine(s, boat), color = MOB_DARK, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text("hold 5 s to reset", color = MOB_DARK.copy(alpha = 0.8f), fontSize = 11.sp)
                 }
+            }
+        } else Row(verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.height(52.dp).padding(horizontal = if (s.active) 10.dp else 14.dp)) {
+            // menu: one compact row, the same height as the Boat button; active: "MOB 12:34" then bearing / distance
+            Canvas(Modifier.size(if (s.active) 22.dp else 28.dp)) { drawLifebuoy() }
+            Text(if (s.active) "MOB " + mobTimer(s, now) else "MOB", color = MOB_DARK, fontSize = if (s.active) 17.sp else 19.sp, fontWeight = FontWeight.Black,
+                maxLines = 1, modifier = Modifier.padding(start = if (s.active) 8.dp else 12.dp))
+            if (s.active) Column(Modifier.padding(start = 8.dp)) {
+                Text(mobLine(s, boat), color = MOB_DARK, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("hold 5 s to reset", color = MOB_DARK.copy(alpha = 0.8f), fontSize = 10.sp, maxLines = 1)
             }
         }
     }

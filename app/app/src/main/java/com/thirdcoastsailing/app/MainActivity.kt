@@ -850,10 +850,6 @@ private fun MenuSheet(
     var showCharts by remember { mutableStateOf(false) }
     ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 300.dp)) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp)) {
-            // ---- man overboard, first thing in the menu
-            MobBox(gps.fix, onActivate = onMob, onReset = onMobReset)
-            Spacer(Modifier.height(14.dp))
-
             // ---- logo and name, in the app's colors
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.tcs_logo), null,
@@ -864,6 +860,10 @@ private fun MenuSheet(
                 }
             }
             Spacer(Modifier.height(14.dp))
+
+            // ---- man overboard: just above the GPS box, the same height as the Boat button
+            MobBox(gps.fix, onActivate = onMob, onReset = onMobReset, modifier = Modifier.padding(vertical = 4.dp))
+            Spacer(Modifier.height(10.dp))
 
             MenuHeader("GPS")
             Column(

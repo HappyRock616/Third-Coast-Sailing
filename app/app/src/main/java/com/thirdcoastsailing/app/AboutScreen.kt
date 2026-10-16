@@ -75,6 +75,8 @@ private val CREDITS = listOf(
     listOf("Almanac calculations", "Astronomy Engine, Don Cross", "MIT", "https://github.com/cosinekitty/astronomy"),
     listOf("Star positions", "Yale Bright Star Catalogue, 5th ed.", "Public domain", ""),
     listOf("Constellation figures and names", "d3-celestial, Olaf Frohn", "BSD 3-Clause", "https://github.com/ofrohn/d3-celestial"),
+    listOf("MOB drift (person-in-water leeway)", "US Coast Guard R&D Center: Allen & Plourde 1999 (CG-D-08-99), Allen 2005; PIW unknown state: downwind 0.96 % of wind, crosswind ±0.54 %",
+        "US Government work, public domain", "https://github.com/OpenDrift/opendrift/blob/master/opendrift/models/OBJECTPROP.DAT"),
 )
 
 /** Full-screen About & credits. */
