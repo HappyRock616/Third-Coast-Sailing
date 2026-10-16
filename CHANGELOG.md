@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.7.3 (not yet released)
+## 0.7.4 (not yet released)
+
+### Fixed
+- **Star finder showed no stars on some phones.** The sky was rebuilt for every GPS fix, and on a phone with steady fixes each rebuild was cancelled by the next, so the stars, constellations and names never appeared (the sky stayed at its dark fallback). The finder now takes the position once when it opens and draws the sky once per opening; the rest of the app keeps its live GPS. This also stops the compass smoothing from restarting with every fix.
+
+## 0.7.3
 
 ### Added
 - **Crash warning.** A red cartoon line drawing of a sailboat snapped in two and sinking into the waves marks the first water shallower than your minimum depth (the water shaded red) that you would hit. On the current heading it looks 30 minutes ahead at your speed (0.5–5 nm), over a narrow ±5° cone in front of the boat using the course averaged over 30 seconds, and only when moving over 1 kn, checked every 20 seconds to save power; the mark is placed straight ahead on the course line. On a plotted route it marks the first shallow spot along the legs. It stops at the first obstruction; no label, no sound.

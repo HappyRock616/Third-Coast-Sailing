@@ -135,23 +135,27 @@ fun StarFinderScreen(
     val renderer = remember { StarFinderRenderer(context) }
     var glView by remember { mutableStateOf<GLSurfaceView?>(null) }
 
-    // ---- sky for now, refreshed every 30 s
+    // ---- position frozen when the screen opens: every GPS fix is a new LatLon, and keying on it restarted the sky
+    // build on each fix, so on a phone with steady fixes it never finished (no stars). The boat barely moves while
+    // the finder is open, so one position is plenty; the rest of the app keeps its live GPS.
+    val openPos = remember { position }
+    val openIsGps = remember { positionIsGps }
+
+    // ---- sky drawn once per opening (stars drift about 4° in 15 min, fine for finding them)
     var sky by remember { mutableStateOf<Sky3D?>(null) }
-    LaunchedEffect(position) {
-        while (true) {
-            val s = withContext(Dispatchers.Default) {
-                runCatching { StarFinder.sky3d(FinderCatalog.load(context), position, System.currentTimeMillis()) }.getOrNull()
-            }
-            if (s != null) { sky = s; renderer.setSky(s); glView?.requestRender() }
-            delay(30_000)
+    LaunchedEffect(Unit) {
+        val s = withContext(Dispatchers.Default) {
+            runCatching { StarFinder.sky3d(FinderCatalog.load(context), openPos, System.currentTimeMillis()) }
+                .onFailure { android.util.Log.e("StarFinder", "sky: $it") }.getOrNull()
         }
+        if (s != null) { sky = s; renderer.setSky(s); glView?.requestRender() }
     }
 
     // ---- where the phone points
     val sm = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
     val rotSensor = remember { sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) }
-    val declination = remember(position) {
-        GeomagneticField(position.lat.toFloat(), position.lon.toFloat(), 0f, System.currentTimeMillis()).declination.toDouble()
+    val declination = remember {
+        GeomagneticField(openPos.lat.toFloat(), openPos.lon.toFloat(), 0f, System.currentTimeMillis()).declination.toDouble()
     }
     var pose by remember { mutableStateOf(PhonePose.look(boatHeadingDeg ?: 0.0, 15.0)) }
     var yaw by remember { mutableStateOf(boatHeadingDeg ?: 0.0) }
@@ -212,7 +216,7 @@ fun StarFinderScreen(
     // known even below the horizon (the sky list leaves out bodies well below it)
     val arrowBody: SkyBody? = selected?.body ?: suggested
     val arrowAltAz = remember(arrowBody, sky) {
-        arrowBody?.let { b -> runCatching { SightReduction.altAz(b, position, System.currentTimeMillis()) }.getOrNull() }
+        arrowBody?.let { b -> runCatching { SightReduction.altAz(b, openPos, System.currentTimeMillis()) }.getOrNull() }
     }
     val currentSky by rememberUpdatedState(sky)
     val measurer = rememberTextMeasurer()
@@ -287,7 +291,7 @@ fun StarFinderScreen(
         Column(Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 124.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (rotSensor == null) Note("No compass on this device: drag to look around")
             else if (compassPoor) Note("Compass needs calibrating: wave the phone in a figure 8")
-            if (!positionIsGps) Note("No GPS: sky for ${formatLat(position.lat)} ${formatLon(position.lon)}")
+            if (!openIsGps) Note("No GPS: sky for ${formatLat(openPos.lat)} ${formatLon(openPos.lon)}")
         }
 
         // selected body: name, where it is, and "Use <name>"
