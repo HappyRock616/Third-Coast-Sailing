@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.7.4 (not yet released)
+## 0.7.5 (not yet released)
+
+### Changed
+- **Routes start where you put them.** The route no longer always starts at the boat, so you can plan and measure anywhere ("what if" passages far from where you are).
+  - **+** drops the next pin in the middle of the current view. The first pin is the start (green push pin), the ones after it are waypoints (black, numbered) and the last is the finish (checkered flag).
+  - Let go of the start pin within about a fingertip of the boat and it snaps onto the boat and follows it as you move; hold and drag it to unhook it again. The link isn't saved: after a restart the start is a plain pin.
+  - Snapped to the boat, the route box shows distance, VMG, time and ETA as before. Not snapped, it shows the distance and, once calculated, how long the route takes.
+  - **Weather routing** starts at the start pin at the forecast time on the slider (now when the slider is at now), as if the boat were there then. The route still has to fit inside the forecast.
+  - The **crash warning** on the route checks only the route itself, from the start pin on, not the boat's way to it.
+  - Hold **−** for 1.2 seconds to clear the whole route (a ring fills while you hold); a tap still removes the last pin.
+
+## 0.7.4
 
 ### Fixed
 - **Star finder showed no stars on some phones.** The sky was rebuilt for every GPS fix, and on a phone with steady fixes each rebuild was cancelled by the next, so the stars, constellations and names never appeared (the sky stayed at its dark fallback). The finder now takes the position once when it opens and draws the sky once per opening; the rest of the app keeps its live GPS. This also stops the compass smoothing from restarting with every fix.

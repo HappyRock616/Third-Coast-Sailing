@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextStyle
@@ -122,12 +123,12 @@ class RouteStore(private val prefs: SharedPreferences) {
 // ---------------------------------------------------------------------------------------- chart overlay
 
 /**
- * Route over the chart: orange dashed line from the start (boat, or the first point with no GPS) through the
- * numbered points, each leg labeled along the line with its distance and magnetic bearing.
+ * Route over the chart: orange dashed line from the start pin (green) through the waypoint pins (black, numbered)
+ * to the finish (checkered flag), each leg labeled along the line with its distance and magnetic bearing.
  * A calculated route is drawn as a solid teal line and the planned line fades behind it.
  */
 @Composable
-fun RouteOverlay(map: MapLibreMap?, tick: Int, start: GeoPt?, points: List<GeoPt>, calc: RouteResult?, night: Boolean,
+fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteResult?, night: Boolean,
                  modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
     Canvas(modifier.fillMaxSize()) {
@@ -135,7 +136,7 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, start: GeoPt?, points: List<GeoPt
         val m = map ?: return@Canvas
         if (points.isEmpty()) return@Canvas
         fun xy(p: GeoPt) = m.projection.toScreenLocation(LatLng(p.lat, p.lon)).let { Offset(it.x, it.y) }
-        val legs = (listOfNotNull(start) + points)
+        val legs = points
         val faded = if (calc != null) 0.45f else 1f
 
         // planned line
@@ -174,15 +175,46 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, start: GeoPt?, points: List<GeoPt
             }
         }
 
-        // numbered pins
+        // pins: start green, waypoints black and numbered, the last one a checkered finish flag
+        val k = 1.dp.toPx()
         points.forEachIndexed { i, p ->
             val o = xy(p)
-            drawCircle(Navy, 11.dp.toPx(), o)
-            drawCircle(SignalOrange, 9.dp.toPx(), o)
-            val t = measurer.measure("${i + 1}", TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Navy))
-            drawText(t, topLeft = o - Offset(t.size.width / 2f, t.size.height / 2f))
+            when {
+                i == 0 -> drawRoutePin(o, k, StartGreen, null)
+                i == points.lastIndex -> drawFinishFlag(o, k)
+                else -> drawRoutePin(o, k, PinBlack, measurer.measure("$i", TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)))
+            }
         }
     }
+}
+
+/** How far above the point (its tip) a route pin's head is drawn, in dp; also used to pick pins up by the head. */
+const val ROUTE_PIN_HEAD_DP = 24f
+private val StartGreen = Color(0xFF2E9E4F)
+private val PinBlack = Color(0xFF1B1F24)
+
+/** Push pin standing on the point: gray needle, colored round head with a white rim and shine, optional number. */
+private fun DrawScope.drawRoutePin(tip: Offset, k: Float, color: Color, label: androidx.compose.ui.text.TextLayoutResult?) {
+    val head = tip + Offset(0f, -ROUTE_PIN_HEAD_DP * k)
+    drawLine(Color(0xFF6B6B6B), tip, head + Offset(0f, 7f * k), 2.5f * k, cap = StrokeCap.Round)          // needle
+    drawCircle(Color.White, 10.5f * k, head)                                                              // rim
+    drawCircle(color, 9f * k, head)
+    if (label != null) drawText(label, topLeft = head - Offset(label.size.width / 2f, label.size.height / 2f))
+    else drawCircle(Color.White.copy(alpha = 0.7f), 2.8f * k, head + Offset(-3f * k, -3f * k))           // shine
+}
+
+/** Checkered finish flag: pole standing on the point, a 4 x 3 black-and-white flag at the top. */
+private fun DrawScope.drawFinishFlag(foot: Offset, k: Float) {
+    val top = foot + Offset(0f, -32f * k)
+    drawLine(Color.White, foot, top, 4.5f * k, cap = StrokeCap.Round)                                     // pole halo
+    drawLine(PinBlack, foot, top, 2.5f * k, cap = StrokeCap.Round)
+    val cell = 4.5f * k; val cols = 4; val rows = 3
+    val tl = top + Offset(1.5f * k, 0f)
+    drawRect(Color.White, tl - Offset(1f * k, 1f * k), androidx.compose.ui.geometry.Size(cols * cell + 2f * k, rows * cell + 2f * k))
+    for (r in 0 until rows) for (c in 0 until cols) {
+        drawRect(if ((r + c) % 2 == 0) PinBlack else Color.White, tl + Offset(c * cell, r * cell), androidx.compose.ui.geometry.Size(cell, cell))
+    }
+    drawRect(PinBlack, tl, androidx.compose.ui.geometry.Size(cols * cell, rows * cell), style = Stroke(1f * k))
 }
 
 // ---------------------------------------------------------------------------------------- top route box
@@ -190,7 +222,7 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, start: GeoPt?, points: List<GeoPt
 /** Numbers for the route box. Null fields show as "—". */
 data class RouteStats(val distNm: Double?, val vmgKn: Double?, val hours: Double?, val etaMs: Long?)
 
-/** Planned-route numbers: distance along the legs, VMG toward the final point, time at the 15-minute average speed. */
+/** Planned-route numbers: distance along the legs (start = first point), VMG toward the final point, time at the 15-minute average speed. */
 fun plannedStats(start: GeoPt?, points: List<GeoPt>, fix: BoatFix?, avgSogKn: Double?, nowMs: Long): RouteStats {
     val legs = listOfNotNull(start) + points
     val dist = legs.zipWithNext { a, b -> distNm(a, b) }.sum()
@@ -215,11 +247,12 @@ fun calculatedStats(r: RouteResult, nowMs: Long): RouteStats {
 enum class CalcState { IDLE, WORKING, DONE }
 
 /**
- * Route box at the top: DIST, VMG, TIME (+ ETA) and the route-calculation button.
+ * Route box at the top: DIST, VMG, TIME (+ ETA) and the route-calculation button. A route not snapped to the boat
+ * (a what-if plan) shows only DIST and, once calculated, TIME as the time the route takes.
  * Calculated route active = bold orange border and orange labels; tapping the button again clears it.
  */
 @Composable
-fun RouteBox(stats: RouteStats, calc: CalcState, onCalc: () -> Unit, modifier: Modifier = Modifier) {
+fun RouteBox(stats: RouteStats, calc: CalcState, boatLinked: Boolean, onCalc: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(12.dp)
     val active = calc == CalcState.DONE
     Row(
@@ -238,8 +271,10 @@ fun RouteBox(stats: RouteStats, calc: CalcState, onCalc: () -> Unit, modifier: M
             }
         }
         Stat("DIST", stats.distNm?.let { "%.1f".format(it) } ?: "—", if (active) "nm sailed" else "nm")
-        Stat("VMG", stats.vmgKn?.let { "%.1f".format(it) } ?: "—", "kn")
-        Stat("TIME", stats.hours?.let { hoursText(it) } ?: "—", stats.etaMs?.let { "ETA ${clockText(it)}" } ?: "")
+        if (boatLinked) {
+            Stat("VMG", stats.vmgKn?.let { "%.1f".format(it) } ?: "—", "kn")
+            Stat("TIME", stats.hours?.let { hoursText(it) } ?: "—", stats.etaMs?.let { "ETA ${clockText(it)}" } ?: "")
+        } else if (stats.hours != null) Stat("TIME", hoursText(stats.hours), "elapsed")
         val btnShape = RoundedCornerShape(10.dp)
         Column(
             Modifier.clip(btnShape)

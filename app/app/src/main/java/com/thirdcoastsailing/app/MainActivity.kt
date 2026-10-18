@@ -79,6 +79,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -141,7 +147,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val PREFS = "tcs"
-private const val APP_VERSION = "0.7.4"
+private const val APP_VERSION = "0.7.5"
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
 private const val HOUR_MS = 3_600_000L
 private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interval while online and the app is open
@@ -150,6 +156,8 @@ private const val CRUISE_FACTOR = 0.85       // routing: fraction of polar speed
 private const val TACK_PENALTY_MIN = 15.0    // routing: time lost per tack or gybe
 private const val MAX_ROUTE_POINTS = 6        // the app is for rough passage planning, not detailed routes
 private const val HOLD_MS = 450L             // hold on a route point this long (without moving) to drag it
+private const val ROUTE_CLEAR_HOLD_MS = 1200L // hold "−" this long to clear the whole route
+private const val SNAP_DP = 40f              // start pin let go this close to the boat (on screen) snaps onto it
 private const val WX_SOURCE = "wx_field"     // map source + layer for the wind / gust color field
 private const val WX_LAYER = "wx_field_layer"
 
@@ -232,9 +240,12 @@ private fun App() {
     var clock by remember { mutableStateOf(System.currentTimeMillis()) }
     var frame by remember { mutableStateOf<WxFrame?>(null) }
     var forecastWind by remember { mutableStateOf<Pair<Double, Double>?>(null) }
-    // Route: "+" drops a point ahead, a short hold drags it, "−" removes the last; optional calculated version
+    // Route: "+" drops a pin at the middle of the view, a short hold drags it, "−" removes the last (hold to clear).
+    // The first pin is the start (green), the last the finish (flag). The start can be snapped to the boat and then
+    // follows it; that link is not saved (after a restart the start is a plain pin where it was last).
     val routeStore = remember { RouteStore(prefs) }
     var routePts by remember { mutableStateOf(routeStore.load()) }
+    var startOnBoat by remember { mutableStateOf(false) }
     var mapRef by remember { mutableStateOf<MapLibreMap?>(null) }   // for placing new points relative to the view
     var calcResult by remember { mutableStateOf<RouteResult?>(null) }
     var calcState by remember { mutableStateOf(CalcState.IDLE) }
@@ -312,11 +323,16 @@ private fun App() {
             delay(CrashWatch.AHEAD_EVERY_MS)
         }
     }
-    // the route is checked when it changes, the limit changes, or the boat has moved about 100 m
-    LaunchedEffect(routePts, depthLimitFt, lakes, fix?.lat?.let { (it * 1000).roundToInt() }, fix?.lon?.let { (it * 1000).roundToInt() }) {
-        val start = fix?.let { GeoPt(it.lat, it.lon) }
+    // the route as sailed: the start pin replaced by the boat's position while it is snapped to the boat
+    val boatPt = fix?.let { GeoPt(it.lat, it.lon) }
+    val effRoute = if (startOnBoat && boatPt != null && routePts.isNotEmpty()) listOf(boatPt) + routePts.drop(1) else routePts
+    // only the route itself is checked (start pin onward), never the boat's way to the start: routes can be planned
+    // anywhere. Rechecked when the route or limit changes, or a snapped start has moved about 100 m with the boat.
+    val routeKey = effRoute.map { (it.lat * 1000).roundToInt() to (it.lon * 1000).roundToInt() }
+    LaunchedEffect(routeKey, depthLimitFt, lakes) {
+        val pts = effRoute
         CrashWatch.onRoute = withContext(Dispatchers.IO) {
-            runCatching { CrashWatch.scanRoute(depthLookup, start, routePts, depthLimitFt) }.getOrNull()
+            runCatching { CrashWatch.scanRoute(depthLookup, null, pts, depthLimitFt) }.getOrNull()
         }
     }
     val activePolar = remember(activeBoat) { activeBoat?.let { runCatching { boatStore.polar(it) }.getOrNull() } }
@@ -471,32 +487,32 @@ private fun App() {
     val tripText = if (trackPts.isEmpty()) null else trackLabel(trackNm, tripElapsedMs)
 
     // ---- route editing and weather routing
-    val routeStart = fix?.let { GeoPt(it.lat, it.lon) }
     fun setRoute(p: List<GeoPt>) {
         routePts = p
+        if (p.isEmpty()) startOnBoat = false
         routeStore.save(p)
         calcCancel.set(true)                                   // any calculation is now out of date
         calcResult = null
         calcState = CalcState.IDLE
     }
-    // "+": put the next point a quarter of the screen height ahead. First point: along the boat's course
-    // (or straight up the screen when stopped / no GPS); later points: continuing the last leg.
+    // "+": the next pin goes at the middle of the current view (never attached to the boat)
     fun addRoutePoint() {
         if (routePts.size >= MAX_ROUTE_POINTS) { status = "Up to $MAX_ROUTE_POINTS route points"; return }
-        val m = mapRef ?: return
-        val bounds = m.projection.visibleRegion.latLngBounds
-        val stepNm = (bounds.latitudeNorth - bounds.latitudeSouth) * 60.0 / 4.0
-        val f = fix
-        val center = m.cameraPosition.target?.let { GeoPt(it.latitude, it.longitude) }
-        val from = routePts.lastOrNull() ?: routeStart ?: center ?: return
-        if (routePts.isEmpty() && routeStart == null) { setRoute(listOf(from)); return }   // no GPS: first point at screen center
-        val prev = if (routePts.size >= 2) routePts[routePts.size - 2] else if (routePts.size == 1) routeStart else null
-        val brg = when {
-            prev != null -> bearingDeg(prev, from)
-            f?.cogDeg != null && (f.sogKn ?: 0f) >= 0.5f -> f.cogDeg.toDouble()
-            else -> m.cameraPosition.bearing
-        }
-        setRoute(routePts + destination(from, brg, stepNm))
+        val c = mapRef?.cameraPosition?.target ?: return
+        setRoute(routePts + GeoPt(c.latitude, c.longitude))
+    }
+    // a pin is being dragged: moving the start pin unhooks it from the boat
+    fun movePoint(i: Int, p: GeoPt) {
+        if (i !in routePts.indices) return
+        if (i == 0) startOnBoat = false
+        setRoute(routePts.toMutableList().also { it[i] = p })
+    }
+    // the start pin was let go close to the boat: snap it on (it then follows the boat)
+    fun snapStartToBoat() {
+        val b = boatPt ?: return
+        if (routePts.isEmpty()) return
+        setRoute(routePts.toMutableList().also { it[0] = b })
+        startOnBoat = true
     }
     fun onCalc() {
         when (calcState) {
@@ -504,9 +520,13 @@ private fun App() {
             CalcState.WORKING -> calcCancel.set(true)
             CalcState.IDLE -> {
                 val polar = activePolar ?: run { status = "Set up a boat first: menu → Boat & Polars"; return }
-                val start = routeStart ?: routePts.firstOrNull()
-                val wps = if (routeStart != null) routePts else routePts.drop(1)
-                if (start == null || wps.isEmpty()) { status = "Add a route point first"; return }
+                val start = effRoute.firstOrNull()
+                val wps = effRoute.drop(1)
+                if (start == null || wps.isEmpty()) { status = "Add a finish point first"; return }
+                // the boat is assumed to be at the start pin at the start time: the forecast time on the slider
+                // (now when the slider is at now)
+                val ahead = aheadH.roundToInt()
+                val departMs = if (ahead <= 0) System.currentTimeMillis() else (clock / HOUR_MS) * HOUR_MS + ahead * HOUR_MS
                 val files = visibleLakes.map { File(it.pmtiles.parentFile, "${it.id}_hazards.gpkg") }
                 calcCancel.set(false)
                 calcState = CalcState.WORKING
@@ -516,7 +536,7 @@ private fun App() {
                         runCatching {
                             val all = listOf(start) + wps
                             val mask = NavMask.build(files, Router.boxFor(all), depthLimitFt * 0.3048, all) { calcCancel.get() }
-                            Router.route(start, wps, System.currentTimeMillis(), polar, WindLookup(weather), mask,
+                            Router.route(start, wps, departMs, polar, WindLookup(weather), mask,
                                 CRUISE_FACTOR, TACK_PENALTY_MIN) { calcCancel.get() }
                         }
                     }
@@ -633,7 +653,7 @@ private fun App() {
     ) {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
-                visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, fix, avgSog, centerRequest, frame, layers, routeStart, routePts, calcResult, buoyFeatures, info?.at,
+                visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, fix, avgSog, centerRequest, frame, layers, effRoute, calcResult, buoyFeatures, info?.at,
                 celPlot,
                 // tapping the celestial fix opens the workbook
                 onTap = { ll ->
@@ -641,7 +661,8 @@ private fun App() {
                 },
                 onInfo = { info = it },
                 onMap = { mapRef = it },
-                onMovePoint = { i, p -> if (i in routePts.indices) setRoute(routePts.toMutableList().also { it[i] = p }) },
+                onMovePoint = { i, p -> movePoint(i, p) },
+                onSnapStart = { snapStartToBoat() },
             )
 
             // Right edge: add route point (+), center on boat, remove last route point (−)
@@ -656,7 +677,8 @@ private fun App() {
                         .border(2.dp, SignalOrange, CircleShape).clickable { centerRequest++ },
                     contentAlignment = Alignment.Center
                 ) { CrosshairIcon() }
-                RoundButton("−", armed = false) {
+                // tap: remove the last pin; hold 1.2 s: clear the whole route
+                RoundButton("−", armed = false, onHold = { setRoute(emptyList()); status = "Route cleared" }) {
                     if (routePts.isNotEmpty()) setRoute(routePts.dropLast(1))
                 }
             }
@@ -673,8 +695,16 @@ private fun App() {
             // Top: route box (distance, VMG, time to destination, calculate button) while a route is laid in
             if (routePts.isNotEmpty()) {
                 val cr = calcResult
-                val stats = if (cr != null) calculatedStats(cr, clock) else plannedStats(routeStart, routePts, fix, avgSog, clock)
-                RouteBox(stats, calcState, onCalc = { onCalc() },
+                // snapped to the boat: distance, VMG, time and ETA from the boat; a what-if route elsewhere: distance,
+                // and after calculation the time it takes (no VMG or ETA, the boat isn't on it)
+                val linked = startOnBoat && boatPt != null
+                val stats = when {
+                    cr != null && linked -> calculatedStats(cr, clock)
+                    cr != null -> RouteStats(cr.distanceNm, null, (cr.endMs - cr.startMs) / 3_600_000.0, null)
+                    linked -> plannedStats(null, effRoute, fix, avgSog, clock)
+                    else -> RouteStats(effRoute.zipWithNext { a, b -> distNm(a, b) }.sum(), null, null, null)
+                }
+                RouteBox(stats, calcState, boatLinked = linked, onCalc = { onCalc() },
                     modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(start = 78.dp, top = 10.dp, end = 10.dp))
             }
 
@@ -841,13 +871,43 @@ private fun SetupDialog(catalog: List<CatalogLake>, loading: Boolean, error: Str
 
 /** Small round orange-ringed button (route + / −). Armed = filled orange; disabled = faded. Half the size of the center button. */
 @Composable
-private fun RoundButton(label: String, armed: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        Modifier.size(26.dp).alpha(if (enabled) 1f else 0.35f).shadow(4.dp, CircleShape).clip(CircleShape)
-            .background(if (armed) SignalOrange else Navy)
-            .border(2.dp, SignalOrange, CircleShape).clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) { Text(label, color = if (armed) Navy else SignalOrange, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+private fun RoundButton(label: String, armed: Boolean, enabled: Boolean = true, onHold: (() -> Unit)? = null, onClick: () -> Unit) {
+    // with onHold: a tap is onClick, holding ROUTE_CLEAR_HOLD_MS fills a ring round the button and then calls onHold
+    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    val click by rememberUpdatedState(onClick)
+    val hold by rememberUpdatedState(onHold)
+    val gesture = if (onHold == null) Modifier.clickable(enabled = enabled, onClick = onClick)
+    else Modifier.pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        detectTapGestures(onPress = {
+            var held = false
+            val job = scope.launch {
+                progress.snapTo(0f)
+                progress.animateTo(1f, androidx.compose.animation.core.tween(ROUTE_CLEAR_HOLD_MS.toInt(), easing = androidx.compose.animation.core.LinearEasing))
+                held = true
+                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                hold?.invoke()
+                progress.snapTo(0f)
+            }
+            val released = tryAwaitRelease()
+            if (job.isActive) { job.cancel(); scope.launch { progress.snapTo(0f) } }
+            if (released && !held) click()
+        })
+    }
+    Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+        if (onHold != null) Canvas(Modifier.size(34.dp)) {
+            val p = progress.value
+            if (p > 0f) drawArc(SignalOrange, -90f, 360f * p, false, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+        }
+        Box(
+            Modifier.size(26.dp).alpha(if (enabled) 1f else 0.35f).shadow(4.dp, CircleShape).clip(CircleShape)
+                .background(if (armed) SignalOrange else Navy)
+                .border(2.dp, SignalOrange, CircleShape).then(gesture),
+            contentAlignment = Alignment.Center
+        ) { Text(label, color = if (armed) Navy else SignalOrange, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+    }
 }
 
 /** Side menu: logo header, GPS, charts, weather, boat, display, connection. */
@@ -1110,10 +1170,10 @@ private fun toInfo(f: Feature, layerId: String): Info =
 /** The chart: MapLibre MapView inside Compose, restyled when lakes or day/night change. */
 @Composable
 private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, track: List<GeoPt>, trackText: String?, trackLive: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
-                     frame: WxFrame?, layers: WxLayers, routeStart: GeoPt?, routePts: List<GeoPt>, calc: RouteResult?,
+                     frame: WxFrame?, layers: WxLayers, routePts: List<GeoPt>, calc: RouteResult?,
                      buoys: FeatureCollection, selected: LatLng?, celestial: CelestialPlot?,
                      onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit,
-                     onMap: (MapLibreMap) -> Unit, onMovePoint: (Int, GeoPt) -> Unit) {
+                     onMap: (MapLibreMap) -> Unit, onMovePoint: (Int, GeoPt) -> Unit, onSnapStart: () -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context).apply { onCreate(null) } }
@@ -1174,9 +1234,13 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
     // follows the finger. A tap, swipe, pan or pinch never moves a point; those go to the map as usual.
     val currentRoute by rememberUpdatedState(routePts)
     val currentOnMove by rememberUpdatedState(onMovePoint)
+    val currentOnSnap by rememberUpdatedState(onSnapStart)
+    val currentFix by rememberUpdatedState(fix)
     DisposableEffect(map) {
         val m = map ?: return@DisposableEffect onDispose { }
         val hitPx = 28f * context.resources.displayMetrics.density
+        val pinHeadPx = ROUTE_PIN_HEAD_DP * context.resources.displayMetrics.density
+        val snapPx = SNAP_DP * context.resources.displayMetrics.density
         val slop = ViewConfiguration.get(context).scaledTouchSlop
         val handler = Handler(Looper.getMainLooper())
         var downX = 0f; var downY = 0f
@@ -1196,13 +1260,12 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.x; downY = e.y; dragging = -1
-                    candidate = currentRoute.indices.minByOrNull { i ->
+                    // a pin is hit at its tip (the point) or its head, drawn above the tip
+                    fun hit(i: Int): Float {
                         val s = m.projection.toScreenLocation(LatLng(currentRoute[i].lat, currentRoute[i].lon))
-                        hypot(s.x - e.x, s.y - e.y)
-                    }?.takeIf { i ->
-                        val s = m.projection.toScreenLocation(LatLng(currentRoute[i].lat, currentRoute[i].lon))
-                        hypot(s.x - e.x, s.y - e.y) <= hitPx
-                    } ?: -1
+                        return minOf(hypot(s.x - e.x, s.y - e.y), hypot(s.x - e.x, s.y - pinHeadPx - e.y))
+                    }
+                    candidate = currentRoute.indices.minByOrNull { hit(it) }?.takeIf { hit(it) <= hitPx } ?: -1
                     if (candidate >= 0) handler.postDelayed(pickUp, HOLD_MS)
                     false                                    // the map still sees the touch (it may become a pan)
                 }
@@ -1225,6 +1288,12 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     handler.removeCallbacks(pickUp); candidate = -1
                     val wasDragging = dragging >= 0
+                    // start pin let go next to the boat: snap it on
+                    val f = currentFix
+                    if (dragging == 0 && e.actionMasked == MotionEvent.ACTION_UP && f != null) {
+                        val b = m.projection.toScreenLocation(LatLng(f.lat, f.lon))
+                        if (hypot(b.x - e.x, b.y - e.y) <= snapPx) currentOnSnap()
+                    }
                     dragging = -1
                     wasDragging
                 }
@@ -1297,7 +1366,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         WeatherOverlay(map, tick, idleTick, frame, layers)
-        RouteOverlay(map, tick, routeStart, routePts, calc, night)
+        RouteOverlay(map, tick, routePts, calc, night)
         TrackOverlay(map, tick, track, if (trackLive) fix else null, trackText, night)
         CelestialOverlay(map, tick, celestial, night)
         AnchorOverlay(map, tick, night)

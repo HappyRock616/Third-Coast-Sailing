@@ -68,8 +68,8 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 <!-- screenshot -->
 
-- ✏️ Lay in route points to see each leg's distance and magnetic bearing, plus distance, VMG and time to your destination.
-- 🧠 Calculate a weather-optimized route using isochrones, your boat's polar, a cruise factor, a tack penalty and your minimum depth.
+- 📍 Drop pins anywhere: a green start, numbered waypoints and a 🏁 finish, with each leg's distance and magnetic bearing. Plan "what if" passages far from where you are, or snap the start onto the boat to get VMG and ETA as you sail.
+- 🧠 Calculate a weather-optimized route using isochrones, your boat's polar, a cruise factor, a tack penalty and your minimum depth, departing at the time on the forecast slider.
 - 💥 Crash warning: a little red broken-boat mark shows the first spot shallower than your depth limit, either on your current heading or along your plotted route.
 
 ### 🌊 Wave and wind forecast overlays
