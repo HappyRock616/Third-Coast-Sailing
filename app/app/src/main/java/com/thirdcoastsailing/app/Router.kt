@@ -21,6 +21,8 @@ import kotlin.math.min
 class NavMask private constructor(
     private val lat0: Double, private val lon0: Double, private val dLat: Double, private val dLon: Double,
     private val nx: Int, private val ny: Int, private val cells: ByteArray,
+    /** What went into the grid, per layer: "found/read" features (for error messages). */
+    val note: String = "",
 ) {
     fun free(lat: Double, lon: Double): Boolean {
         if (lat < lat0 || lon < lon0) return false
@@ -61,14 +63,20 @@ class NavMask private constructor(
             val g = Painter(box[1], box[0], dLat, dLon, nx, ny, cells)
 
             val dbs = gpkgs.mapNotNull { Gpkg.open(it) }
+            val note = StringBuilder("files ${dbs.size}/${gpkgs.size}")
             try {
                 fun layer(table: String, valueCol: String?, order: String?, value: (Double?) -> Byte?) {
+                    var found = 0; var read = 0
                     for (db in dbs) for ((fid, v) in Gpkg.query(db, table, valueCol, box[0], box[1], box[2], box[3], order)) {
                         if (cancel()) throw Router.Failed("Stopped")
                         val paint = value(v) ?: continue
+                        found++
                         val blob = Gpkg.geom(db, table, fid) ?: continue
-                        for (poly in Gpkg.polygons(blob)) g.fill(poly, paint)
+                        val polys = Gpkg.polygons(blob)
+                        if (polys.isNotEmpty()) read++
+                        for (poly in polys) g.fill(poly, paint)
                     }
+                    note.append(", ").append(table.substringBefore('_')).append(' ').append(read).append('/').append(found)
                 }
                 // 0.1 m margin: an area starting exactly at the limit (7.3 m for 24 ft) counts as deep enough,
                 // matching the red shading on the chart (feet/meter rounding would otherwise block it)
@@ -82,7 +90,7 @@ class NavMask private constructor(
                 dbs.forEach(SQLiteDatabase::close)
             }
             for (p in keepOpen) g.disc(p, KEEP_OPEN_NM)
-            return NavMask(box[1], box[0], dLat, dLon, nx, ny, cells)
+            return NavMask(box[1], box[0], dLat, dLon, nx, ny, cells, note.toString())
         }
     }
 
@@ -261,7 +269,7 @@ object Router {
                     tried > 0 && tooSlow == tried -> "Too little wind to sail on $start: forecast %.1f kn at %s.".format(windKn, at)
                     it == 0 && !mask.free(a.lat, a.lon) -> "Leg $number starts on land or water shallower than the depth limit."
                     else -> "No clear water toward point $number: $blocked of $tried headings run into land or water shallower " +
-                        "than the depth limit (wind %.1f kn at %s).".format(windKn, at)
+                        "than the depth limit (wind %.1f kn at %s). [%s]".format(windKn, at, mask.note)
                 })
             }
         }

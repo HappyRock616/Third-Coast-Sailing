@@ -35,22 +35,36 @@ object Gpkg {
         }.getOrDefault(emptyList())
     }
 
-    /** Geometry blob of one feature, read in 1 MB pieces. */
-    fun geom(db: SQLiteDatabase, table: String, fid: Long): ByteArray? = runCatching {
-        val len = db.rawQuery("SELECT length(geom) FROM \"$table\" WHERE fid = ?", arrayOf("$fid")).use { c ->
-            if (c.moveToFirst() && !c.isNull(0)) c.getInt(0) else 0
-        }
-        if (len <= 0) return null
-        val out = ByteArrayOutputStream(len)
-        var pos = 1                                                      // SQLite substr is 1-based
-        while (pos <= len) {
-            db.rawQuery("SELECT substr(geom, ?, ?) FROM \"$table\" WHERE fid = ?", arrayOf("$pos", "$CHUNK", "$fid")).use { c ->
-                if (c.moveToFirst()) out.write(c.getBlob(0))
+    /**
+     * Geometry blob of one feature. Read through a file descriptor first (no size limit); if that fails, in 1 MB
+     * pieces through a cursor (a cursor cannot carry a single value over about 2 MB, and the approximate-depth
+     * polygons are bigger than that).
+     */
+    fun geom(db: SQLiteDatabase, table: String, fid: Long): ByteArray? {
+        runCatching {
+            db.compileStatement("SELECT geom FROM \"$table\" WHERE fid = ?").use { st ->
+                st.bindLong(1, fid)
+                st.simpleQueryForBlobFileDescriptor()?.let { fd ->
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
+                }
             }
-            pos += CHUNK
-        }
-        out.toByteArray()
-    }.getOrNull()
+        }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return runCatching {
+            val len = db.rawQuery("SELECT length(geom) FROM \"$table\" WHERE fid = ?", arrayOf("$fid")).use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getInt(0) else 0
+            }
+            if (len <= 0) return null
+            val out = ByteArrayOutputStream(len)
+            var pos = 1                                                  // SQLite substr is 1-based
+            while (pos <= len) {
+                db.rawQuery("SELECT substr(geom, ?, ?) FROM \"$table\" WHERE fid = ?", arrayOf("$pos", "$CHUNK", "$fid")).use { c ->
+                    if (c.moveToFirst()) out.write(c.getBlob(0))
+                }
+                pos += CHUNK
+            }
+            out.toByteArray()
+        }.getOrNull()
+    }
 
     /** Polygons in a GeoPackage Polygon / MultiPolygon blob: each polygon is a list of rings of x,y (lon,lat) pairs. */
     fun polygons(blob: ByteArray): List<List<DoubleArray>> = runCatching {
