@@ -246,6 +246,10 @@ private fun App() {
     val routeStore = remember { RouteStore(prefs) }
     var routePts by remember { mutableStateOf(routeStore.load()) }
     var startOnBoat by remember { mutableStateOf(false) }
+    // sailing a route with the start on the boat: next point to sail to (index into the calculated route's
+    // corners, or the pins), and the next pin not yet reached (a re-route starts from the boat toward it)
+    var navNext by remember { mutableStateOf(1) }
+    var pinNext by remember { mutableStateOf(1) }
     var mapRef by remember { mutableStateOf<MapLibreMap?>(null) }   // for placing new points relative to the view
     var calcResult by remember { mutableStateOf<RouteResult?>(null) }
     var calcState by remember { mutableStateOf(CalcState.IDLE) }
@@ -328,6 +332,16 @@ private fun App() {
     val effRoute = if (startOnBoat && boatPt != null && routePts.isNotEmpty()) listOf(boatPt) + routePts.drop(1) else routePts
     // only the route itself is checked (start pin onward), never the boat's way to the start: routes can be planned
     // anywhere. Rechecked when the route or limit changes, or a snapped start has moved about 100 m with the boat.
+    // points being sailed: the calculated route's corners (tacks, gybes, pins) or else the pins themselves.
+    // A point counts as reached within POINT_REACHED_NM; then the next one is steered for.
+    val navTurns = remember(calcResult, routePts) { calcResult?.let { routeTurns(it.path, routePts) } }
+    val navPts = navTurns ?: effRoute
+    LaunchedEffect(fix?.time, startOnBoat) {
+        val b = boatPt ?: return@LaunchedEffect
+        if (!startOnBoat) return@LaunchedEffect
+        while (navNext < navPts.size && distNm(b, navPts[navNext]) <= POINT_REACHED_NM) navNext++
+        while (pinNext < effRoute.size && distNm(b, effRoute[pinNext]) <= POINT_REACHED_NM) pinNext++
+    }
     val routeKey = effRoute.map { (it.lat * 1000).roundToInt() to (it.lon * 1000).roundToInt() }
     LaunchedEffect(routeKey, depthLimitFt, lakes) {
         val pts = effRoute
@@ -490,6 +504,7 @@ private fun App() {
     fun setRoute(p: List<GeoPt>) {
         routePts = p
         if (p.isEmpty()) startOnBoat = false
+        navNext = 1; pinNext = 1
         routeStore.save(p)
         calcCancel.set(true)                                   // any calculation is now out of date
         calcResult = null
@@ -520,9 +535,11 @@ private fun App() {
             CalcState.WORKING -> calcCancel.set(true)
             CalcState.IDLE -> {
                 val polar = activePolar ?: run { status = "Set up a boat first: menu → Boat & Polars"; return }
+                // on the boat: (re)route from where the boat is now through the pins not yet reached
+                val onBoat = startOnBoat && boatPt != null
                 val start = effRoute.firstOrNull()
-                val wps = effRoute.drop(1)
-                if (start == null || wps.isEmpty()) { status = "Add a finish point first"; return }
+                val wps = if (onBoat) effRoute.drop(pinNext.coerceAtLeast(1)) else effRoute.drop(1)
+                if (start == null || wps.isEmpty()) { status = if (onBoat && effRoute.size > 1) "Route finished" else "Add a finish point first"; return }
                 // the boat is assumed to be at the start pin at the start time: the forecast time on the slider
                 // (now when the slider is at now)
                 val ahead = aheadH.roundToInt()
@@ -543,6 +560,7 @@ private fun App() {
                     if (calcState != CalcState.WORKING) return@launch  // route changed while calculating
                     r.onSuccess {
                         calcResult = it
+                        navNext = 1
                         calcState = CalcState.DONE
                         status = "Route: %.1f nm sailed, %s".format(it.distanceNm, hoursText((it.endMs - it.startMs) / 3_600_000.0))
                     }.onFailure {
@@ -701,10 +719,14 @@ private fun App() {
                 val stats = when {
                     cr != null && linked -> calculatedStats(cr, clock)
                     cr != null -> RouteStats(cr.distanceNm, null, (cr.endMs - cr.startMs) / 3_600_000.0, null)
-                    linked -> plannedStats(null, effRoute, fix, avgSog, clock)
+                    linked -> plannedStats(null, listOfNotNull(boatPt) + effRoute.drop(pinNext.coerceAtLeast(1)), fix, avgSog, clock)
                     else -> RouteStats(effRoute.zipWithNext { a, b -> distNm(a, b) }.sum(), null, null, null)
                 }
-                RouteBox(stats, calcState, boatLinked = linked, onCalc = { onCalc() },
+                // the leg being sailed: distance and magnetic course from the boat to the next point
+                val nextPt = if (linked) navPts.getOrNull(navNext) else null
+                val nextNm = if (nextPt != null && boatPt != null) distNm(boatPt, nextPt) else null
+                val steer = if (nextPt != null && boatPt != null) toMagnetic(bearingDeg(boatPt, nextPt), boatPt) else null
+                RouteBox(stats, calcState, boatLinked = linked, nextNm = nextNm, steerDegM = steer, onCalc = { onCalc() },
                     modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(start = 78.dp, top = 10.dp, end = 10.dp))
             }
 

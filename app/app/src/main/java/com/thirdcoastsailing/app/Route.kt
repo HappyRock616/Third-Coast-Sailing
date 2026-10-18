@@ -45,6 +45,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.asin
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -156,9 +157,12 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteR
             drawPath(path, RouteTeal, style = Stroke(3.5.dp.toPx(), join = StrokeJoin.Round, cap = StrokeCap.Round))
         }
 
-        // leg labels along the line: "4.2 nm 212°M", kept upright, just above the line
-        for (i in 0 until legs.size - 1) {
-            val a = legs[i]; val b = legs[i + 1]
+        // leg labels along the line: "4.2 nm 212°M" (distance and magnetic course to steer), kept upright, just
+        // above the line. With a calculated route, its own legs (tack to tack) are labeled instead of the plan's.
+        val turns = calc?.let { routeTurns(it.path, points) }
+        val labelLegs = turns ?: legs
+        for (i in 0 until labelLegs.size - 1) {
+            val a = labelLegs[i]; val b = labelLegs[i + 1]
             val pa = xy(a); val pb = xy(b)
             val len = hypot(pb.x - pa.x, pb.y - pa.y)
             val label = "%.1f nm  %03.0f°M".format(distNm(a, b), toMagnetic(bearingDeg(a, b), a))
@@ -175,6 +179,15 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteR
             }
         }
 
+        // turn markers on the calculated route (tacks and gybes; the pins mark their own points)
+        turns?.drop(1)?.dropLast(1)?.forEach { t ->
+            if (points.any { distNm(it, t) < 0.01 }) return@forEach
+            val o = xy(t)
+            drawCircle(Navy, 6.dp.toPx(), o)
+            drawCircle(Color.White, 4.5.dp.toPx(), o)
+            drawCircle(RouteTeal, 2.5.dp.toPx(), o)
+        }
+
         // pins: start green, waypoints black and numbered, the last one a checkered finish flag
         val k = 1.dp.toPx()
         points.forEachIndexed { i, p ->
@@ -187,6 +200,30 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteR
         }
     }
 }
+
+/**
+ * Corners of a calculated route: its start, every place the course changes by more than TURN_DEG (a tack or
+ * gybe), every route pin it passes, and its end. The legs between them are what you steer.
+ */
+fun routeTurns(path: List<RoutePoint>, pins: List<GeoPt>): List<GeoPt> {
+    val pts = path.map { GeoPt(it.lat, it.lon) }
+    if (pts.size < 3) return pts
+    val out = mutableListOf(pts.first())
+    var legBrg = bearingDeg(pts[0], pts[1])
+    for (i in 1 until pts.size - 1) {
+        val b = bearingDeg(pts[i], pts[i + 1])
+        val d = abs(((b - legBrg) % 360 + 540) % 360 - 180)
+        val onPin = pins.any { distNm(it, pts[i]) < 0.01 }
+        if (onPin || d > TURN_DEG) { out += pts[i]; legBrg = b }
+    }
+    out += pts.last()
+    return out
+}
+
+/** Course change that makes a new leg of a calculated route. */
+const val TURN_DEG = 10.0
+/** A route point counts as reached once the boat is this close to it. */
+const val POINT_REACHED_NM = 0.1
 
 /** How far above the point (its tip) a route pin's head is drawn, in dp; also used to pick pins up by the head. */
 const val ROUTE_PIN_HEAD_DP = 24f
@@ -252,43 +289,55 @@ enum class CalcState { IDLE, WORKING, DONE }
  * Calculated route active = bold orange border and orange labels; tapping the button again clears it.
  */
 @Composable
-fun RouteBox(stats: RouteStats, calc: CalcState, boatLinked: Boolean, onCalc: () -> Unit, modifier: Modifier = Modifier) {
+fun RouteBox(stats: RouteStats, calc: CalcState, boatLinked: Boolean, nextNm: Double?, steerDegM: Double?,
+             onCalc: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(12.dp)
     val active = calc == CalcState.DONE
-    Row(
+    Column(
         modifier.widthIn(max = 420.dp).clip(shape).background(Navy.copy(alpha = 0.94f), shape)
             .border(if (active) 3.5.dp else 1.dp, if (active) SignalOrange else NavyLight, shape)
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        @Composable
-        fun Stat(label: String, value: String, unit: String) {
-            Column(Modifier.width(56.dp)) {
-                Text(label, color = if (active) SignalOrange else Mist, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text(value, color = Foam, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text(unit, color = Mist, fontSize = 9.5.sp, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            @Composable
+            fun Stat(label: String, value: String, unit: String) {
+                Column(Modifier.width(56.dp)) {
+                    Text(label, color = if (active) SignalOrange else Mist, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(value, color = Foam, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(unit, color = Mist, fontSize = 9.5.sp, maxLines = 1)
+                }
+            }
+            Stat("DIST", stats.distNm?.let { "%.1f".format(it) } ?: "—", if (active) "nm sailed" else "nm")
+            if (boatLinked) {
+                Stat("VMG", stats.vmgKn?.let { "%.1f".format(it) } ?: "—", "kn")
+                Stat("TIME", stats.hours?.let { hoursText(it) } ?: "—", stats.etaMs?.let { "ETA ${clockText(it)}" } ?: "")
+            } else if (stats.hours != null) Stat("TIME", hoursText(stats.hours), "elapsed")
+            val btnShape = RoundedCornerShape(10.dp)
+            Column(
+                Modifier.clip(btnShape)
+                    .then(if (active) Modifier.background(SignalOrange, btnShape) else Modifier.border(2.dp, SignalOrange, btnShape))
+                    .clickable(onClick = onCalc).padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val (top, sub) = when (calc) {
+                    CalcState.IDLE -> "CALC" to "best route"
+                    CalcState.WORKING -> "CALC…" to "tap to stop"
+                    CalcState.DONE -> "ROUTED" to "tap to clear"
+                }
+                Text(top, color = if (active) Navy else SignalOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(sub, color = if (active) Navy else Mist, fontSize = 10.sp)
             }
         }
-        Stat("DIST", stats.distNm?.let { "%.1f".format(it) } ?: "—", if (active) "nm sailed" else "nm")
-        if (boatLinked) {
-            Stat("VMG", stats.vmgKn?.let { "%.1f".format(it) } ?: "—", "kn")
-            Stat("TIME", stats.hours?.let { hoursText(it) } ?: "—", stats.etaMs?.let { "ETA ${clockText(it)}" } ?: "")
-        } else if (stats.hours != null) Stat("TIME", hoursText(stats.hours), "elapsed")
-        val btnShape = RoundedCornerShape(10.dp)
-        Column(
-            Modifier.clip(btnShape)
-                .then(if (active) Modifier.background(SignalOrange, btnShape) else Modifier.border(2.dp, SignalOrange, btnShape))
-                .clickable(onClick = onCalc).padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            val (top, sub) = when (calc) {
-                CalcState.IDLE -> "CALC" to "best route"
-                CalcState.WORKING -> "CALC…" to "tap to stop"
-                CalcState.DONE -> "ROUTED" to "tap to clear"
+        // sailing the route: the leg being sailed, distance to its end and the magnetic course to steer
+        if (boatLinked) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (nextNm == null) Text("ARRIVED", color = SignalOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            else {
+                Text("STEER", color = Mist, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(steerDegM?.let { "%03.0f°M".format(it) } ?: "—", color = Foam, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text("NEXT", color = Mist, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("%.1f nm".format(nextNm), color = Foam, fontSize = 24.sp, fontWeight = FontWeight.Black)
             }
-            Text(top, color = if (active) Navy else SignalOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text(sub, color = if (active) Navy else Mist, fontSize = 10.sp)
         }
     }
 }

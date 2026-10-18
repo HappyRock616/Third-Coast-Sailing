@@ -10,6 +10,12 @@
   - **Weather routing** starts at the start pin at the forecast time on the slider (now when the slider is at now), as if the boat were there then. The route still has to fit inside the forecast.
   - The **crash warning** on the route checks only the route itself, from the start pin on, not the boat's way to it.
   - Hold **−** for 1.2 seconds to clear the whole route (a ring fills while you hold); a tap still removes the last pin.
+  - **Calculated routes are labeled leg by leg**: the teal line is split at each tack or gybe (course change over 10°), each leg labeled with its distance and magnetic course to steer, with a small marker at each turn.
+  - **Sailing a route** (start on the boat, planned or calculated): the route box shows **STEER** (magnetic course) and **NEXT** (distance) to the next point; a point counts as reached within 0.1 nm and the next one takes over. No sound.
+  - **Re-route from the boat** by hand: clear the calculated route and calculate again; it starts from the boat now and goes through the pins not yet reached.
+
+### Fixed
+- **Weather routing found no water away from the shore, and the crash warning never found a depth.** Android's built-in SQLite has no R*Tree, so the routing file's spatial index returned nothing on the phone; features are now found by bounding boxes read from the geometry headers. Large depth polygons are read in one piece through a file descriptor. A route that still can't be found says why (no wind, start on land, or how many headings are blocked, with what the water grid loaded).
 
 ## 0.7.4
 
