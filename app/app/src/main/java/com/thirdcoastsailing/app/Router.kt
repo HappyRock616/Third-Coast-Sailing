@@ -225,13 +225,17 @@ object Router {
             // 2. sail every heading for one step; keep the furthest point per 2° sector
             val keep = arrayOfNulls<Node>(180)
             val far = DoubleArray(180) { -1.0 }
+            var tried = 0; var tooSlow = 0; var blocked = 0                // why headings fail (for the error message)
+            var windKn = Double.NaN
             for (n in frontier) {
                 val w = wind.at(n.t, n.lat, n.lon) ?: continue
+                if (windKn.isNaN()) windKn = w.first
                 val p = GeoPt(n.lat, n.lon)
                 for (h in 0 until 360 step 5) {
                     val twa = signed(h - w.second)
                     val v = speed(polar, cruise, w.first, abs(twa))
-                    if (v < 0.2) continue
+                    tried++
+                    if (v < 0.2) { tooSlow++; continue }
                     val side = if (twa >= 0) 1 else -1
                     val debt = n.debtH + (if (n.side != 0 && side != n.side) tackH else 0.0)
                     val avail = dtH - debt
@@ -241,7 +245,7 @@ object Router {
                     else {
                         val ll = destination(n.lat, n.lon, h.toDouble(), v * avail)
                         q = GeoPt(ll.latitude, ll.longitude); newDebt = 0.0
-                        if (!mask.clear(p, q)) continue
+                        if (!mask.clear(p, q)) { blocked++; continue }
                     }
                     val d = distNm(a, q)
                     val sec = (bearingDeg(a, q) / 2).toInt().coerceIn(0, 179)
@@ -249,7 +253,17 @@ object Router {
                 }
             }
             frontier = keep.filterNotNull()
-            if (frontier.isEmpty()) throw Failed("No clear water toward point $number (land or water shallower than the depth limit).")
+            if (frontier.isEmpty()) {
+                // say which it is: no wind to sail in, or every way out runs into land / shallow water
+                val at = WeatherRepo.dayHour(t0 + it * dtMs)
+                val start = if (it == 0) "the start of leg $number" else "leg $number"
+                throw Failed(when {
+                    tried > 0 && tooSlow == tried -> "Too little wind to sail on $start: forecast %.1f kn at %s.".format(windKn, at)
+                    it == 0 && !mask.free(a.lat, a.lon) -> "Leg $number starts on land or water shallower than the depth limit."
+                    else -> "No clear water toward point $number: $blocked of $tried headings run into land or water shallower " +
+                        "than the depth limit (wind %.1f kn at %s).".format(windKn, at)
+                })
+            }
         }
         throw Failed("Leg to point $number is too slow to finish with this forecast.")
     }
