@@ -19,20 +19,60 @@ object Gpkg {
         if (!f.exists()) null
         else runCatching { SQLiteDatabase.openDatabase(f.path, null, SQLiteDatabase.OPEN_READONLY) }.getOrNull()
 
-    /** Feature ids (and an optional numeric column, null when empty) whose index box overlaps the given box. */
+    /**
+     * Feature ids (and an optional numeric column, null when empty) whose bounding box overlaps the given box.
+     * Android's built-in SQLite has no R*Tree module, so the file's spatial index (rtree_* tables) can't be used:
+     * instead each table's boxes are read once from the geometry headers (the GeoPackage envelope) and kept.
+     */
     fun query(db: SQLiteDatabase, table: String, valueCol: String?,
               minLon: Double, minLat: Double, maxLon: Double, maxLat: Double, orderBy: String? = null): List<Pair<Long, Double?>> {
-        val v = if (valueCol != null) "t.\"$valueCol\"" else "NULL"
-        val sql = "SELECT t.fid, $v FROM \"$table\" t JOIN \"rtree_${table}_geom\" r ON t.fid = r.id " +
-                "WHERE r.maxx >= CAST(? AS REAL) AND r.minx <= CAST(? AS REAL) AND r.maxy >= CAST(? AS REAL) AND r.miny <= CAST(? AS REAL)" +
-                (if (orderBy != null) " ORDER BY t.\"$orderBy\"" else "")
-        return runCatching {
-            db.rawQuery(sql, arrayOf("$minLon", "$maxLon", "$minLat", "$maxLat")).use { c ->
-                val out = mutableListOf<Pair<Long, Double?>>()
-                while (c.moveToNext()) out += c.getLong(0) to (if (c.isNull(1)) null else c.getDouble(1))
-                out
+        val ix = index(db, table, valueCol, orderBy) ?: return emptyList()
+        val out = ArrayList<Pair<Long, Double?>>()
+        for (k in ix.fid.indices) {
+            if (ix.maxx[k] < minLon || ix.minx[k] > maxLon || ix.maxy[k] < minLat || ix.miny[k] > maxLat) continue
+            out += ix.fid[k] to ix.value[k]
+        }
+        return out                                                       // already in orderBy order
+    }
+
+    /** Bounding boxes of one table's features, in orderBy order (if any). */
+    private class BoxIndex(val fid: LongArray, val value: Array<Double?>,
+                           val minx: DoubleArray, val maxx: DoubleArray, val miny: DoubleArray, val maxy: DoubleArray)
+
+    private val indexes = HashMap<String, BoxIndex>()
+
+    @Synchronized
+    private fun index(db: SQLiteDatabase, table: String, valueCol: String?, orderBy: String?): BoxIndex? {
+        val f = File(db.path)
+        val key = "${db.path}|${f.length()}|${f.lastModified()}|$table|$valueCol|$orderBy"
+        indexes[key]?.let { return it }
+        val v = if (valueCol != null) "\"$valueCol\"" else "NULL"
+        // the first 40 bytes of a geometry: 8-byte header, then the envelope (min x, max x, min y, max y)
+        val sql = "SELECT fid, $v, substr(geom, 1, 40) FROM \"$table\"" + (if (orderBy != null) " ORDER BY \"$orderBy\"" else "")
+        val ix = runCatching {
+            db.rawQuery(sql, null).use { c ->
+                val n = c.count
+                val fid = LongArray(n); val value = arrayOfNulls<Double>(n)
+                val minx = DoubleArray(n); val maxx = DoubleArray(n); val miny = DoubleArray(n); val maxy = DoubleArray(n)
+                var k = 0
+                while (c.moveToNext()) {
+                    fid[k] = c.getLong(0)
+                    value[k] = if (c.isNull(1)) null else c.getDouble(1)
+                    val h = if (c.isNull(2)) null else c.getBlob(2)
+                    val env = h?.let { (it[3].toInt() shr 1) and 7 } ?: 0
+                    if (h != null && env != 0 && h.size >= 40) {
+                        val bb = ByteBuffer.wrap(h, 8, 32).order(if (h[3].toInt() and 1 == 1) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN)
+                        minx[k] = bb.double; maxx[k] = bb.double; miny[k] = bb.double; maxy[k] = bb.double
+                    } else {                                             // no envelope: always a candidate
+                        minx[k] = -180.0; maxx[k] = 180.0; miny[k] = -90.0; maxy[k] = 90.0
+                    }
+                    k++
+                }
+                BoxIndex(fid, value, minx, maxx, miny, maxy)
             }
-        }.getOrDefault(emptyList())
+        }.getOrNull() ?: return null
+        indexes[key] = ix
+        return ix
     }
 
     /**
