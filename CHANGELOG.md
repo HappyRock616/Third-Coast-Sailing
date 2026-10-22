@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.7.5 (not yet released)
+## 0.7.6 (not yet released)
+
+### Fixed
+- **A route start snapped to the boat came unhooked** when the screen went off or the app was closed and reopened. The link, and which pins have been reached, are now kept.
+
+### Changed
+- **North is always up**: two-finger rotate and tilt are off on the chart (the screen still turns to landscape).
+- **Gauge touch area is a circle** over the compass ring, so its transparent corners no longer block the chart or the menu button.
+
+## 0.7.5
 
 ### Changed
 - **Routes start where you put them.** The route no longer always starts at the boat, so you can plan and measure anywhere ("what if" passages far from where you are).
@@ -13,9 +22,6 @@
   - **Calculated routes are labeled leg by leg**: the teal line is split at each tack or gybe (course change over 10°), each leg labeled with its distance and magnetic course to steer, with a small marker at each turn.
   - **Sailing a route** (start on the boat, planned or calculated): the route box shows **STEER** (magnetic course) and **NEXT** (distance) to the next point; a point counts as reached within 0.1 nm and the next one takes over. No sound.
   - **Re-route from the boat** by hand: clear the calculated route and calculate again; it starts from the boat now and goes through the pins not yet reached.
-  - The start's link to the boat, and which pins have been reached, are kept through the screen going off and the app being closed and reopened.
-- **North is always up**: two-finger rotate and tilt are off on the chart (the screen still turns to landscape).
-- **Gauge touch area is a circle** over the compass ring, so its transparent corners no longer block the chart or the menu button.
 
 ### Fixed
 - **Weather routing found no water away from the shore, and the crash warning never found a depth.** Android's built-in SQLite has no R*Tree, so the routing file's spatial index returned nothing on the phone; features are now found by bounding boxes read from the geometry headers. Large depth polygons are read in one piece through a file descriptor. A route that still can't be found says why (no wind, start on land, or how many headings are blocked, with what the water grid loaded).
