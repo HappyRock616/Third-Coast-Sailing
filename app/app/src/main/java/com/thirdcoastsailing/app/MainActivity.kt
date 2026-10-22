@@ -691,6 +691,9 @@ private fun App() {
                 onWxBarbs = { wxBarbs = it; prefs.edit().putBoolean("wxBarbs", it).apply() },
                 onWxWaves = { wxWaves = it; prefs.edit().putBoolean("wxWaves", it).apply() },
                 gps = GpsInfo(hasLocation, locationOn, fix, sats, avgSog),
+                // sun/moon position: the boat, or the chart's center until there is a fix
+                skyPos = fix?.let { it.lat to it.lon } ?: mapRef?.cameraPosition?.target?.let { it.latitude to it.longitude },
+                nowMs = clock,
                 onGpsPermission = { permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) },
                 onLocationSettings = { context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
             )
@@ -997,7 +1000,7 @@ private fun MenuSheet(
     tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
     wxColor: String, wxBarbs: Boolean, wxWaves: Boolean,
     onWxColor: (String) -> Unit, onWxBarbs: (Boolean) -> Unit, onWxWaves: (Boolean) -> Unit,
-    gps: GpsInfo, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
+    gps: GpsInfo, skyPos: Pair<Double, Double>?, nowMs: Long, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
 ) {
     var showCharts by remember { mutableStateOf(false) }
     ModalDrawerSheet(drawerContainerColor = Navy, modifier = Modifier.widthIn(max = 300.dp)) {
@@ -1034,7 +1037,7 @@ private fun MenuSheet(
                     }
                     f == null -> {
                         Text("Searching for a fix…", color = Foam, fontSize = 15.sp)
-                        Text("Sats ${gps.sats.first}/${gps.sats.second}", color = Mist, fontSize = 12.5.sp)
+                        SatsSunMoonRow("Sats ${gps.sats.first}/${gps.sats.second}", skyPos, nowMs)
                     }
                     else -> {
                         Text(latLonText(f.lat, f.lon), color = Foam, fontSize = 16.sp)
@@ -1043,7 +1046,7 @@ private fun MenuSheet(
                             f.sogKn?.let { "%.1f kn".format(it) } ?: "—",
                             gps.avgSogKn?.let { "%.1f kn".format(it) } ?: "—"), color = Mist, fontSize = 12.5.sp)
                         val age = ((System.currentTimeMillis() - f.time) / 1000).coerceAtLeast(0)
-                        Text("Sats ${gps.sats.first}/${gps.sats.second} · ${age} s", color = Mist, fontSize = 12.5.sp)
+                        SatsSunMoonRow("Sats ${gps.sats.first}/${gps.sats.second} · ${age} s", f.lat to f.lon, nowMs)
                     }
                 }
             }
@@ -1138,6 +1141,15 @@ private fun MenuSheet(
 private fun MenuHeader(text: String) =
     Text(text.uppercase(), color = SignalOrange, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = 6.dp))
+
+/** The GPS box's last line: satellites on the left, today's sunrise, sunset and the moon on the right. */
+@Composable
+private fun SatsSunMoonRow(sats: String, pos: Pair<Double, Double>?, nowMs: Long) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(sats, color = Mist, fontSize = 12.5.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        if (pos != null) SunMoonRow(pos.first, pos.second, nowMs)
+    }
+}
 
 @Composable
 private fun MenuDivider() = HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 14.dp))
