@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (not yet released)
+## 0.8.0 (2026-10-22)
 
 Needs the 1.4 charts (download them again from the menu → Charts). With older charts the app works as before, without the new marks.
 
@@ -20,7 +20,7 @@ Needs the 1.4 charts (download them again from the menu → Charts). With older 
 ### Changed
 - Chart labels use Roboto, the app's own font, bundled so they work offline.
 
-## 0.7.6 (not yet released)
+## 0.7.6 (not released on its own; included in 0.8.0)
 
 ### Added
 - **Barograph.** Menu → *Baro* (below Waves): the button opens the Barograph page, the switch turns logging on and off, the hold arrow resets the log (like the trip log). The button shows the pressure and the 3-hour change in the tendency color. Grayed out on phones without a barometer (the page then says so).
