@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -30,7 +29,6 @@ import java.time.Instant
 import java.time.ZoneId
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /*
@@ -42,6 +40,17 @@ import kotlin.math.sin
 data class SunMoonDay(val sunriseMs: Long?, val sunsetMs: Long?, val moonLitFraction: Double, val moonWaxing: Boolean)
 
 object SunMoon {
+    private var cacheDay = Long.MIN_VALUE
+    private var cache: SunMoonDay? = null
+
+    /** Today's values, worked out once per local calendar day (the first time they're asked for that day). */
+    @Synchronized
+    fun today(lat: Double, lon: Double, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): SunMoonDay {
+        val epochDay = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate().toEpochDay()
+        cache?.takeIf { epochDay == cacheDay }?.let { return it }
+        return day(lat, lon, nowMs, zone).also { cache = it; cacheDay = epochDay }
+    }
+
     /** Sun times for the local calendar day containing `nowMs`, and the moon's phase at `nowMs`. */
     fun day(lat: Double, lon: Double, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): SunMoonDay {
         val dayStart = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
@@ -58,17 +67,12 @@ private val SUN_YELLOW = Color(0xFFF2C14E)
 private val MOON_LIT = Color(0xFFE9E4D4)
 private val MOON_DARK = Color(0xFF33475F)
 
-/**
- * "▲ 8:03a ▼ 6:55p ◐" in one short row: sun glyphs with the times, then the moon in its phase. The position is
- * rounded to 0.1° and the day/minute to keep the almanac search from running on every GPS update.
- */
+/** "▲ 8:03a ▼ 6:55p ◐" in one short row: sun glyphs with the times, then the moon in its phase (worked out once a day). */
 @Composable
 fun SunMoonRow(lat: Double, lon: Double, nowMs: Long, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val h24 = android.text.format.DateFormat.is24HourFormat(context)
-    val latR = (lat * 10).roundToInt(); val lonR = (lon * 10).roundToInt()
-    val minute = nowMs / 60_000L
-    val d = remember(latR, lonR, minute / 10) { SunMoon.day(latR / 10.0, lonR / 10.0, nowMs) }
+    val d = SunMoon.today(lat, lon, nowMs)
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         SunGlyph(rise = true)
         Text(clockText(d.sunriseMs, h24), color = Mist, fontSize = 12.5.sp, modifier = Modifier.padding(start = 2.dp, end = 6.dp))
