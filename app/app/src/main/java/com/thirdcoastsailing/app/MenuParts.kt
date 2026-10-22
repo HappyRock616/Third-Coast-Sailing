@@ -125,15 +125,20 @@ private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
             }, Foam, style = Stroke(1.8f * k))
             drawLine(Foam, o(8f, 3f), o(8f, 19f), 1.5f * k); drawLine(Foam, o(16f, 5f), o(16f, 21f), 1.5f * k)
         }
-        MenuIcon.BARO -> {                                            // barometer dial: arc, ticks, orange needle
-            drawArc(Foam, 200f, 140f, false, o(2f, 4f), Size(20f * k, 20f * k), style = line)
-            for (deg in listOf(210f, 240f, 270f, 300f, 330f)) {
-                val a = Math.toRadians(deg.toDouble())
-                drawLine(Foam, o(12f + 9.5f * kotlin.math.cos(a).toFloat(), 14f + 9.5f * kotlin.math.sin(a).toFloat()),
-                    o(12f + 7.5f * kotlin.math.cos(a).toFloat(), 14f + 7.5f * kotlin.math.sin(a).toFloat()), 1.2f * k, StrokeCap.Round)
+        MenuIcon.BARO -> {                                            // analog barograph: chart drum, pen arm, aneroid stack, base
+            drawLine(Foam, o(1.5f, 21.5f), o(22.5f, 21.5f), w, StrokeCap.Round)                   // base
+            drawRoundRect(Foam, o(3f, 5f), Size(9f * k, 14f * k), CornerRadius(2f * k), style = Stroke(1.8f * k))   // drum
+            drawLine(Foam, o(3.5f, 8f), o(11.5f, 8f), 1f * k)                                     // drum top rim
+            drawPath(Path().apply {                                                               // pen trace on the chart
+                moveTo(4.5f * k, 14f * k); lineTo(6f * k, 13f * k); lineTo(7.5f * k, 14.5f * k); lineTo(9f * k, 12.5f * k); lineTo(10.5f * k, 13f * k)
+            }, SignalOrange, style = Stroke(1.2f * k, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            for (i in 0 until 4) {                                                                // aneroid stack
+                val y = 12.5f + i * 2.2f
+                drawRoundRect(Foam, o(14.5f, y), Size(6f * k, 1.5f * k), CornerRadius(0.75f * k))
             }
-            drawLine(SignalOrange, o(12f, 14f), o(17.5f, 7.5f), w, StrokeCap.Round)
-            drawCircle(Foam, 1.6f * k, o(12f, 14f))
+            drawLine(Foam, o(20.5f, 11.5f), o(20.5f, 21f), 1.4f * k, StrokeCap.Round)             // arm post
+            drawLine(SignalOrange, o(20.5f, 11.5f), o(10.5f, 13f), 1.6f * k, StrokeCap.Round)     // pen arm, tip on the drum
+            drawCircle(Foam, 1.3f * k, o(20.5f, 11.5f))                                           // pivot
         }
         MenuIcon.ANCHOR -> {
             drawCircle(Foam, 2.4f * k, o(12f, 4.5f), style = Stroke(1.8f * k))

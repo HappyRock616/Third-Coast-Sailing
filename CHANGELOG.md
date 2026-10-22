@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Barograph menu button** matches the Anchor button: same size, the full name "Barograph", and a new icon (a small analog barograph: chart drum, pen arm, aneroid stack). The pressure reading is no longer shown on the button; it's on the Barograph page.
+
 ## 0.8.0 (2026-10-22)
 
 Needs the 1.4 charts (download them again from the menu → Charts). With older charts the app works as before, without the new marks.

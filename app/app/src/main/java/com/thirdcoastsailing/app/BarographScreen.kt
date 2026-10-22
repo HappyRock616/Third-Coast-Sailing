@@ -162,27 +162,9 @@ fun BaroMenuRow(onOpen: () -> Unit, onToggle: (Boolean) -> Unit) {
     val has = remember { Baro.hasSensor(context) }
     val on = Baro.isOn(context)
     val pts = remember(Baro.version) { BaroMath.clean(Baro.log(context)) }
-    val t = remember(Baro.version) { BaroMath.trend(pts, System.currentTimeMillis()) }
-    val elev = Baro.elevationM(context)
+    // same button as Anchor: icon, "Barograph", ›; grayed out on phones without a barometer
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().alpha(if (has) 1f else 0.4f)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f).padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp))
-                .border(1.5.dp, SignalOrange, RoundedCornerShape(12.dp)).clickable(onClick = onOpen)
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-        ) {
-            MenuIconView(MenuIcon.BARO, Modifier.size(28.dp))
-            Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                Text("Baro", color = Foam, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                val now = t.now
-                if (has && now != null) {
-                    val r = t.shownRate
-                    val arrow = when { r == null -> ""; r < -0.1 -> "  ▼%.1f".format(abs(r)); r > 0.1 -> "  ▲%.1f".format(r); else -> "  ▶0.0" }
-                    Text("%.0f%s".format(seaLevel(now, elev), arrow), color = tendencyColor(r), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-            Text("›", color = SignalOrange, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        }
+        Box(Modifier.weight(1f)) { MenuButton(MenuIcon.BARO, "Barograph", onClick = onOpen) }
         if (has && pts.isNotEmpty()) HoldToResetArrow(onReset = { Baro.reset(context) })
         Switch(checked = on && has, onCheckedChange = onToggle, enabled = has, modifier = Modifier.padding(start = 4.dp),
             colors = SwitchDefaults.colors(checkedTrackColor = SignalOrange, checkedThumbColor = Foam,
