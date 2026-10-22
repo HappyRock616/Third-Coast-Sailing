@@ -2,7 +2,11 @@ package com.thirdcoastsailing.app
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -69,18 +73,34 @@ fun WindGauge(
 ) {
     val measurer = rememberTextMeasurer()
     val baseSize = 300.dp
-    Canvas(
+    val side = baseSize * scale
+    Box(
         modifier
             .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
-            .size(baseSize * scale)
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ -> onTransform(pan, zoom) }
-            }
+            .size(side)
     ) {
-        val k = size.width / 640f
-        drawGauge(data, k, measurer)
+        // drawing only: no touch handling, so the transparent corners don't block the chart or the menu button
+        Canvas(Modifier.fillMaxSize()) {
+            val k = size.width / 640f
+            drawGauge(data, k, measurer)
+        }
+        // touch zone: a circle over the compass ring (center 320, 330 and outer radius 215 on the 640-unit layout,
+        // a little extra for the tick labels); drag to move, pinch to resize
+        val r = side * (TOUCH_R / 640f)
+        Box(
+            Modifier
+                .offset(x = side * (320f / 640f) - r, y = side * (330f / 640f) - r)
+                .size(r * 2)
+                .clip(CircleShape)
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ -> onTransform(pan, zoom) }
+                }
+        )
     }
 }
+
+/** Radius of the gauge's touch circle on the 640-unit layout (compass ring outer edge 215 plus a margin). */
+private const val TOUCH_R = 225f
 
 private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
     val c = Offset(320f * k, 330f * k)

@@ -242,14 +242,18 @@ private fun App() {
     var forecastWind by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     // Route: "+" drops a pin at the middle of the view, a short hold drags it, "−" removes the last (hold to clear).
     // The first pin is the start (green), the last the finish (flag). The start can be snapped to the boat and then
-    // follows it; that link is not saved (after a restart the start is a plain pin where it was last).
+    // follows it; the link and the progress along the pins are kept through screen-off and app restarts.
     val routeStore = remember { RouteStore(prefs) }
     var routePts by remember { mutableStateOf(routeStore.load()) }
-    var startOnBoat by remember { mutableStateOf(false) }
+    // kept on the phone so the link survives the screen going off and the app being closed and reopened
+    var startOnBoat by remember { mutableStateOf(prefs.getBoolean("routeOnBoat", false)) }
+    LaunchedEffect(startOnBoat) { prefs.edit().putBoolean("routeOnBoat", startOnBoat).apply() }
     // sailing a route with the start on the boat: next point to sail to (index into the calculated route's
     // corners, or the pins), and the next pin not yet reached (a re-route starts from the boat toward it)
-    var navNext by remember { mutableStateOf(1) }
-    var pinNext by remember { mutableStateOf(1) }
+    // (pins reached are kept on the phone; a calculated route isn't, so after a restart the pins are sailed)
+    var pinNext by remember { mutableStateOf(prefs.getInt("routePinNext", 1)) }
+    var navNext by remember { mutableStateOf(pinNext) }
+    LaunchedEffect(pinNext) { prefs.edit().putInt("routePinNext", pinNext).apply() }
     var mapRef by remember { mutableStateOf<MapLibreMap?>(null) }   // for placing new points relative to the view
     var calcResult by remember { mutableStateOf<RouteResult?>(null) }
     var calcState by remember { mutableStateOf(CalcState.IDLE) }
@@ -1229,6 +1233,9 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
             m.setMaxZoomPreference(MAX_ZOOM)
             m.setMinZoomPreference(4.0)
             m.uiSettings.isCompassEnabled = true
+            // north always up: no two-finger rotate or tilt (the screen can still turn to landscape)
+            m.uiSettings.isRotateGesturesEnabled = false
+            m.uiSettings.isTiltGesturesEnabled = false
             m.uiSettings.isAttributionEnabled = false
             m.uiSettings.isLogoEnabled = false
             m.cameraPosition = CameraPosition.Builder().target(LatLng(44.5, -84.5)).zoom(5.0).build()
