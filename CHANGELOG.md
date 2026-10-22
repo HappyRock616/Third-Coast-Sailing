@@ -2,6 +2,13 @@
 
 ## 0.7.6 (not yet released)
 
+### Added
+- **Barograph.** Menu → *Baro* (below Waves): the button opens the Barograph page, the switch turns logging on and off, the hold arrow resets the log (like the trip log). The button shows the pressure and the 3-hour change in the tendency color. Grayed out on phones without a barometer (the page then says so).
+  - **Logging**: a 2-second burst of readings (median kept) every 5 minutes, every minute while the weather is turning (falling faster than 0.5 hPa an hour, or a jump over 1 hPa) and for an hour after; the sensor is off between bursts. Works with the screen off (a small notification, like the trip track); stops when the app is closed. Opening the page takes one fresh reading. Readings are kept 14 days.
+  - **Filtering**: a reading that jumps away and snaps straight back (a slammed hatch, a gust) is dropped; a jump that holds is kept and checked as a squall. Trends are straight-line fits over the last hour and the last 3 hours.
+  - **Page**: sea-level pressure in hPa (corrected for the lake's height, same units as the NOAA buoys), TREND in Met Office terms and an OUTLOOK symbol (⛈️ 🌧️ 🌥️ ⛅ 🌤️ 💨, from pressure only), a tendency color bar (−8 to +8 hPa / 3 h) with a pointer, and the graph: colored band under the line by tendency, the 3-hour trend continued (dashed orange), the nearest NOAA buoy's pressure as dots, ▼ where an alert level was reached, outlook symbols along the top. Drag sideways or use the ‹ › tabs to scroll; slider for 3 h / 6 h / 24 h / 3 d (default 6 h).
+  - **Warning**: a yellow box over the chart (⚠️, trend, outlook, color bar) when the fall turns serious: −1.2 hPa an hour or −3.6 in 3 h held 10 minutes; −2.0 an hour or −6.0 in 3 h held 5 minutes; or a squall jump (1.5 hPa within minutes, still up 2 minutes later). Tap it for the Barograph, tap anywhere else to clear it. It comes back only if it gets worse, and can warn again only after 2 hours of steady or rising pressure.
+
 ### Fixed
 - **A route start snapped to the boat came unhooked** when the screen went off or the app was closed and reopened. The link, and which pins have been reached, are now kept.
 

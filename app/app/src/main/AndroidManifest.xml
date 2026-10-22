@@ -11,12 +11,15 @@
     <!-- Trip track: slow GPS sampling (every 5 min) while the app is in the background, shown as a notification -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Barograph: reading the pressure sensor in the background needs a foreground service (a short burst every few minutes) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Anchor watch: vibrate with the bell, keep the phone awake while the bell sounds -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.barometer" android:required="false" />
 
     <application
         android:allowBackup="false"
@@ -53,6 +56,16 @@
             android:exported="false"
             android:foregroundServiceType="location"
             android:stopWithTask="true" />
+        <!-- Barograph logging: pressure every 5 minutes (every minute when the weather turns); stops when the app is closed -->
+        <service
+            android:name=".BaroService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="true">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Barograph: logs air pressure from the phone's barometer every few minutes for a weather trend" />
+        </service>
     </application>
 
 </manifest>

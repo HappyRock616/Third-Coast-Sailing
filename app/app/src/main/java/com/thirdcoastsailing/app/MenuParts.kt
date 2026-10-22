@@ -45,7 +45,7 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
  */
 
 /** The menu's icons, each drawn on a 24 x 24 grid. */
-enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, NIGHT, GAUGE, OFFLINE, BOAT, SEXTANT, CHARTS, INFO, ANCHOR }
+enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, NIGHT, GAUGE, OFFLINE, BOAT, SEXTANT, CHARTS, INFO, ANCHOR, BARO }
 
 // Wind color stops (knots), the same scale as the map field and the buoy fill
 private val KEY_WIND = listOf(0 to Color(0xFF3B6FB6), 8 to Color(0xFF3DBE6B), 14 to Color(0xFFF2D028),
@@ -124,6 +124,16 @@ private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
                 lineTo(22f * k, 19f * k); lineTo(16f * k, 21f * k); lineTo(8f * k, 19f * k); lineTo(2f * k, 21f * k); close()
             }, Foam, style = Stroke(1.8f * k))
             drawLine(Foam, o(8f, 3f), o(8f, 19f), 1.5f * k); drawLine(Foam, o(16f, 5f), o(16f, 21f), 1.5f * k)
+        }
+        MenuIcon.BARO -> {                                            // barometer dial: arc, ticks, orange needle
+            drawArc(Foam, 200f, 140f, false, o(2f, 4f), Size(20f * k, 20f * k), style = line)
+            for (deg in listOf(210f, 240f, 270f, 300f, 330f)) {
+                val a = Math.toRadians(deg.toDouble())
+                drawLine(Foam, o(12f + 9.5f * kotlin.math.cos(a).toFloat(), 14f + 9.5f * kotlin.math.sin(a).toFloat()),
+                    o(12f + 7.5f * kotlin.math.cos(a).toFloat(), 14f + 7.5f * kotlin.math.sin(a).toFloat()), 1.2f * k, StrokeCap.Round)
+            }
+            drawLine(SignalOrange, o(12f, 14f), o(17.5f, 7.5f), w, StrokeCap.Round)
+            drawCircle(Foam, 1.6f * k, o(12f, 14f))
         }
         MenuIcon.ANCHOR -> {
             drawCircle(Foam, 2.4f * k, o(12f, 4.5f), style = Stroke(1.8f * k))

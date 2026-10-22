@@ -64,6 +64,15 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 - 🌙 Runs all night with the screen off. The volume buttons silence the alarm for 15 minutes.
 - 💾 The anchor position is saved, so it survives if the phone dies.
 
+### 📉 Barograph
+
+<!-- screenshot -->
+
+- 🌡️ Logs the phone's barometer every few minutes (every minute when the weather turns), filtered so a slammed hatch doesn't count.
+- 📊 Scrolling graph colored by the 3-hour tendency, with the nearest NOAA buoy's pressure for comparison.
+- ⛈️ Trend in Met Office terms and an outlook symbol from the pressure alone.
+- ⚠️ A quiet yellow warning when the pressure starts falling fast or a squall jump arrives, shown once, not a nag.
+
 ### 🛤️ Weather routing
 
 <!-- screenshot -->

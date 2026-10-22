@@ -366,6 +366,22 @@ private fun App() {
     // First launch: the not-for-navigation notice must be accepted before anything else (then the lake picker)
     var showDisclaimer by remember { mutableStateOf(!prefs.getBoolean("disclaimerAccepted", false)) }
     var showAbout by remember { mutableStateOf(false) }
+    var showBaro by remember { mutableStateOf(false) }
+    // ---- barograph: logging restarts with the app; lake height follows the boat; the yellow box (anti-nag rules in Baro)
+    var baroWarn by remember { mutableStateOf<BaroTrend?>(null) }        // the trend shown in the yellow box, or null
+    var baroWarnLevel by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { if (Baro.isOn(context) && Baro.hasSensor(context)) BaroService.start(context) }
+    LaunchedEffect(fix?.lat?.let { (it * 10).roundToInt() }, fix?.lon?.let { (it * 10).roundToInt() }) {
+        fix?.let { Baro.setPosition(context, it.lat, it.lon) }
+    }
+    LaunchedEffect(Baro.version) {
+        val now = System.currentTimeMillis()
+        val t = withContext(Dispatchers.Default) { BaroMath.trend(BaroMath.clean(Baro.log(context)), now) }
+        val lvl = Baro.warningToShow(context, t, now)
+        if (lvl > baroWarnLevel) { baroWarn = t; baroWarnLevel = lvl }         // only ever goes up while shown
+        else if (baroWarn != null) baroWarn = t                                 // keep the shown box current
+    }
+    fun dismissBaroWarn() { Baro.dismissWarning(context, baroWarnLevel); baroWarn = null; baroWarnLevel = 0 }
     var showAnchor by remember { mutableStateOf(false) }
     remember { AnchorWatch.load(context) }                      // saved anchor point survives a restart
     remember { MobWatch.load(context) }                         // a MOB mark stays until it is reset
@@ -630,6 +646,13 @@ private fun App() {
                 onAbout = { scope.launch { drawer.close() }; showAbout = true },
                 onAnchorOpen = { scope.launch { drawer.close() }; showAnchor = true },
                 onMob = { activateMob() }, onMobReset = { MobWatch.reset(context) },
+                onBaroOpen = { scope.launch { drawer.close() }; showBaro = true },
+                onBaroToggle = { on ->
+                    if (on && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                            Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    Baro.setOn(context, on)
+                },
                 onAnchorToggle = { on ->
                     if (on) {
                         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
@@ -789,10 +812,31 @@ private fun App() {
             // Info card for a tapped harbor or buoy
             // (tapping anywhere else on the chart closes it: the map tap handler clears it when nothing is hit)
             info?.let { i -> InfoCard(i, Modifier.align(Alignment.BottomEnd), buoyObs, buoyRepo, offline, clock) { info = null } }
+
+            // Barograph warning: yellow box on top of everything; a tap on it opens the barograph, a tap anywhere else
+            // clears it (and it stays away unless the fall gets worse)
+            baroWarn?.let { t ->
+                Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { dismissBaroWarn() } })
+                BaroWarningBox(t, onOpen = { dismissBaroWarn(); showBaro = true },
+                    modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(start = 78.dp, end = 10.dp, top = 10.dp))
+            }
         }
     }
 
     if (showCelestial) CelestialScreen(celestial, fix) { showCelestial = false }
+
+    // Barograph page; the nearest NOAA station reporting pressure (in the last 3 h) gives the cross-check dots
+    if (showBaro) {
+        val near = remember(buoyObs, buoyStations, fix?.lat?.roundToInt(), fix?.lon?.roundToInt()) {
+            val at = fix?.let { GeoPt(it.lat, it.lon) } ?: mapRef?.cameraPosition?.target?.let { GeoPt(it.latitude, it.longitude) }
+            val now = System.currentTimeMillis()
+            if (at == null) null else buoyStations.filter { st ->
+                buoyObs[st.id.uppercase()]?.let { it.presHpa != null && now - it.timeMs < 3 * 3_600_000L } == true
+            }.minByOrNull { distNm(at, GeoPt(it.lat, it.lon)) }
+        }
+        BarographScreen(near?.let { it.id.uppercase() to it.name },
+            loadBuoy = { near?.let { buoyRepo.history(it.id, network = !offline && online(context)) } }) { showBaro = false }
+    }
 
     if (showBoats) BoatScreen(boatStore) {
         showBoats = false
@@ -947,6 +991,7 @@ private fun MenuSheet(
     onAbout: () -> Unit,
     onAnchorOpen: () -> Unit, onAnchorToggle: (Boolean) -> Unit,
     onMob: () -> Unit, onMobReset: () -> Unit,
+    onBaroOpen: () -> Unit, onBaroToggle: (Boolean) -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
     tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
@@ -1015,6 +1060,7 @@ private fun MenuSheet(
             IconSwitchRow(MenuIcon.GUST, "Gusts", wxColor == "gust", { onWxColor(if (it) "gust" else "none") })
             IconSwitchRow(MenuIcon.BARBS, "Barbs", wxBarbs, onWxBarbs)
             IconSwitchRow(MenuIcon.WAVES, "Waves", wxWaves, onWxWaves)
+            BaroMenuRow(onOpen = onBaroOpen, onToggle = onBaroToggle)
 
             MenuDivider()
             MenuHeader("Display")
