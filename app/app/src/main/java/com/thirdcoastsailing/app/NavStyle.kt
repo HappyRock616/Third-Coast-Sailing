@@ -73,9 +73,12 @@ object NavStyle {
             .put("paint", textPaint(k.text, k.halo)))
 
         // lights: flare in the light's colour, at the light's position; major lights larger with a tower ring
-        layers.put(base("${src}_lhring", "symbol", src, "light", 9.0)
-            .put("filter", JSONArray("[\"==\", [\"get\", \"kind\"], \"lighthouse\"]"))
-            .put("layout", JSONObject().put("icon-image", "nav_lmk").put("icon-allow-overlap", true).put("icon-ignore-placement", true)))
+        // tower ring under lighthouse flares, shown with the flare: major lighthouses from 9, the rest from 12
+        for ((suffix, minZoom, tierTest) in listOf(Triple("1", 9.0, "=="), Triple("", 12.0, "!="))) {
+            layers.put(base("${src}_lhring$suffix", "symbol", src, "light", minZoom)
+                .put("filter", JSONArray("[\"all\", [\"==\", [\"get\", \"kind\"], \"lighthouse\"], [\"$tierTest\", [\"get\", \"tier\"], 1]]"))
+                .put("layout", JSONObject().put("icon-image", "nav_lmk").put("icon-allow-overlap", true).put("icon-ignore-placement", true)))
+        }
         for ((tier, minZoom) in listOf(3 to 12.0, 2 to 10.0, 1 to 9.0)) {
             layers.put(base("${src}_light$tier", "symbol", src, "light", minZoom)
                 .put("filter", JSONArray("[\"==\", [\"get\", \"tier\"], $tier]"))
