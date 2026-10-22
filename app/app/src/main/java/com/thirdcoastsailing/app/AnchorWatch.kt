@@ -545,7 +545,7 @@ fun AnchorMenuRow(onOpen: () -> Unit, onToggle: (Boolean) -> Unit) {
     val s = AnchorWatch.state
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.weight(1f)) { MenuButton(MenuIcon.ANCHOR, "Anchor", onClick = onOpen) }
-        if (s.anchor != null) HoldToResetArrow(onReset = { AnchorWatch.reset(context) })
+        if (s.anchor != null) HoldToResetArrow(onReset = { AnchorWatch.reset(context) }, boxSize = 40.dp)
         Switch(checked = s.armed, onCheckedChange = onToggle, modifier = Modifier.padding(start = 4.dp),
             colors = SwitchDefaults.colors(checkedTrackColor = SignalOrange, checkedThumbColor = Foam,
                 uncheckedTrackColor = NavyLight, uncheckedThumbColor = Mist, uncheckedBorderColor = NavyLight))

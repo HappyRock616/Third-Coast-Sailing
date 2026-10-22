@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -175,11 +176,14 @@ fun MenuButton(icon: MenuIcon, label: String, value: String? = null, onClick: ()
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp))
             .border(1.5.dp, SignalOrange, RoundedCornerShape(12.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
     ) {
         MenuIconView(icon, Modifier.size(28.dp))
-        Text(label, color = Foam, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 14.dp))
-        Spacer(Modifier.weight(1f))
+        // the label takes the free width, so the value and › always stay visible (Anchor and Barograph share the row
+        // with a reset arrow and a switch)
+        Text(label, color = Foam, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp).weight(1f))
         if (value != null) Text(value, color = Mist, fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(end = 8.dp))
         Text("›", color = SignalOrange, fontSize = 24.sp, fontWeight = FontWeight.Bold)
     }
@@ -205,18 +209,18 @@ fun ChartKey() {
             Text("ft", color = Mist, fontSize = 11.sp)
         }
         // other marks on the chart: marina, trip track, celestial fix, light, buoy/beacon, landmark
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            KeySwatch("Marina", 48.dp) { drawMarina() }
-            KeySwatch("Track", 48.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            KeySwatch("Marina", fill = true) { drawMarina() }
+            KeySwatch("Track", fill = true) {
                 for (i in 0 until 3) drawLine(Foam, Offset(size.width * (0.12f + i * 0.28f), size.height / 2),
                     Offset(size.width * (0.28f + i * 0.28f), size.height / 2), 2.dp.toPx(), StrokeCap.Round)
             }
-            KeySwatch("Fix", 48.dp) {
+            KeySwatch("Fix", fill = true) {
                 drawCircle(FIX_PURPLE, size.minDimension * 0.34f, style = Stroke(2.dp.toPx())); drawCircle(FIX_PURPLE, size.minDimension * 0.08f)
             }
-            KeySwatch("Light", 48.dp) { drawKeyFlare() }
-            KeySwatch("Aid", 48.dp) { drawKeyAid() }
-            KeySwatch("Landmark", 48.dp) {
+            KeySwatch("Light", fill = true) { drawKeyFlare() }
+            KeySwatch("Aid", fill = true) { drawKeyAid() }
+            KeySwatch("Landmark", fill = true) {
                 drawCircle(Color.White, size.minDimension * 0.22f)
                 drawCircle(KEY_INK, size.minDimension * 0.22f, style = Stroke(1.dp.toPx()))
                 drawCircle(KEY_INK, size.minDimension * 0.07f)
@@ -225,12 +229,13 @@ fun ChartKey() {
     }
 }
 
-/** One key entry: a 24 dp picture over a short label. */
+/** One key entry: a 24 dp picture over a short label; `fill` shares the row's width equally (the bottom row of six). */
 @Composable
-private fun KeySwatch(label: String, width: androidx.compose.ui.unit.Dp = 30.dp, draw: DrawScope.() -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(width)) {
+private fun RowScope.KeySwatch(label: String, width: androidx.compose.ui.unit.Dp = 30.dp, fill: Boolean = false,
+                               draw: DrawScope.() -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = if (fill) Modifier.weight(1f) else Modifier.width(width)) {
         Canvas(Modifier.size(22.dp)) { draw() }
-        Text(label, color = Mist, fontSize = 10.5.sp, maxLines = 1)
+        Text(label, color = Mist, fontSize = if (fill) 10.sp else 10.5.sp, maxLines = 1)
     }
 }
 

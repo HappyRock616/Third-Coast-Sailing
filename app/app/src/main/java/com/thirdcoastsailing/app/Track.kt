@@ -128,13 +128,13 @@ const val TRACK_RESET_HOLD_MS = 1200
  * An orange ring fills around the arrow while held; letting go early cancels. The phone buzzes when it clears.
  */
 @Composable
-fun HoldToResetArrow(onReset: () -> Unit) {
+fun HoldToResetArrow(onReset: () -> Unit, boxSize: androidx.compose.ui.unit.Dp = 48.dp) {
     val progress = remember { androidx.compose.animation.core.Animatable(0f) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val view = androidx.compose.ui.platform.LocalView.current
     val reset by androidx.compose.runtime.rememberUpdatedState(onReset)
     androidx.compose.foundation.layout.Box(
-        Modifier.size(48.dp).pointerInput(Unit) {
+        Modifier.size(boxSize).pointerInput(Unit) {
             detectTapGestures(onPress = {
                 val job = scope.launch {
                     progress.snapTo(0f)

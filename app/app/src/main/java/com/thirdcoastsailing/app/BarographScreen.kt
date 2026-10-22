@@ -162,10 +162,10 @@ fun BaroMenuRow(onOpen: () -> Unit, onToggle: (Boolean) -> Unit) {
     val has = remember { Baro.hasSensor(context) }
     val on = Baro.isOn(context)
     val pts = remember(Baro.version) { BaroMath.clean(Baro.log(context)) }
-    // same button as Anchor: icon, "Barograph", ›; grayed out on phones without a barometer
+    // same row as Anchor: button (icon, "Barograph", ›), reset arrow, switch; grayed out on phones without a barometer
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().alpha(if (has) 1f else 0.4f)) {
         Box(Modifier.weight(1f)) { MenuButton(MenuIcon.BARO, "Barograph", onClick = onOpen) }
-        if (has && pts.isNotEmpty()) HoldToResetArrow(onReset = { Baro.reset(context) })
+        if (has && pts.isNotEmpty()) HoldToResetArrow(onReset = { Baro.reset(context) }, boxSize = 40.dp)
         Switch(checked = on && has, onCheckedChange = onToggle, enabled = has, modifier = Modifier.padding(start = 4.dp),
             colors = SwitchDefaults.colors(checkedTrackColor = SignalOrange, checkedThumbColor = Foam,
                 uncheckedTrackColor = NavyLight, uncheckedThumbColor = Mist, uncheckedBorderColor = NavyLight))

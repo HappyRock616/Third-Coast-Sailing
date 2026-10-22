@@ -4,6 +4,7 @@
 
 ### Changed
 - **Barograph menu button** matches the Anchor button: same size, the full name "Barograph", and a new icon (a small analog barograph: chart drum with a red pressure trace, pen arm, aneroid stack). The pressure reading is no longer shown on the button; it's on the Barograph page.
+- **Menu rows fit the narrow menu**: Barograph and Anchor share one layout (button, hold-to-reset arrow, switch) with a slimmer arrow and padding so the full names fit; the chart key's bottom row spreads its six symbols evenly so "Landmark" is no longer cut off.
 
 ## 0.8.0 (2026-10-22)
 
