@@ -41,7 +41,7 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
 /*
  * Pieces of the side menu: small line icons drawn in code (no image files), a switch row with an icon and one word,
  * a large bordered button for the screens behind the menu (Boat, Celestial, Charts, About), and the chart key
- * (buoy colors and rings, marina, shallow water, track, route, celestial fix).
+ * (buoy colors and rings, marina, track, celestial fix, light, buoy/beacon, landmark).
  */
 
 /** The menu's icons, each drawn on a 24 x 24 grid. */
@@ -179,7 +179,7 @@ fun MenuButton(icon: MenuIcon, label: String, value: String? = null, onClick: ()
     }
 }
 
-/** Chart key: buoy fill (wind, kt), buoy ring (waves, ft), marina, shallow, track, route, celestial fix. */
+/** Chart key: buoy fill (wind, kt), buoy ring (waves, ft), marina, track, celestial fix, light, aid, landmark. */
 @Composable
 fun ChartKey() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -198,22 +198,22 @@ fun ChartKey() {
             KeySwatch("5+") { drawBuoy(KEY_WIND[1].second, RING_RED) }
             Text("ft", color = Mist, fontSize = 11.sp)
         }
-        // other marks on the chart
+        // other marks on the chart: marina, trip track, celestial fix, light, buoy/beacon, landmark
         Row(verticalAlignment = Alignment.CenterVertically) {
-            KeySwatch("Marina", 52.dp) { drawMarina() }
-            KeySwatch("<Min", 52.dp) {
-                drawRect(Color(0xFFD68C8C), Offset(size.width * 0.15f, size.height * 0.25f), Size(size.width * 0.7f, size.height * 0.5f))
-                drawLine(RING_RED, Offset(size.width * 0.15f, size.height * 0.75f), Offset(size.width * 0.85f, size.height * 0.75f), 2.dp.toPx())
-            }
-            KeySwatch("Track", 52.dp) {
+            KeySwatch("Marina", 48.dp) { drawMarina() }
+            KeySwatch("Track", 48.dp) {
                 for (i in 0 until 3) drawLine(Foam, Offset(size.width * (0.12f + i * 0.28f), size.height / 2),
                     Offset(size.width * (0.28f + i * 0.28f), size.height / 2), 2.dp.toPx(), StrokeCap.Round)
             }
-            KeySwatch("Route", 52.dp) {
-                drawCircle(SignalOrange, size.minDimension * 0.36f); drawCircle(KEY_INK, size.minDimension * 0.36f, style = Stroke(1.5.dp.toPx()))
-            }
-            KeySwatch("Fix", 52.dp) {
+            KeySwatch("Fix", 48.dp) {
                 drawCircle(FIX_PURPLE, size.minDimension * 0.34f, style = Stroke(2.dp.toPx())); drawCircle(FIX_PURPLE, size.minDimension * 0.08f)
+            }
+            KeySwatch("Light", 48.dp) { drawKeyFlare() }
+            KeySwatch("Aid", 48.dp) { drawKeyAid() }
+            KeySwatch("Landmark", 48.dp) {
+                drawCircle(Color.White, size.minDimension * 0.22f)
+                drawCircle(KEY_INK, size.minDimension * 0.22f, style = Stroke(1.dp.toPx()))
+                drawCircle(KEY_INK, size.minDimension * 0.07f)
             }
         }
     }
@@ -249,4 +249,32 @@ fun DrawScope.drawMarina() {
     drawLine(Navy, o(15f, 9.7f), o(15f, 24f), 2.6f * k, StrokeCap.Round)
     drawLine(Navy, o(10.5f, 12.5f), o(19.5f, 12.5f), 2.6f * k, StrokeCap.Round)
     drawArc(Navy, 20f, 140f, false, o(7.5f, 12f), Size(15f * k, 12.5f * k), style = st)
+}
+
+/** The red light flare as drawn on the chart (NavStyle): a teardrop from the light toward the lower right. */
+private fun DrawScope.drawKeyFlare() {
+    val k = size.minDimension / 24f
+    val start = Offset(5f * k, 5f * k)
+    val tx = 0.7071f; val ty = 0.7071f; val nx = -ty; val ny = tx
+    val len = 14f * k; val w = 3.2f * k
+    val ex = start.x + tx * len; val ey = start.y + ty * len
+    val path = Path().apply {
+        moveTo(start.x, start.y)
+        for (i in 0..12) {
+            val t = -Math.PI / 2 + Math.PI * i / 12
+            lineTo(ex + w * (kotlin.math.cos(t).toFloat() * tx + kotlin.math.sin(t).toFloat() * nx),
+                ey + w * (kotlin.math.cos(t).toFloat() * ty + kotlin.math.sin(t).toFloat() * ny))
+        }
+        close()
+    }
+    drawPath(path, Color(0xFFD62828)); drawPath(path, KEY_INK, style = Stroke(0.7f * k))
+}
+
+/** Red triangle and green square, the buoy and beacon shapes. */
+private fun DrawScope.drawKeyAid() {
+    val k = size.minDimension / 24f
+    val tri = Path().apply { moveTo(7f * k, 6f * k); lineTo(12f * k, 17f * k); lineTo(2f * k, 17f * k); close() }
+    drawPath(tri, Color(0xFFD62828)); drawPath(tri, KEY_INK, style = Stroke(0.8f * k))
+    drawRect(Color(0xFF1F9D3A), Offset(14f * k, 8f * k), Size(9f * k, 9f * k))
+    drawRect(KEY_INK, Offset(14f * k, 8f * k), Size(9f * k, 9f * k), style = Stroke(0.8f * k))
 }

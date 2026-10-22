@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val PREFS = "tcs"
-private const val APP_VERSION = "0.7.6"
+private const val APP_VERSION = "0.8.0"
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
 private const val HOUR_MS = 3_600_000L
 private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interval while online and the app is open
@@ -186,7 +186,8 @@ private fun online(context: Context): Boolean {
 /** What the info card shows after tapping a harbor or buoy. */
 private data class Info(val title: String, val lines: List<String>, val phone: String = "", val website: String = "",
                         val station: String? = null,          // set for buoys: live readings and graph are added
-                        val at: LatLng? = null)               // position of the tapped marker (blue ring while open)
+                        val at: LatLng? = null,               // position of the tapped marker (blue ring while open)
+                        val nav: NavInfo? = null)             // set for lights, buoys, beacons, landmarks
 
 @Composable
 private fun App() {
@@ -703,6 +704,9 @@ private fun App() {
             ChartMap(
                 visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, fix, avgSog, centerRequest, frame, layers, effRoute, calcResult, buoyFeatures, info?.at,
                 celPlot,
+                // animated lights: after sunset at the chart's position, or any time in night mode (zoom 13+, see NavLightGlow)
+                lightsAnimate = night || sunIsDown(fix?.let { it.lat to it.lon }
+                    ?: mapRef?.cameraPosition?.target?.let { it.latitude to it.longitude }, clock),
                 // tapping the celestial fix opens the workbook
                 onTap = { ll ->
                     if (tapsCelestialFix(mapRef, celPlot, ll, 28f * context.resources.displayMetrics.density)) { showCelestial = true; true } else false
@@ -1187,6 +1191,7 @@ private fun InfoCard(info: Info, modifier: Modifier, buoyObs: Map<String, BuoyOb
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(info.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Foam,
                 modifier = Modifier.padding(end = 36.dp))          // room for the close icon
+            info.nav?.let { NavCardBody(it) }
             for (l in info.lines) Text(l, color = Mist, fontSize = 14.sp)
             info.station?.let { st ->
                 for (l in buoyLines(st, buoyObs[st], nowMs)) Text(l, color = Mist, fontSize = 14.sp)
@@ -1219,6 +1224,18 @@ private fun InfoCard(info: Info, modifier: Modifier, buoyObs: Map<String, BuoyOb
     }
 }
 
+/** True from sunset to sunrise (today's times, worked out once a day) at `pos`; false when unknown. */
+private fun sunIsDown(pos: Pair<Double, Double>?, nowMs: Long): Boolean {
+    val p = pos ?: return false
+    val d = SunMoon.today(p.first, p.second, nowMs)
+    val rise = d.sunriseMs; val set = d.sunsetMs
+    return when {
+        rise != null && nowMs < rise -> true
+        set != null && nowMs >= set -> true
+        else -> false
+    }
+}
+
 /** Read a feature property as text ("" when missing). */
 private fun Feature.text(key: String): String =
     runCatching { getProperty(key)?.takeIf { !it.isJsonNull }?.asString ?: "" }.getOrDefault("").trim()
@@ -1232,7 +1249,10 @@ private fun kindLabel(k: String) = when (k.lowercase()) {
 
 /** Turn a tapped map feature into card content. */
 private fun toInfo(f: Feature, layerId: String): Info =
-    if (layerId == BUOY_LAYER) {
+    if (NavAids.isNavLayer(layerId)) {
+        val (title, nav) = NavAids.card(f, layerId)
+        Info(title = title, lines = emptyList(), at = f.position(), nav = nav)
+    } else if (layerId == BUOY_LAYER) {
         val id = f.text("station")
         Info(
             title = f.text("name").ifEmpty { "Station $id" },
@@ -1255,7 +1275,7 @@ private fun toInfo(f: Feature, layerId: String): Info =
 @Composable
 private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, track: List<GeoPt>, trackText: String?, trackLive: Boolean, fix: BoatFix?, avgSog: Double?, centerRequest: Int,
                      frame: WxFrame?, layers: WxLayers, routePts: List<GeoPt>, calc: RouteResult?,
-                     buoys: FeatureCollection, selected: LatLng?, celestial: CelestialPlot?,
+                     buoys: FeatureCollection, selected: LatLng?, celestial: CelestialPlot?, lightsAnimate: Boolean,
                      onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit,
                      onMap: (MapLibreMap) -> Unit, onMovePoint: (Int, GeoPt) -> Unit, onSnapStart: () -> Unit) {
     val context = LocalContext.current
@@ -1394,8 +1414,10 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
     LaunchedEffect(map, lakes, night, depthLimitFt) {
         val m = map ?: return@LaunchedEffect
         val marina = ChartStyle.marinaBitmap(context.resources.displayMetrics.density)
-        m.setStyle(Style.Builder().fromJson(ChartStyle.build(lakes, night, depthLimitFt))
-            .withImage(ChartStyle.MARINA_ICON, marina)) { s -> style = s; tick++ }
+        val builder = Style.Builder().fromJson(ChartStyle.build(lakes, night, depthLimitFt))
+            .withImage(ChartStyle.MARINA_ICON, marina)
+        for ((name, bmp) in NavStyle.navImages(context.resources.displayMetrics.density)) builder.withImage(name, bmp)
+        m.setStyle(builder) { s -> style = s; tick++ }
     }
 
     // Center on the first fix, and whenever the center button is pressed: boat centered, north up, default zoom
@@ -1453,6 +1475,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         WeatherOverlay(map, tick, idleTick, frame, layers)
+        NavLightGlow(map, tick, idleTick, lightsAnimate, remember(lakes) { lakes.flatMap { NavStyle.lightLayers("lake_${it.id}") } })
         RouteOverlay(map, tick, routePts, calc, night)
         TrackOverlay(map, tick, track, if (trackLive) fix else null, trackText, night)
         CelestialOverlay(map, tick, celestial, night)

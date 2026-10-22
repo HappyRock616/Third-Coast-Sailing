@@ -13,8 +13,8 @@ android {
         applicationId = "com.thirdcoastsailing.app"
         minSdk = 34                       // Android 14 and newer
         targetSdk = 37
-        versionCode = 13
-        versionName = "0.7.6"
+        versionCode = 14
+        versionName = "0.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

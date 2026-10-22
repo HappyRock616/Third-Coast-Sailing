@@ -66,10 +66,13 @@ object ChartStyle {
         // land layers (weather color field) show on water only, whichever lakes are loaded
         for (lake in lakes) addWaterLayers(layers, "lake_${lake.id}", p, limitM)
         for (lake in lakes) addLakeLayers(layers, "lake_${lake.id}", p, limitM)
+        // Navigation aids and names last, over every lake's land and water (labels never hide under a neighbor lake)
+        for (lake in lakes) NavStyle.addLayers(layers, "lake_${lake.id}", night)
 
         return JSONObject()
             .put("version", 8)
             .put("name", "Third Coast Sailing")
+            .put("glyphs", NavStyle.GLYPHS)
             .put("sources", sources)
             .put("layers", layers)
             .toString()
@@ -109,7 +112,8 @@ object ChartStyle {
 
     /** Layer ids that open an info card when tapped. */
     fun tapLayers(lakes: List<Lake>): Array<String> =
-        (listOf(BUOY_LAYER) + lakes.map { "lake_${it.id}_harbor" }).toTypedArray()
+        (listOf(BUOY_LAYER) + lakes.flatMap { NavStyle.tapLayers("lake_${it.id}") } + lakes.map { "lake_${it.id}_harbor" })
+            .toTypedArray()
 
     /**
      * Fill color by depth: red-tinted where the area's shallow edge is above the minimum depth,

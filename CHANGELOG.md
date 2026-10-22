@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.0 (not yet released)
+
+Needs the 1.4 charts (download them again from the menu → Charts). With older charts the app works as before, without the new marks.
+
+### Added
+- **Lights, buoys, beacons, landmarks and names on the chart**, from the NOAA charts. What shows depends on the zoom, most important first:
+  - **Zoom 9 and out**: town names; major lights (seen 10 nm or more) as flares.
+  - **Zoom 10–11**: harbor entrance lights (5 nm or more); the major light's pattern ("Al Fl W R 10s"); conspicuous landmarks (TOWER, R TOWER, STACK, TANK); NOAA course lines with their bearing; lake and bay names.
+  - **Zoom 12**: every light with its pattern; red and green buoys and beacons; Coast Guard stations; park names; lighthouse names.
+  - **Zoom 13**: buoy and beacon numbers.
+  - **Zoom 14 and in**: full light text with height and range ("Fl G 6s 27ft 6M"); fog signals ("HORN (MRASS)"); flagpoles and minor landmarks.
+  - Labels that would overlap are left out, keeping the most important.
+- **Symbols**: a flare in the light's color (white drawn yellow, two-color lights split), bigger with a tower ring for lighthouses; red triangles and green squares for buoys, the same on a short post for beacons; yellow or white diamonds for special and safe-water marks; a ring with a dot for landmarks; magenta arcs for fog signals; a navy CG badge. None of them is round, so they never look like the weather-buoy or hazard dots.
+- **Tap any of them for a card**: name, type, the pattern with a lamp that blinks it, the pattern in plain words ("White and red, alternating, every 5 s"), height and range, the fog signal, a yellow ⚠ note such as "Not visible westward", and a strip that plays the flash timing.
+- **Animated lights**: from zoom 13, after sunset (or any time in night mode), each light flashes in its own color and pattern, using NOAA's timing where the chart has it. Flashes shorter than 0.3 s are stretched so they can be seen; the period is exact. Not in step with the real lights.
+- **Chart key**: the bottom row is now Marina, Track, Fix, Light, Aid, Landmark.
+
+### Changed
+- Chart labels use Roboto, the app's own font, bundled so they work offline.
+
 ## 0.7.6 (not yet released)
 
 ### Added

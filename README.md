@@ -126,6 +126,8 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 - 📥 NOAA electronic charts for all five lakes and connected inland lakes, stored on the phone.
 - 🟥 Depth shading and hazards, with water shallower than your boat's minimum depth shaded red.
+- 🚨 Lights, buoys, beacons, landmarks and place names, shown by importance as you zoom in. Tap any of them for its details.
+- ✨ After sunset, the lights flash on the chart in their real colors and patterns.
 
 ## 📲 Getting the app
 
@@ -152,6 +154,7 @@ Requirements: Android 14 (API 34) or newer. The build fails on purpose if any Go
 | Buoy observations | NOAA National Data Buoy Center | Public domain |
 | Marinas, clubs, docks, anchorages | © OpenStreetMap contributors | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) |
 | Map engine | [MapLibre Native](https://maplibre.org) | BSD 2-Clause |
+| Chart label font | Roboto by Google (glyph files from [OpenMapTiles fonts](https://github.com/openmaptiles/fonts)) | Apache License 2.0 |
 | Almanac calculations (celestial trainer) | [Astronomy Engine](https://github.com/cosinekitty/astronomy) by Don Cross | MIT |
 | Star positions (celestial trainer) | Yale Bright Star Catalogue, 5th ed. | Public domain |
 | Constellation figures and names | [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn | BSD 3-Clause |
