@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Changed
-- **Barograph menu button** matches the Anchor button: same size, the full name "Barograph", and a new icon (a small analog barograph: chart drum, pen arm, aneroid stack). The pressure reading is no longer shown on the button; it's on the Barograph page.
+- **Barograph menu button** matches the Anchor button: same size, the full name "Barograph", and a new icon (a small analog barograph: chart drum with a red pressure trace, pen arm, aneroid stack). The pressure reading is no longer shown on the button; it's on the Barograph page.
 
 ## 0.8.0 (2026-10-22)
 

@@ -129,9 +129,10 @@ private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
             drawLine(Foam, o(1.5f, 21.5f), o(22.5f, 21.5f), w, StrokeCap.Round)                   // base
             drawRoundRect(Foam, o(3f, 5f), Size(9f * k, 14f * k), CornerRadius(2f * k), style = Stroke(1.8f * k))   // drum
             drawLine(Foam, o(3.5f, 8f), o(11.5f, 8f), 1f * k)                                     // drum top rim
-            drawPath(Path().apply {                                                               // pen trace on the chart
-                moveTo(4.5f * k, 14f * k); lineTo(6f * k, 13f * k); lineTo(7.5f * k, 14.5f * k); lineTo(9f * k, 12.5f * k); lineTo(10.5f * k, 13f * k)
-            }, SignalOrange, style = Stroke(1.2f * k, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            drawPath(Path().apply {                                                               // red pressure trace across the chart, ending at the pen
+                moveTo(4.3f * k, 11.5f * k); lineTo(5.4f * k, 12.6f * k); lineTo(6.3f * k, 12f * k); lineTo(7.2f * k, 14.8f * k)
+                lineTo(8.1f * k, 16f * k); lineTo(9f * k, 14f * k); lineTo(9.8f * k, 13.4f * k); lineTo(10.5f * k, 13f * k)
+            }, RING_RED, style = Stroke(1.2f * k, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
             for (i in 0 until 4) {                                                                // aneroid stack
                 val y = 12.5f + i * 2.2f
                 drawRoundRect(Foam, o(14.5f, y), Size(6f * k, 1.5f * k), CornerRadius(0.75f * k))
