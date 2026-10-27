@@ -37,7 +37,9 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 ### ⭐ Interactive star finder with instructions
 
-<!-- screenshot -->
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_star_finder.png" width="220" alt="3D star finder with the boat and named stars">
+</p>
 
 - 📱 A 3D sky that turns with your phone. Hold it up and the stars on screen line up with the stars overhead.
 - ✨ Every star is shown, the named navigation stars are labeled, and the constellation lines help you learn to recognize them by eye.
@@ -75,7 +77,9 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 ### 🛤️ Weather routing
 
-<!-- screenshot -->
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_weather_routing.png" width="220" alt="Weather-optimized route over the wave forecast">
+</p>
 
 - 📍 Drop pins anywhere: a green start, numbered waypoints and a 🏁 finish, with each leg's distance and magnetic bearing. Plan "what if" passages far from where you are, or snap the start onto the boat to get VMG and ETA as you sail.
 - 🧠 Calculate a weather-optimized route using isochrones, your boat's polar, a cruise factor, a tack penalty and your minimum depth, departing at the time on the forecast slider.
@@ -84,7 +88,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 🌊 Wave and wind forecast overlays
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_waves_barbs.png" width="220" alt="Wind barbs and animated wave crests with forecast slider">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_wind_waves.png" width="220" alt="Wind barbs and animated wave crests with forecast slider">
 </p>
 
 - 💨 Wind speed and gusts as a color field over the water, plus wind barbs.
@@ -95,7 +99,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 📟 Sailing instrument from GPS and the wind forecast
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_wind_gauge.png" width="220" alt="Wind field and wind gauge with polar">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_sailing_gauge.png" width="220" alt="Heading-up wind gauge with polar">
 </p>
 
 - 🧭 A heading-up wind gauge built from your GPS course and speed and the forecast wind at your position.
@@ -106,7 +110,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 🛟 Live buoy data on the chart with history graphs
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_live_buoy.png" width="220" alt="Live NOAA buoy report with 24-hour graph">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_live_buoy.png" width="220" alt="Live NOAA buoy report with 24-hour graph">
 </p>
 
 - 🎨 NOAA NDBC stations colored by wind speed and ringed for waves over 3 ft or 5 ft.
@@ -116,7 +120,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 🏝️ Marina locations and contact information
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_harbor.png" width="220" alt="Marina details with call and website buttons">
+  <img src="docs/screenshots_old/4_harbor.png" width="220" alt="Marina details with call and website buttons">
 </p>
 
 - ⚓ Marinas, yacht clubs, docks and anchorages marked on the chart.

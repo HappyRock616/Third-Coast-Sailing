@@ -1,0 +1,40 @@
+Third Coast Sailing puts the Great Lakes on your phone: NOAA charts, wind and wave forecasts, live buoys, weather routing and a celestial navigation trainer. Free and open source, with no ads, no accounts, no tracking and no Google Play Services.
+
+WEATHER ROUTING
+• Drop a start, waypoints and a finish, with each leg's distance and magnetic bearing
+• Calculate a weather-optimized route from your boat's polar, the forecast wind, a tack penalty and your minimum depth
+• Warns where your route or heading crosses water shallower than your depth limit
+
+WIND AND WAVE FORECASTS
+• Wind speed, gusts and barbs over the water, with animated wave crests showing height and direction
+• A 48-hour forecast slider, with data straight from NOAA
+
+SAILING GAUGE
+• Heading-up wind gauge built from your GPS and the forecast wind, with your boat's polar
+• Course line with 1, 2 and 3-hour marks, plus a GPS track
+• No wind instrument needed
+
+LIVE BUOYS
+• NOAA buoys colored by wind speed and ringed for big waves
+• Tap one for the latest report and 24-hour graphs
+
+CELESTIAL NAVIGATION TRAINER (works anywhere)
+• A 3D star finder that turns with your phone
+• Sight planning, step-by-step sextant instructions, and a workbook that reduces your sights
+• Almanac tables, plus lines of position and the fix plotted on the chart
+• Beginner, intermediate and advanced levels
+
+OFFLINE NOAA CHARTS
+• All five lakes stored on the phone, with depth shading and hazards
+• Lights, buoys, beacons and landmarks you can tap for details; after sunset the lights flash in their real colors and patterns
+
+SAFETY AND MORE
+• Man overboard with a drift search area
+• Anchor alarm that runs all night with the screen off
+• Barograph with pressure-trend warnings
+• Marinas with call and website buttons
+• Sunrise, sunset and moon phase
+
+Charts, weather and buoys cover the Great Lakes and connected inland lakes only. Requires Android 14 or newer.
+
+Not for navigation. Official NOAA charts and notices govern.
