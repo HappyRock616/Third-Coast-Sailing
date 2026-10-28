@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -158,12 +159,14 @@ private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
 
 /** Menu switch: icon, one word, switch. */
 @Composable
-fun IconSwitchRow(icon: MenuIcon, label: String, value: Boolean, onChange: (Boolean) -> Unit, extra: @Composable () -> Unit = {}) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+fun IconSwitchRow(icon: MenuIcon, label: String, value: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true,
+                  extra: @Composable () -> Unit = {}) {
+    // greyed out (enabled = false): the row fades and the switch can't be changed
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(48.dp).alpha(if (enabled) 1f else 0.38f)) {
         MenuIconView(icon)
         Text(label, color = Foam, fontSize = 17.sp, modifier = Modifier.padding(start = 14.dp).weight(1f))
         extra()
-        Switch(checked = value, onCheckedChange = onChange,
+        Switch(checked = value, onCheckedChange = onChange, enabled = enabled,
             colors = SwitchDefaults.colors(checkedTrackColor = SignalOrange, checkedThumbColor = Foam,
                 uncheckedTrackColor = NavyLight, uncheckedThumbColor = Mist, uncheckedBorderColor = NavyLight))
     }

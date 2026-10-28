@@ -52,6 +52,7 @@ data class GaugeData(
     val twdDeg: Double?,          // forecast true wind direction (from)
     val twsKn: Double?,           // forecast true wind speed
     val polar: Polar?,            // active boat polar
+    val outside: Boolean = false, // phone outside the Great Lakes: wind, polar target and depth greyed out
 )
 
 private const val NO_GO_DEG = 30f          // red/green arcs either side of the bow
@@ -159,9 +160,10 @@ private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
         }
         path.close()
         val faded = tws == null
-        drawPath(path, GPolar.copy(alpha = if (faded) 0.08f else 0.18f))
+        val pc = if (d.outside) GMist else GPolar                  // outside the region: grey, no forecast to drive it
+        drawPath(path, pc.copy(alpha = if (faded) 0.08f else 0.18f))
         drawPath(path, GNavy, style = Stroke(6f * k, join = StrokeJoin.Round))
-        drawPath(path, GPolar.copy(alpha = if (faded) 0.45f else 1f), style = Stroke(3f * k, join = StrokeJoin.Round))
+        drawPath(path, pc.copy(alpha = if (faded) 0.45f else 1f), style = Stroke(3f * k, join = StrokeJoin.Round))
 
         // where the wind line meets the polar = where you are on it
         if (windScreen != null && tws != null) {
@@ -233,9 +235,10 @@ private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
     text("kt", Offset(c.x + 56f * k, c.y + 26f * k), 24f, GMist)
 
     val dTL = Offset(c.x - 40f * k, bottom + 8f * k)
-    drawRoundRect(GBlue, dTL, Size(80f * k, 32f * k), androidx.compose.ui.geometry.CornerRadius(6f * k))
+    drawRoundRect(if (d.outside) GMist.copy(alpha = 0.55f) else GBlue, dTL, Size(80f * k, 32f * k),
+        androidx.compose.ui.geometry.CornerRadius(6f * k))                      // grey outside: no chart depths there
     drawRoundRect(GFoam, dTL, Size(80f * k, 32f * k), androidx.compose.ui.geometry.CornerRadius(6f * k), style = Stroke(1.5f * k))
     text(d.depthFt?.let { if (it < 6) "<6 ft" else "%.0f ft".format(it) } ?: "— ft", Offset(c.x, bottom + 24f * k), 18f, GFoam)
 
-    if (d.twdDeg == null) text("no wind forecast yet", Offset(c.x, c.y + rIn - 40f * k), 14f, GMist, bold = false)
+    if (d.twdDeg == null && !d.outside) text("no wind forecast yet", Offset(c.x, c.y + rIn - 40f * k), 14f, GMist, bold = false)
 }

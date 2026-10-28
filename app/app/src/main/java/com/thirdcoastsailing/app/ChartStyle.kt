@@ -21,7 +21,7 @@ object ChartStyle {
     )
 
     private val DAY = Palette(
-        background = "#E9DDBF", land = "#E9DDBF", coast = "#6E6048",
+        background = "#D9DCDF", land = "#E9DDBF", coast = "#6E6048",   // light grey where there is no chart
         water = listOf("#E3F0FA", "#CCE2F4", "#B4D3EC", "#98C1E3", "#7DAFD9"),
         tooShallow = "#F2C4C0",
         contour = "#5B8DB8", structure = "#4A4A4A",
@@ -29,7 +29,7 @@ object ChartStyle {
     )
 
     private val NIGHT = Palette(
-        background = "#2A2D31", land = "#2A2D31", coast = "#8A8F96",
+        background = "#45494F", land = "#2A2D31", coast = "#8A8F96",   // grey where there is no chart
         water = listOf("#2E4B63", "#24405A", "#1C3650", "#152C45", "#10233A"),
         tooShallow = "#5C2E36",
         contour = "#4D7EA8", structure = "#B0B4B8",

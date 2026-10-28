@@ -48,6 +48,9 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
 
 const val SOURCE_URL = "https://github.com/HappyRock616/Third-Coast-Sailing"
 
+/** Privacy policy page (also linked from the Play store listing). */
+const val PRIVACY_URL = "$SOURCE_URL/blob/main/PRIVACY.md"
+
 /** What "Third Coast" means, and that the app isn't affiliated with anyone. */
 const val NAME_ORIGIN =
     "\"Third Coast\" is a common name for the Great Lakes and their shoreline. Third Coast Sailing is an " +
@@ -109,6 +112,12 @@ fun AboutScreen(version: String, onClose: () -> Unit) {
                     "the GNU Affero General Public License v3.0.", color = Mist, fontSize = 13.sp)
                 Text("Source code ›", color = SignalOrange, fontSize = 14.sp,
                     modifier = Modifier.padding(top = 4.dp).clickable { open(SOURCE_URL) })
+            }
+            Section("Privacy") {
+                Text("Nothing is collected. Your location, tracks and logs stay on this phone; the app only downloads " +
+                    "charts and NOAA weather and buoy data.", color = Mist, fontSize = 13.sp)
+                Text("Privacy policy ›", color = SignalOrange, fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 4.dp).clickable { open(PRIVACY_URL) })
             }
             Section("Data and credits") {
                 for ((what, who, terms, url) in CREDITS) Column(Modifier.padding(vertical = 4.dp)

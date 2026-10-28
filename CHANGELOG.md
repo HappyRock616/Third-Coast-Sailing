@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.2 (unreleased)
+
+### Added
+- **Great Lakes only, clearly**: the chart stays on the Great Lakes (it can't be panned or zoomed away from them). When the phone is outside the region, the chart shows Michigan with a large Third Coast logo over the Lower Peninsula instead of a boat on an empty map, and the center-on-boat button and boat marker are hidden.
+- **Privacy policy** link on the About screen (also on the store listing).
+
+### Changed
+- Outside the region, features that depend on the charts or forecasts at the boat are greyed out: the Track switch, snapping a route start to the boat (with VMG and ETA), the crash warning on the current heading, the gauge's wind, polar target and depth, and the barograph's nearest-buoy comparison. Course, speed and heading on the gauge stay live, and routes can still be planned on the lakes.
+- MOB and the anchor alarm keep working anywhere. While either is on outside the region, the chart may leave the lakes and centers on the boat.
+- Where there is no chart, the background is now plain grey instead of land color, so the app never suggests land or water it hasn't charted. Lakes not downloaded and some areas beyond the chart edges show grey too.
+
 ## 0.8.1 (2026-10-27)
 
 ### Changed

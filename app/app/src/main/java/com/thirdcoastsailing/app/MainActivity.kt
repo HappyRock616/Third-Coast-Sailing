@@ -306,6 +306,13 @@ private fun App() {
         onDispose { lifecycle.removeObserver(obs); if (hasLocation) gps.stop() }
     }
 
+    // ---- region: outside the Great Lakes the chart stays on the lakes with the logo over Michigan, and everything
+    // worked out from the boat's position on the charts or forecasts is greyed out (see GreatLakes). MOB and the
+    // anchor alarm keep working anywhere; while either is on, the chart may follow the boat outside the region.
+    val outside = GreatLakes.outside(fix)
+    val safetyOn = MobWatch.state.active || AnchorWatch.state.armed
+    val navFix = if (outside) null else fix                     // the fix for chart, forecast and route features
+
     fun savePrefs() {
         prefs.edit().putBoolean("night", night).putBoolean("offline", offline).putStringSet("hidden", hidden).apply()
     }
@@ -314,14 +321,14 @@ private fun App() {
     val currentLakes by rememberUpdatedState(visibleLakes)
     val depthLookup = remember { DepthLookup { currentLakes } }
     DisposableEffect(Unit) { onDispose { depthLookup.close() } }
-    LaunchedEffect(fix) {
-        val f = fix ?: return@LaunchedEffect
+    LaunchedEffect(navFix) {
+        val f = navFix ?: run { depthFt = null; return@LaunchedEffect }
         depthFt = withContext(Dispatchers.IO) { runCatching { depthLookup.depthFt(f.lat, f.lon) }.getOrNull() }
     }
     // Crash warning: red broken-boat mark on the first too-shallow water ahead (current heading) and on the route
     val courseAvg = remember { CourseAverager() }
     LaunchedEffect(fix) { fix?.let { courseAvg.add(it) } }
-    val latestFix by rememberUpdatedState(fix)
+    val latestFix by rememberUpdatedState(navFix)
     val latestLimit by rememberUpdatedState(depthLimitFt)
     LaunchedEffect(Unit) {
         while (true) {                                          // every 20 s, to save power; it stops at the first hit
@@ -333,7 +340,7 @@ private fun App() {
         }
     }
     // the route as sailed: the start pin replaced by the boat's position while it is snapped to the boat
-    val boatPt = fix?.let { GeoPt(it.lat, it.lon) }
+    val boatPt = navFix?.let { GeoPt(it.lat, it.lon) }
     val effRoute = if (startOnBoat && boatPt != null && routePts.isNotEmpty()) listOf(boatPt) + routePts.drop(1) else routePts
     // only the route itself is checked (start pin onward), never the boat's way to the start: routes can be planned
     // anywhere. Rechecked when the route or limit changes, or a snapped start has moved about 100 m with the boat.
@@ -507,9 +514,10 @@ private fun App() {
         }
     }
     LaunchedEffect(fix, tripOn) {
-        if (!tripOn) return@LaunchedEffect
+        if (!tripOn || outside) return@LaunchedEffect
         // first any 5-minute fixes taken while the app was in the background (oldest first), then the live one
-        BackgroundTrack.drain().sortedBy { it.time }.forEach { recordFix(it) }
+        // (fixes taken outside the Great Lakes are dropped: the track only covers charted water)
+        BackgroundTrack.drain().filter { GreatLakes.contains(it.lat, it.lon) }.sortedBy { it.time }.forEach { recordFix(it) }
         fix?.let { recordFix(it) }
     }
     // Background sampling runs only while the trip track records; stop it if the app's screen goes away
@@ -604,8 +612,8 @@ private fun App() {
         else withContext(Dispatchers.IO) { runCatching { WxFrame.load(weather, layers, forecastMs) }.getOrNull() }
     }
     // Forecast wind at the boat, now, for the gauge
-    LaunchedEffect(fix?.lat?.let { (it * 100).roundToInt() }, fix?.lon?.let { (it * 100).roundToInt() }, wxVersion, clock / HOUR_MS) {
-        val f = fix ?: return@LaunchedEffect
+    LaunchedEffect(navFix?.lat?.let { (it * 100).roundToInt() }, navFix?.lon?.let { (it * 100).roundToInt() }, wxVersion, clock / HOUR_MS) {
+        val f = navFix ?: run { forecastWind = null; return@LaunchedEffect }
         forecastWind = withContext(Dispatchers.IO) { runCatching { weather.wind(System.currentTimeMillis(), f.lat, f.lon) }.getOrNull() }
     }
 
@@ -666,7 +674,7 @@ private fun App() {
                 onNight = { night = it; savePrefs() },
                 onOffline = { offline = it; savePrefs() },
                 gaugeOn = gaugeOn,
-                tripOn = tripOn, hasTrack = trackPts.isNotEmpty(),
+                tripOn = tripOn, hasTrack = trackPts.isNotEmpty(), trackEnabled = !outside,
                 onTrip = { on ->
                     val now = System.currentTimeMillis()
                     if (on) {
@@ -702,7 +710,7 @@ private fun App() {
     ) {
         Box(Modifier.fillMaxSize()) {
             ChartMap(
-                visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, fix, avgSog, centerRequest, frame, layers, effRoute, calcResult, buoyFeatures, info?.at,
+                visibleLakes, night, depthLimitFt, trackPts, tripText, tripOn, if (outside && !safetyOn) null else fix, avgSog, centerRequest, frame, layers, effRoute, calcResult, buoyFeatures, info?.at,
                 celPlot,
                 // animated lights: after sunset at the chart's position, or any time in night mode (zoom 13+, see NavLightGlow)
                 lightsAnimate = night || sunIsDown(fix?.let { it.lat to it.lon }
@@ -715,6 +723,7 @@ private fun App() {
                 onMap = { mapRef = it },
                 onMovePoint = { i, p -> movePoint(i, p) },
                 onSnapStart = { snapStartToBoat() },
+                outside = outside, safetyOn = safetyOn,
             )
 
             // Right edge: add route point (+), center on boat, remove last route point (−)
@@ -724,7 +733,8 @@ private fun App() {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 RoundButton("+", armed = false, enabled = routePts.size < MAX_ROUTE_POINTS) { addRoutePoint() }
-                Box(
+                // center on the boat: hidden while outside the region, unless MOB or the anchor alarm is on
+                if (!outside || safetyOn) Box(
                     Modifier.size(52.dp).shadow(6.dp, CircleShape).clip(CircleShape).background(Navy)
                         .border(2.dp, SignalOrange, CircleShape).clickable { centerRequest++ },
                     contentAlignment = Alignment.Center
@@ -782,6 +792,7 @@ private fun App() {
                     headingDeg = fix?.cogDeg?.toDouble(), sogKn = fix?.sogKn?.toDouble(),
                     depthFt = depthFt, twdDeg = forecastWind?.second, twsKn = forecastWind?.first,   // forecast wind at the boat, now
                     polar = activePolar,
+                    outside = outside,                          // wind, polar target and depth greyed out
                 ),
                 offset = gaugeOffset, scale = gaugeScale,
                 onTransform = { pan, zoom ->
@@ -834,10 +845,10 @@ private fun App() {
 
     // Barograph page; the nearest NOAA station reporting pressure (in the last 3 h) gives the cross-check dots
     if (showBaro) {
-        val near = remember(buoyObs, buoyStations, fix?.lat?.roundToInt(), fix?.lon?.roundToInt()) {
+        val near = remember(buoyObs, buoyStations, fix?.lat?.roundToInt(), fix?.lon?.roundToInt(), outside) {
             val at = fix?.let { GeoPt(it.lat, it.lon) } ?: mapRef?.cameraPosition?.target?.let { GeoPt(it.latitude, it.longitude) }
             val now = System.currentTimeMillis()
-            if (at == null) null else buoyStations.filter { st ->
+            if (at == null || outside) null else buoyStations.filter { st ->
                 buoyObs[st.id.uppercase()]?.let { it.presHpa != null && now - it.timeMs < 3 * 3_600_000L } == true
             }.minByOrNull { distNm(at, GeoPt(it.lat, it.lon)) }
         }
@@ -1001,7 +1012,7 @@ private fun MenuSheet(
     onBaroOpen: () -> Unit, onBaroToggle: (Boolean) -> Unit,
     onNight: (Boolean) -> Unit, onOffline: (Boolean) -> Unit,
     gaugeOn: Boolean, onGauge: (Boolean) -> Unit,
-    tripOn: Boolean, hasTrack: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
+    tripOn: Boolean, hasTrack: Boolean, trackEnabled: Boolean, onTrip: (Boolean) -> Unit, onTripReset: () -> Unit,
     wxColor: String, wxBarbs: Boolean, wxWaves: Boolean,
     onWxColor: (String) -> Unit, onWxBarbs: (Boolean) -> Unit, onWxWaves: (Boolean) -> Unit,
     gps: GpsInfo, skyPos: Pair<Double, Double>?, nowMs: Long, onGpsPermission: () -> Unit, onLocationSettings: () -> Unit,
@@ -1056,8 +1067,9 @@ private fun MenuSheet(
             }
 
             // Trip track: the switch starts/stops recording; the reset arrow (shown once there is a track) clears it when held
-            IconSwitchRow(MenuIcon.TRACK, "Track", tripOn, onTrip) {
-                if (hasTrack) HoldToResetArrow(onReset = onTripReset)        // hold 1.2 s to clear
+            // greyed out outside the Great Lakes: the track can't be shown on a chart there
+            IconSwitchRow(MenuIcon.TRACK, "Track", tripOn, onTrip, enabled = trackEnabled) {
+                if (hasTrack && trackEnabled) HoldToResetArrow(onReset = onTripReset)        // hold 1.2 s to clear
             }
 
             MenuDivider()
@@ -1277,7 +1289,8 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
                      frame: WxFrame?, layers: WxLayers, routePts: List<GeoPt>, calc: RouteResult?,
                      buoys: FeatureCollection, selected: LatLng?, celestial: CelestialPlot?, lightsAnimate: Boolean,
                      onTap: (LatLng) -> Boolean, onInfo: (Info?) -> Unit,
-                     onMap: (MapLibreMap) -> Unit, onMovePoint: (Int, GeoPt) -> Unit, onSnapStart: () -> Unit) {
+                     onMap: (MapLibreMap) -> Unit, onMovePoint: (Int, GeoPt) -> Unit, onSnapStart: () -> Unit,
+                     outside: Boolean, safetyOn: Boolean) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context).apply { onCreate(null) } }
@@ -1309,14 +1322,15 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
     LaunchedEffect(Unit) {
         mapView.getMapAsync { m ->
             m.setMaxZoomPreference(MAX_ZOOM)
-            m.setMinZoomPreference(4.0)
+            m.setMinZoomPreference(GreatLakes.MIN_ZOOM)
+            m.setLatLngBoundsForCameraTarget(GreatLakes.bounds)       // the chart stays on the Great Lakes
             m.uiSettings.isCompassEnabled = true
             // north always up: no two-finger rotate or tilt (the screen can still turn to landscape)
             m.uiSettings.isRotateGesturesEnabled = false
             m.uiSettings.isTiltGesturesEnabled = false
             m.uiSettings.isAttributionEnabled = false
             m.uiSettings.isLogoEnabled = false
-            m.cameraPosition = CameraPosition.Builder().target(LatLng(44.5, -84.5)).zoom(5.0).build()
+            m.cameraPosition = GreatLakes.HOME
             m.addOnCameraMoveListener { tick++ }
             m.addOnCameraIdleListener { tick++; idleTick++ }
             // Tap: look for a harbor or buoy within a finger's width
@@ -1420,7 +1434,8 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         m.setStyle(builder) { s -> style = s; tick++ }
     }
 
-    // Center on the first fix, and whenever the center button is pressed: boat centered, north up, default zoom
+    // Center on the first fix, and whenever the center button is pressed: boat centered, north up, default zoom.
+    // (Outside the region the boat isn't passed in unless MOB or the anchor alarm is on, so the view stays on Michigan.)
     LaunchedEffect(map, fix != null, centerRequest) {
         val f = fix ?: return@LaunchedEffect
         val m = map ?: return@LaunchedEffect
@@ -1428,6 +1443,32 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         m.animateCamera(CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(LatLng(f.lat, f.lon)).zoom(12.0).bearing(0.0).tilt(0.0).build()))
         centered = true
+    }
+
+    // Pan limit: on the Great Lakes, except while MOB or the anchor alarm is on outside the region, when the chart
+    // follows the boat over the grey "no chart" background. When that ends the view goes back to the lakes.
+    val lifted = outside && safetyOn
+    var wasLifted by remember { mutableStateOf(false) }
+    LaunchedEffect(map, lifted) {
+        val m = map ?: return@LaunchedEffect
+        if (lifted) {
+            m.setLatLngBoundsForCameraTarget(null)
+            fix?.let { f -> m.animateCamera(CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder().target(LatLng(f.lat, f.lon)).zoom(12.0).bearing(0.0).tilt(0.0).build())) }
+        } else {
+            m.setLatLngBoundsForCameraTarget(GreatLakes.bounds)
+            // back from outside: on the boat if it is now inside the region, otherwise the Michigan view
+            val f = fix
+            if (wasLifted) m.animateCamera(CameraUpdateFactory.newCameraPosition(
+                if (!outside && f != null) CameraPosition.Builder().target(LatLng(f.lat, f.lon)).zoom(12.0).bearing(0.0).tilt(0.0).build()
+                else GreatLakes.HOME))
+        }
+        wasLifted = lifted
+    }
+    // Phone outside the region (no MOB or anchor): back to the Michigan view
+    LaunchedEffect(map, outside && !safetyOn) {
+        val m = map ?: return@LaunchedEffect
+        if (outside && !safetyOn) m.animateCamera(CameraUpdateFactory.newCameraPosition(GreatLakes.HOME))
     }
 
     // Wind / gust color field as a map image layer under the land, so it moves with the chart and tints water only
@@ -1484,6 +1525,7 @@ private fun ChartMap(lakes: List<Lake>, night: Boolean, depthLimitFt: Double, tr
         CrashOverlay(map, tick)
         SelectionRing(map, tick, selected)
         BoatOverlay(map, fix, avgSog, tick)
+        if (outside && !safetyOn) RegionLogo(map, tick)           // outside the Great Lakes: the logo over Michigan
     }
 }
 
