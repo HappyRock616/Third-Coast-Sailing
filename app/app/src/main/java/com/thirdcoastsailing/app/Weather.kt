@@ -19,6 +19,11 @@ enum class Wx { WIND_SPEED, WIND_DIR, GUST, WAVE_HEIGHT, WAVE_DIR, WAVE_PERIOD }
  *  - waves: NOAA GLWU Great Lakes wave model via the NOMADS filter, trimmed to each imported lake
  * Files are kept in files/weather/ so the last forecast works offline.
  */
+/** Largest forecast file accepted (NDFD sectors and the per-lake wave cut-outs are a few MB). */
+private const val MAX_FORECAST_BYTES = 100_000_000L
+/** Largest NOMADS directory listing accepted. */
+private const val MAX_LISTING_BYTES = 2_000_000
+
 class WeatherRepo(private val context: Context) {
 
     private val dir = File(context.filesDir, "weather").apply { mkdirs() }
@@ -129,7 +134,8 @@ class WeatherRepo(private val context: Context) {
                         304 -> return Fetch.NotModified
                         200 -> {
                             val part = File(out.path + ".part")
-                            c.inputStream.use { i -> part.outputStream().use { o -> i.copyTo(o, 1 shl 16) } }
+                            // forecast files are a few MB: anything over MAX_FORECAST_BYTES is refused
+                            c.inputStream.use { i -> part.outputStream().use { o -> CatalogTrust.copyCapped(i, o, MAX_FORECAST_BYTES) } }
                             part.renameTo(out)
                             return Fetch.Ok(c.getHeaderField("Last-Modified"))
                         }
@@ -146,7 +152,9 @@ class WeatherRepo(private val context: Context) {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 20_000; readTimeout = 30_000; setRequestProperty("User-Agent", ua)
         }
-        try { if (c.responseCode == 200) c.inputStream.bufferedReader().readText() else null } finally { c.disconnect() }
+        // directory listings are a few KB: read at most MAX_LISTING_BYTES
+        try { if (c.responseCode == 200) String(c.inputStream.use { CatalogTrust.readCapped(it, MAX_LISTING_BYTES) }, Charsets.UTF_8) else null }
+        finally { c.disconnect() }
     }.getOrNull()
 
     private fun readMeta(): JSONObject? = runCatching { JSONObject(metaFile.readText()) }.getOrNull()

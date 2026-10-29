@@ -9,14 +9,17 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
 /** Where the app finds the list of downloadable lakes (a file on the GitHub release tagged "charts"). */
 const val CATALOG_URL = "https://github.com/HappyRock616/Third-Coast-Sailing/releases/download/charts/catalog.json"
 
-/** One downloadable file of a lake package. name = file name on the phone; gzip = unpack after download. */
-data class CatalogFile(val name: String, val url: String, val size: Long, val sha256: String, val gzip: Boolean)
+/**
+ * One downloadable file of a lake package. name = file name on the phone; gzip = unpack after download;
+ * sizeRaw / sha256Raw = size and checksum after unpacking (newer catalogs; null for older ones).
+ */
+data class CatalogFile(val name: String, val url: String, val size: Long, val sha256: String, val gzip: Boolean,
+                       val sizeRaw: Long? = null, val sha256Raw: String? = null)
 
 /** One lake as offered for download. built = package build time (newer = update available). */
 data class CatalogLake(val id: String, val name: String, val chartsAsOf: String, val built: String, val files: List<CatalogFile>) {
@@ -36,7 +39,8 @@ fun meteredNetwork(context: Context): Boolean {
 
 /**
  * Chart downloads from the GitHub release:
- *  - the catalog (a few KB) lists each lake's files, sizes, SHA-256 checksums and build time
+ *  - the catalog (a few KB) lists each lake's files, sizes, SHA-256 checksums and build time; it must carry a
+ *    valid signature (catalog.json.sig, see CatalogTrust), so the checksums can be trusted
  *  - each file downloads into files/staging/, resuming where it left off after a dropped connection
  *  - every file is checked against its checksum, then unpacked if compressed
  *  - only when the whole lake is complete and verified is it swapped into files/packages/<lake>/,
@@ -47,32 +51,51 @@ class ChartRepo(context: Context) {
     private val packages = File(context.filesDir, "packages").apply { mkdirs() }
     private val staging = File(context.filesDir, "staging").apply { mkdirs() }
     private val cacheFile = File(context.filesDir, "catalog.json")
+    private val cacheSig = File(context.filesDir, "catalog.json.sig")
     private val ua = "ThirdCoastSailing/0.7 (Android)"
 
     class Stopped : IOException("Download stopped")
 
     /** Download the catalog (and keep a copy for offline use). Throws on failure. */
     fun fetchCatalog(): List<CatalogLake> {
-        val text = String(get(CATALOG_URL), Charsets.UTF_8)
-        val lakes = parse(text)                                     // throws if it is not a valid catalog
-        cacheFile.writeText(text)
+        val bytes = get(CATALOG_URL, CatalogTrust.MAX_CATALOG_BYTES)
+        val sig = String(get("$CATALOG_URL.sig", CatalogTrust.MAX_SIG_BYTES), Charsets.US_ASCII)
+        if (!CatalogTrust.verifyCatalog(bytes, sig)) throw IOException("Chart list failed its signature check")
+        val lakes = parse(String(bytes, Charsets.UTF_8))           // throws if it is not a valid catalog
+        cacheFile.writeBytes(bytes)
+        cacheSig.writeText(sig)
         return lakes
     }
 
-    /** Last catalog fetched, or empty. */
-    fun cachedCatalog(): List<CatalogLake> = runCatching { parse(cacheFile.readText()) }.getOrDefault(emptyList())
+    /** Last catalog fetched (signature checked again), or empty. */
+    fun cachedCatalog(): List<CatalogLake> = runCatching {
+        val bytes = cacheFile.readBytes()
+        if (!CatalogTrust.verifyCatalog(bytes, cacheSig.readText())) emptyList() else parse(String(bytes, Charsets.UTF_8))
+    }.getOrDefault(emptyList())
 
+    /** Parse the catalog; every id, file name, link, size and checksum must pass CatalogTrust's checks or it throws. */
     private fun parse(text: String): List<CatalogLake> {
         val arr = JSONObject(text).getJSONArray("lakes")
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
+            val id = o.getString("id")
+            if (!CatalogTrust.validId(id)) throw IOException("Bad lake id in chart list")
             val fa = o.getJSONArray("files")
             CatalogLake(
-                id = o.getString("id"), name = o.optString("name", o.getString("id")),
+                id = id, name = o.optString("name", id).take(40),
                 chartsAsOf = o.optString("charts_as_of"), built = o.optString("built"),
                 files = (0 until fa.length()).map { j ->
                     val f = fa.getJSONObject(j)
-                    CatalogFile(f.getString("name"), f.getString("url"), f.getLong("size"), f.getString("sha256"), f.optBoolean("gzip"))
+                    val file = CatalogFile(f.getString("name"), f.getString("url"), f.getLong("size"), f.getString("sha256"),
+                        f.optBoolean("gzip"),
+                        sizeRaw = if (f.has("size_raw")) f.getLong("size_raw") else null,
+                        sha256Raw = if (f.has("sha256_raw")) f.getString("sha256_raw") else null)
+                    val ok = CatalogTrust.validName(file.name) && CatalogTrust.validUrl(file.url) &&
+                        file.size in 1..CatalogTrust.MAX_CHART_FILE_BYTES && CatalogTrust.validSha(file.sha256) &&
+                        (file.sizeRaw == null || file.sizeRaw in 1..CatalogTrust.MAX_CHART_FILE_BYTES) &&
+                        (file.sha256Raw == null || CatalogTrust.validSha(file.sha256Raw))
+                    if (!ok) throw IOException("Bad file entry in chart list")
+                    file
                 },
             )
         }
@@ -107,13 +130,19 @@ class ChartRepo(context: Context) {
             val dl = File(stage, f.name + ".dl")
             val base = before
             fetchResumable(f.url, dl, f.size, { n -> progress(base + n, total) }, cancel)
-            if (sha256(dl) != f.sha256) {
+            if (CatalogTrust.sha256(dl) != f.sha256) {
                 dl.delete()
                 throw IOException("${f.name}: download damaged (checksum mismatch). Try again.")
             }
             if (f.gzip) {
                 val tmp = File(stage, f.name + ".tmp")
-                GZIPInputStream(dl.inputStream().buffered(1 shl 16)).use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 16) } }
+                // unpacked size is capped (catalog size, or a fixed limit for older catalogs) and checked when known
+                val cap = f.sizeRaw ?: CatalogTrust.MAX_CHART_FILE_BYTES
+                GZIPInputStream(dl.inputStream().buffered(1 shl 16)).use { i -> tmp.outputStream().use { o -> CatalogTrust.copyCapped(i, o, cap) } }
+                if (f.sha256Raw != null && CatalogTrust.sha256(tmp) != f.sha256Raw) {
+                    tmp.delete(); dl.delete()
+                    throw IOException("${f.name}: unpacked file damaged (checksum mismatch). Try again.")
+                }
                 tmp.renameTo(done)
                 dl.delete()
             } else dl.renameTo(done)
@@ -136,12 +165,12 @@ class ChartRepo(context: Context) {
         old.deleteRecursively()
     }
 
-    /** GET a small file, following redirects. */
-    private fun get(url: String): ByteArray {
+    /** GET a small file (at most `max` bytes), following redirects. */
+    private fun get(url: String, max: Int): ByteArray {
         val c = open(url, 0)
         try {
             if (c.responseCode != 200) throw IOException("HTTP ${c.responseCode}")
-            return c.inputStream.use { it.readBytes() }
+            return c.inputStream.use { CatalogTrust.readCapped(it, max) }
         } finally { c.disconnect() }
     }
 
@@ -194,6 +223,7 @@ class ChartRepo(context: Context) {
                                 if (cancel()) throw Stopped()
                                 val n = inp.read(buf)
                                 if (n < 0) break
+                                if (have + n > expected) throw IOException("Download larger than expected")
                                 raf.write(buf, 0, n)
                                 have += n
                                 if (have - last > 256_000) { onBytes(have); last = have }
@@ -214,12 +244,4 @@ class ChartRepo(context: Context) {
         }
     }
 
-    private fun sha256(f: File): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        f.inputStream().buffered(1 shl 16).use { i ->
-            val buf = ByteArray(1 shl 16)
-            while (true) { val n = i.read(buf); if (n < 0) break; md.update(buf, 0, n) }
-        }
-        return md.digest().joinToString("") { "%02x".format(it) }
-    }
 }

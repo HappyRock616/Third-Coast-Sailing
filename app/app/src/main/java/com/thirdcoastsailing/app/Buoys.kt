@@ -51,6 +51,7 @@ const val BUOY_SOURCE = "buoys_live"
 const val BUOY_LAYER = "buoys_live_layer"
 private const val STALE_MS = 2 * 3_600_000L                 // no report for 2 h = gray marker
 private const val HISTORY_BYTES = 25_000                     // newest ~24 h of a station's 10-minute file
+private const val MAX_LATEST_BYTES = 8_000_000L             // cap on NOAA's all-stations file (normally ~200 KB)
 
 /**
  * NDBC buoy and shore-station data, fetched by the phone:
@@ -78,7 +79,8 @@ class BuoyRepo(context: Context) {
         try {
             if (c.responseCode != 200) return false
             val part = File(latestFile.path + ".part")
-            c.inputStream.use { i -> part.outputStream().use { o -> i.copyTo(o) } }
+            // the all-stations file is about 200 KB: anything over 8 MB is refused
+            c.inputStream.use { i -> part.outputStream().use { o -> CatalogTrust.copyCapped(i, o, MAX_LATEST_BYTES) } }
             part.renameTo(latestFile)
             c.getHeaderField("Last-Modified")?.let { lmFile.writeText(it) }
             latest = null
@@ -100,6 +102,8 @@ class BuoyRepo(context: Context) {
      * otherwise uses the saved copy. Null when there is nothing to show.
      */
     fun history(station: String, network: Boolean): List<BuoyObs>? {
+        // the id comes from the chart files: only plain NOAA ids ("45007") go into a file name or a link
+        if (!CatalogTrust.validStation(station.uppercase())) return null
         val f = File(dir, "ndbc_hist_${station.uppercase()}.txt")
         if (network && (!f.exists() || System.currentTimeMillis() - f.lastModified() > 10 * 60_000L)) {
             runCatching {

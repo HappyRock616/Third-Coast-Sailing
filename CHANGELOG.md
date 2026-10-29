@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.8.2 (unreleased)
+## 0.8.2 (2026-10-29)
+
+Needs the signed chart list: upload `catalog.json` and `catalog.json.sig` to the charts release before publishing this version.
+
+### Security
+- **Signed chart list**: the chart catalog must carry a valid signature (`catalog.json.sig`, ECDSA P-256) made with the project's private key, which never goes on GitHub. The app checks it on download and again when it reads its saved copy, so altered charts are refused even if the release files were changed.
+- **Strict checks on the chart list**: lake ids, file names and download links must be plain names on this project's charts release, so nothing in the list can point outside the app's chart folders.
+- **Imported chart folders are checked** against the signed chart list. Charts that don't match (self-built, another build, or altered) are only installed after an "Unverified charts" question.
+- **Size limits on downloads**: the chart list, unpacked chart files (also checked against their unpacked checksum), forecast files, NOAA directory listings and the buoy file, so a misbehaving server can't fill the phone's memory or storage.
+- **Buoy station ids** from the chart files must be plain NOAA ids before they are used in a file name or link.
+
+### Fixed
+- Tapping Call on a marina no longer crashes on devices without a phone app (some tablets).
 
 ### Added
 - **Great Lakes only, clearly**: the chart stays on the Great Lakes (it can't be panned or zoomed away from them). When the phone is outside the region, the chart shows Michigan with a large Third Coast logo over the Lower Peninsula instead of a boat on an empty map, and the center-on-boat button and boat marker are hidden.

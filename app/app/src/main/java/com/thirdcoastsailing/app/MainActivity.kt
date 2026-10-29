@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val PREFS = "tcs"
-private const val APP_VERSION = "0.8.1"
+private const val APP_VERSION = "0.8.2"
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
 private const val HOUR_MS = 3_600_000L
 private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interval while online and the app is open
@@ -268,11 +268,23 @@ private fun App() {
     val scope = rememberCoroutineScope()
     val drawer = rememberDrawerState(DrawerValue.Closed)
 
-    // Folder picker for "Import lake package"
+    // Folder picker for "Import lake package": files are copied, checked against the signed chart list, and installed
+    // right away when they match; otherwise the user is asked first (self-built or altered charts)
+    var pendingImport by remember { mutableStateOf<LakeStore.StagedImport?>(null) }
+    fun commitImport(s: LakeStore.StagedImport) = scope.launch {
+        withContext(Dispatchers.IO) { lakeStore.commitImport(s) { msg -> scope.launch { status = msg } } }
+        lakes = lakeStore.list()
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) scope.launch {
-            withContext(Dispatchers.IO) { lakeStore.import(uri) { msg -> scope.launch { status = msg } } }
-            lakes = lakeStore.list()
+            val s = withContext(Dispatchers.IO) {
+                runCatching { lakeStore.stageImport(uri, ChartRepo(context).cachedCatalog()) { msg -> scope.launch { status = msg } } }.getOrNull()
+            }
+            when {
+                s == null || s.lakes.isEmpty() -> status = "No lake package found in that folder"
+                s.unverified.isEmpty() -> commitImport(s)
+                else -> pendingImport = s
+            }
         }
     }
 
@@ -430,7 +442,12 @@ private fun App() {
                 val n = c.count { chartRepo.updateAvailable(it) }
                 catalogMsg = if (n == 0) "Checked ${clockText(System.currentTimeMillis())} · no updates"
                 else "$n update${if (n > 1) "s" else ""} available"
-            }.onFailure { catalogMsg = "Couldn't reach the chart server. Check your connection." }
+            }.onFailure {
+                // a chart list that fails its signature or format checks is refused, not "no connection"
+                catalogMsg = if (it is java.io.IOException && it.message?.startsWith("Chart list") == true ||
+                    it.message?.startsWith("Bad ") == true) "The chart list failed its security check. Try again later."
+                else "Couldn't reach the chart server. Check your connection."
+            }
             checking = false
         }
     }
@@ -890,6 +907,19 @@ private fun App() {
         )
     }
 
+    // Imported charts that don't match the signed chart list: install only if the user says so
+    pendingImport?.let { s ->
+        AlertDialog(
+            onDismissRequest = { lakeStore.discardImport(); pendingImport = null },
+            title = { Text("Unverified charts") },
+            text = { Text("${s.unverified.joinToString { it.replaceFirstChar { c -> c.uppercase() } }}: these files don't match " +
+                "the published Third Coast charts. They may be charts you built yourself, an older or newer build, or " +
+                "altered files. Import them anyway?") },
+            confirmButton = { TextButton(onClick = { commitImport(s); pendingImport = null }) { Text("Import anyway", color = SignalOrange) } },
+            dismissButton = { TextButton(onClick = { lakeStore.discardImport(); pendingImport = null }) { Text("Cancel") } },
+        )
+    }
+
     removeLake?.let { l ->
         AlertDialog(
             onDismissRequest = { removeLake = null },
@@ -1219,7 +1249,8 @@ private fun InfoCard(info: Info, modifier: Modifier, buoyObs: Map<String, BuoyOb
                 horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)
             ) {
                 if (info.phone.isNotBlank()) Button(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${info.phone.substringBefore(" x")}")))
+                    // no phone app on some tablets: do nothing rather than crash
+                    runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${info.phone.substringBefore(" x")}"))) }
                 }) { Text("Call ${info.phone}", fontSize = 13.sp) }
                 if (info.website.isNotBlank()) OutlinedButton(onClick = {
                     val url = if (info.website.startsWith("http")) info.website else "https://${info.website}"
