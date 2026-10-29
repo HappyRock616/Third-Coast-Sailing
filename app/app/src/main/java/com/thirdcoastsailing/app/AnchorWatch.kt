@@ -123,6 +123,7 @@ import kotlin.math.sin
 /** Feet per nautical mile. */
 private const val FT_PER_NM = 6076.12
 
+/** The anchor watch's state and settings, shared by the screen, the chart overlay and the background service. */
 object AnchorWatch {
     const val DEFAULT_RADIUS_FT = 100.0
     const val FIX_MS = 2 * 60_000L                 // one GPS fix every 2 minutes; the radius is checked on each
@@ -131,6 +132,7 @@ object AnchorWatch {
     private const val MAX_TRACE = 600              // swing trace points kept (20 hours at 2 minutes)
     private const val PREFS = "tcs_anchor"
 
+    /** Anchor point, alarm radius and the live watch status. */
     data class State(
         val anchor: GeoPt? = null,                 // anchor position (saved on the phone)
         val setMs: Long = 0L,                      // when it was set
@@ -171,6 +173,7 @@ object AnchorWatch {
             offsetFt = p.getString("offsetFt", null)?.toDoubleOrNull() ?: 0.0)
     }
 
+    /** Save the anchor point, radius and armed state, so the watch survives the phone or app restarting. */
     private fun save(context: Context) {
         val s = state
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
@@ -185,6 +188,7 @@ object AnchorWatch {
     /** Change the state (main thread only) and save what's kept. */
     fun update(context: Context, f: (State) -> State) { state = f(state); save(context) }
 
+    /** Set the alarm radius (kept between 20 and 2000 ft). */
     fun setRadius(context: Context, ft: Double) = update(context) { it.copy(radiusFt = ft.coerceIn(20.0, 2000.0)) }
 
     /**
@@ -237,8 +241,11 @@ object AnchorWatch {
 // ============================================================================ the service: GPS, alarm, notification
 
 private const val ANCHOR_CHANNEL = "anchor_watch"
+/** Id of the anchor watch notification. */
 private const val ANCHOR_NOTE_ID = 2
+/** Notification action: silence the bell for SNOOZE_MS. */
 private const val ACTION_SILENCE = "com.thirdcoastsailing.app.ANCHOR_SILENCE"
+/** Alarm action: take a fix and check the radius. */
 private const val ACTION_CHECK = "com.thirdcoastsailing.app.ANCHOR_CHECK"
 
 /**
@@ -311,6 +318,7 @@ class AnchorService : Service() {
         alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, servicePending(ACTION_CHECK))
     }
 
+    /** Start the bell and vibration, and keep the phone awake while it rings. */
     private fun startAlarm() {
         if (AnchorWatch.state.alarming) return
         AnchorWatch.update(this) { it.copy(alarming = true) }
@@ -319,6 +327,7 @@ class AnchorService : Service() {
         bell = ThirdCoastShipsBell(this).also { it.start() }
     }
 
+    /** Stop the bell and let the phone sleep again. */
     private fun stopAlarm() {
         bell?.stop(); bell = null
         wake?.let { if (it.isHeld) it.release() }; wake = null
@@ -344,14 +353,17 @@ class AnchorService : Service() {
         super.onDestroy()
     }
 
+    /** PendingIntent that sends an action to this service (notification buttons, alarms). */
     private fun servicePending(action: String): PendingIntent =
         PendingIntent.getService(this, action.hashCode(), Intent(this, AnchorService::class.java).setAction(action),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
+    /** Refresh the notification text (distance to the anchor, status). */
     private fun updateNotification() {
         getSystemService(NotificationManager::class.java).notify(ANCHOR_NOTE_ID, notification())
     }
 
+    /** The anchor watch notification (high priority, silent: the app plays the bell itself); tapping it opens the app. */
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(ANCHOR_CHANNEL) == null)
@@ -403,6 +415,7 @@ private class ThirdCoastShipsBell(private val context: Context) {
     private val vibrator = context.getSystemService(VibratorManager::class.java)?.defaultVibrator
     private var savedVolume = -1
 
+    /** Ring the bell at full alarm volume (the previous volume is restored on stop), with vibration. */
     fun start() {
         runCatching {
             savedVolume = audio.getStreamVolume(AudioManager.STREAM_ALARM)
@@ -425,6 +438,7 @@ private class ThirdCoastShipsBell(private val context: Context) {
         }
     }
 
+    /** Stop ringing and vibrating, and put the alarm volume back. */
     fun stop() {
         runCatching { track?.stop(); track?.release() }; track = null
         runCatching { vibrator?.cancel() }
@@ -619,6 +633,7 @@ fun AnchorScreen(fix: BoatFix?, onClose: () -> Unit) {
     }
 }
 
+/** "43.12345° N  86.12345° W". */
 private fun latLonLine(lat: Double, lon: Double) =
     "%.5f° %s  %.5f° %s".format(kotlin.math.abs(lat), if (lat >= 0) "N" else "S", kotlin.math.abs(lon), if (lon >= 0) "E" else "W")
 

@@ -26,6 +26,7 @@ private val TcsColors = darkColorScheme(
     error = Alarm,
 )
 
+/** The app's Material 3 theme: the navy and orange colors and the text styles, around all screens. */
 @Composable
 fun ThirdCoastSailingTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = TcsColors, typography = Typography, content = content)

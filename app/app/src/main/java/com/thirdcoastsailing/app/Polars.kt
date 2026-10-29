@@ -25,6 +25,7 @@ data class Polar(val tws: List<Double>, val twa: List<Double>, val speed: List<L
         return max(0.0, top * (1 - fa) + bot * fa)
     }
 
+    /** This polar as a tab-separated .pol table: true wind speeds across the top, one row per true wind angle. */
     fun toPol(): String = buildString {
         append("TWA\\TWS\t").append(tws.joinToString("\t") { fmt(it) }).append('\n')
         twa.forEachIndexed { i, a ->
@@ -61,6 +62,7 @@ private fun bracket(axis: List<Double>, v: Double): Triple<Int, Int, Double> {
     return Triple(i, i + 1, (v - axis[i]) / (axis[i + 1] - axis[i]))
 }
 
+/** Fold any angle (degrees) onto 0..180, the range a polar covers (port and starboard are the same). */
 private fun foldAngle(a: Double): Double {
     var x = ((a % 360) + 360) % 360
     if (x > 180) x = 360 - x
@@ -78,6 +80,7 @@ data class ManualPoint(val awsKn: Double, val awaDeg: Double, val bspKn: Double)
     }
 }
 
+/** Changes to a polar from the owner's own speed measurements. */
 object PolarMath {
     /**
      * Refit a polar to manual observations. Each observation sets the ratio (observed / predicted)
@@ -115,6 +118,7 @@ object PolarTemplates {
     val names = listOf("27ft", "30ft", "36ft", "37.5ft")
     const val DEFAULT = "37.5ft"
 
+    /** Load a template polar from the app's assets, merged with the spinnaker polars when those are switched on (the fastest sail at each point wins). */
     fun load(context: Context, name: String, sym: Boolean, asym: Boolean): Polar {
         fun read(file: String) = Polar.parse(context.assets.open("polars/$file").bufferedReader().readText())
         val parts = mutableListOf(read("$name.pol"))

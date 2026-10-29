@@ -24,6 +24,7 @@ enum class SkillLevel(val title: String, val description: String) {
  */
 data class SextantStep(val id: String, val title: String, val text: String, val graphic: String, val graphic2: String? = null)
 
+/** The sextant steps the guide walks through, with their text and pictures, per kind of body. */
 object SextantProcedure {
 
     val indexError = SextantStep(
@@ -172,8 +173,13 @@ data class Guidance(
     val tips: List<String>,
 )
 
+/** What to show at each skill level: today's suggested sights and tips (nothing at advanced). */
 object Coach {
 
+    /**
+     * Guidance for a level, position and day.
+     * @param heightOfEyeFt height of eye for the preset altitudes (dip)
+     */
     fun guidance(level: SkillLevel, pos: LatLon, dayStartMs: Long, heightOfEyeFt: Double = 8.0): Guidance {
         if (level == SkillLevel.ADVANCED) return Guidance(level, null, emptyList(), emptyList())
         val plan = SightPlanner.plan(pos, dayStartMs, heightOfEyeFt)

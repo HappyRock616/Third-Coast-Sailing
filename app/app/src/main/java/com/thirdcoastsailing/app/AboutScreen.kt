@@ -86,6 +86,7 @@ private val CREDITS = listOf(
 @Composable
 fun AboutScreen(version: String, onClose: () -> Unit) {
     val context = LocalContext.current
+    /** Open a link in the phone's browser (ignored if no browser is installed). */
     fun open(url: String) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
@@ -132,6 +133,7 @@ fun AboutScreen(version: String, onClose: () -> Unit) {
     }
 }
 
+/** A titled, rounded card on the About screen. */
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Navy, RoundedCornerShape(12.dp)).border(1.dp, NavyLight, RoundedCornerShape(12.dp)).padding(12.dp)) {

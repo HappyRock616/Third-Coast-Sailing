@@ -127,6 +127,16 @@ import org.maplibre.geojson.Point
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
+/*
+ * Third Coast Sailing: entry point and main screen.
+ *
+ * MainActivity sets up the map engine and hosts App(), the one Compose screen everything else hangs off: the chart
+ * (ChartMap) with its overlays, the right-edge route buttons, the info cards and weather boxes, the side menu
+ * (MenuSheet) and the full-screen pages. Feature code lives in its own files (Weather, Buoys, Route, Router,
+ * AnchorWatch, MobWatch, Barometer, Celestial*, Region, CatalogTrust, ...); this file wires them together.
+ */
+
+/** The app's only activity: starts the map engine and shows [App] full screen. */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,9 +156,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Name of the app's main settings file (SharedPreferences). */
 private const val PREFS = "tcs"
-private const val APP_VERSION = "0.8.2"
+/** Version shown on the About screen and in the menu; keep in step with versionName in build.gradle.kts. */
+private const val APP_VERSION = "0.8.3"
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
+/** One hour in milliseconds. */
 private const val HOUR_MS = 3_600_000L
 private const val UPDATE_EVERY_MS = HOUR_MS  // automatic weather update interval while online and the app is open
 private const val FORECAST_HOURS = 48        // forecast time slider range
@@ -159,6 +172,7 @@ private const val HOLD_MS = 450L             // hold on a route point this long 
 private const val ROUTE_CLEAR_HOLD_MS = 1200L // hold "−" this long to clear the whole route
 private const val SNAP_DP = 40f              // start pin let go this close to the boat (on screen) snaps onto it
 private const val WX_SOURCE = "wx_field"     // map source + layer for the wind / gust color field
+/** Map layer id of the wind / gust color field. */
 private const val WX_LAYER = "wx_field_layer"
 
 /** One lake row in the menu's Charts list. progress = 0..1 while downloading, else null. */
@@ -189,6 +203,13 @@ private data class Info(val title: String, val lines: List<String>, val phone: S
                         val at: LatLng? = null,               // position of the tapped marker (blue ring while open)
                         val nav: NavInfo? = null)             // set for lights, buoys, beacons, landmarks
 
+/**
+ * The whole app on one screen: the chart with its overlays and buttons, the side menu, and the full-screen pages
+ * (boat, celestial, barograph, anchor, about) opened over it. Holds the app's state; the pieces are in their own files.
+ *
+ * In order below: GPS, region and position-based features, routing, chart downloads, barograph, weather, buoys, the
+ * trip track, route editing, forecast fields, MOB, then the layout (menu, chart, buttons, boxes) and the dialogs.
+ */
 @Composable
 private fun App() {
     val context = LocalContext.current
@@ -271,6 +292,7 @@ private fun App() {
     // Folder picker for "Import lake package": files are copied, checked against the signed chart list, and installed
     // right away when they match; otherwise the user is asked first (self-built or altered charts)
     var pendingImport by remember { mutableStateOf<LakeStore.StagedImport?>(null) }
+    /** Install a staged folder import, then refresh the lake list. */
     fun commitImport(s: LakeStore.StagedImport) = scope.launch {
         withContext(Dispatchers.IO) { lakeStore.commitImport(s) { msg -> scope.launch { status = msg } } }
         lakes = lakeStore.list()
@@ -325,6 +347,7 @@ private fun App() {
     val safetyOn = MobWatch.state.active || AnchorWatch.state.armed
     val navFix = if (outside) null else fix                     // the fix for chart, forecast and route features
 
+    /** Save the display settings (night, offline, hidden layers). */
     fun savePrefs() {
         prefs.edit().putBoolean("night", night).putBoolean("offline", offline).putStringSet("hidden", hidden).apply()
     }
@@ -401,6 +424,7 @@ private fun App() {
         if (lvl > baroWarnLevel) { baroWarn = t; baroWarnLevel = lvl }         // only ever goes up while shown
         else if (baroWarn != null) baroWarn = t                                 // keep the shown box current
     }
+    /** Close the barograph warning; it stays away unless the fall gets worse. */
     fun dismissBaroWarn() { Baro.dismissWarning(context, baroWarnLevel); baroWarn = null; baroWarnLevel = 0 }
     var showAnchor by remember { mutableStateOf(false) }
     remember { AnchorWatch.load(context) }                      // saved anchor point survives a restart
@@ -422,6 +446,7 @@ private fun App() {
             status = r.fold({ "${lake.name} charts installed" }, { "${lake.name}: ${it.message}" })
         }
     }
+    /** Queue lakes for download (each only once), one at a time in order. */
     fun enqueue(list: List<CatalogLake>) {
         for (l in list) if (l.id !in dlProgress) { dlProgress[l.id] = 0f; dlQueue.trySend(l) }
     }
@@ -575,6 +600,7 @@ private fun App() {
         setRoute(routePts.toMutableList().also { it[0] = b })
         startOnBoat = true
     }
+    /** The route button: calculate a weather route (from the boat when the start is snapped to it), cancel one running, or clear the result. */
     fun onCalc() {
         when (calcState) {
             CalcState.DONE -> { calcResult = null; calcState = CalcState.IDLE }
@@ -935,6 +961,7 @@ private fun App() {
     }
 }
 
+/** A small rounded message box at the bottom of the chart. */
 @Composable
 private fun Pill(text: String, modifier: Modifier = Modifier, background: androidx.compose.ui.graphics.Color = Navy.copy(alpha = 0.9f),
                  color: androidx.compose.ui.graphics.Color = Foam, bold: Boolean = false) {
@@ -1183,6 +1210,7 @@ private fun MenuSheet(
     }
 }
 
+/** An orange section heading in the menu. */
 @Composable
 private fun MenuHeader(text: String) =
     Text(text.uppercase(), color = SignalOrange, fontSize = 12.sp, fontWeight = FontWeight.Bold,
@@ -1197,9 +1225,11 @@ private fun SatsSunMoonRow(sats: String, pos: Pair<Double, Double>?, nowMs: Long
     }
 }
 
+/** A thin divider between menu sections. */
 @Composable
 private fun MenuDivider() = HorizontalDivider(color = NavyLight, modifier = Modifier.padding(vertical = 14.dp))
 
+/** A two-line label (title and smaller subtitle) with a switch on the right. */
 @Composable
 private fun SwitchRow(title: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1283,6 +1313,7 @@ private fun sunIsDown(pos: Pair<Double, Double>?, nowMs: Long): Boolean {
 private fun Feature.text(key: String): String =
     runCatching { getProperty(key)?.takeIf { !it.isJsonNull }?.asString ?: "" }.getOrDefault("").trim()
 
+/** Readable name of a harbor kind from the chart data ("yacht_club" → "Yacht club"). */
 private fun kindLabel(k: String) = when (k.lowercase()) {
     "marina" -> "Marina"; "yacht_club", "club" -> "Yacht club"; "public_dock" -> "Public dock"
     "fuel_dock" -> "Fuel dock"; "mooring_field" -> "Mooring field"; "anchorage" -> "Anchorage"

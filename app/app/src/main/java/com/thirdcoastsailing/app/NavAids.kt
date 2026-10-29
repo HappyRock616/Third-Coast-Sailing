@@ -50,15 +50,21 @@ data class NavInfo(
     val pattern: LightPattern? = null,
 )
 
+/** Glow color per S-57 light colour code: 1 white (drawn warm yellow-white), 3 red, 4 green, 6 yellow. */
 private val GLOW = mapOf("1" to Color(0xFFFFF2A0), "3" to Color(0xFFFF3B30), "4" to Color(0xFF3BE36B), "6" to Color(0xFFFFD60A))
+/** Glow color for a colour code (white when unknown). */
 private fun glowColour(code: String) = GLOW[code] ?: GLOW.getValue("1")
+/** Fill of the yellow warning note on a nav-aid card. */
 private val WARN_YELLOW = Color(0xFFF6D44A)
 
+/** A text property of a map feature, trimmed, or null when missing or blank. */
 private fun Feature.str(key: String): String? =
     runCatching { getProperty(key)?.takeIf { !it.isJsonNull }?.asString?.trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+/** A number property of a map feature, or null. */
 private fun Feature.num(key: String): Double? =
     runCatching { getProperty(key)?.takeIf { !it.isJsonNull }?.asDouble }.getOrNull()
 
+/** Info cards for lights, buoys, beacons, landmarks and Coast Guard stations tapped on the chart. */
 object NavAids {
     /** True for the map layers whose taps open a navigation-aid card. */
     fun isNavLayer(layerId: String) = NAV_SUFFIXES.any { layerId.endsWith(it) }
@@ -72,6 +78,7 @@ object NavAids {
         else -> landmarkCard(f)
     }
 
+    /** Card for a light: title, the pattern in chart and plain words, height and range, sectors and fog signal. */
     private fun lightCard(f: Feature): Pair<String, NavInfo> {
         val chr = f.str("chr") ?: "F"
         val colours = f.str("colours") ?: "1"
@@ -101,6 +108,7 @@ object NavAids {
         )
     }
 
+    /** Card for a buoy or beacon: color, shape, purpose and number. */
     private fun aidCard(f: Feature): Pair<String, NavInfo> {
         val colour = LightPattern.colourWord(f.str("colour") ?: "1").replaceFirstChar { it.uppercase() }
         val what = when (f.str("category")) {
@@ -115,6 +123,7 @@ object NavAids {
         return (f.str("name") ?: "$colour $what") to NavInfo("$colour $what$num", lines = lines)
     }
 
+    /** Card for a landmark: the chart word in plain English ("STACK" → "Smokestack") and whether it's conspicuous. */
     private fun landmarkCard(f: Feature): Pair<String, NavInfo> {
         val word = f.str("word") ?: "LMK"
         val plain = when (word) {
@@ -129,6 +138,7 @@ object NavAids {
         return (f.str("name") ?: plain) to NavInfo(kind, lines = listOf(plain) + lines)
     }
 
+    /** Seconds as "5" or "2.5". */
     private fun fmtS(s: Double) = if (abs(s - Math.round(s)) < 0.05) Math.round(s).toString() else "%.1f".format(s)
 
     /** Phase of one light (lights are not in step with each other): from its position, the same every time. */
@@ -220,5 +230,7 @@ fun NavLightGlow(map: MapLibreMap?, tick: Int, idleTick: Int, active: Boolean, l
 /** One light in view for the glow: position, timing, and its own phase. */
 private data class Lit(val at: LatLng, val pattern: LightPattern, val phase: Double)
 
+/** Lights animate only from this zoom in (closer, so few lights are on screen at once). */
 const val GLOW_MIN_ZOOM = 13.0
+/** Glow animation frame time (20 frames a second). */
 private const val GLOW_FRAME_MS = 50L

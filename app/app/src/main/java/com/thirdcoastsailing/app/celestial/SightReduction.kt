@@ -81,6 +81,7 @@ data class Fix(
     val iterations: Int,
 )
 
+/** Sight reduction by formula: altitude corrections, computed altitude and azimuth, intercepts and fixes. */
 object SightReduction {
 
     // ---------------------------------------------------------------- altitude corrections
@@ -173,6 +174,7 @@ object SightReduction {
         return mean(kept.ifEmpty { return null })
     }
 
+    /** One sight from several shots: their average time and average sextant altitude. */
     private fun mean(xs: List<SightInput>): SightInput =
         xs.first().copy(timeMs = xs.map { it.timeMs }.average().toLong(), hsDeg = xs.map { it.hsDeg }.average())
 
@@ -248,6 +250,7 @@ object SightReduction {
     private fun local(ref: LatLon, p: LatLon): Pair<Double, Double> =
         Pair(norm180(p.lon - ref.lon) * 60.0 * cos(ref.lat * DEG), (p.lat - ref.lat) * 60.0)
 
+    /** Position eastNm east and northNm north of ref (flat-earth step, fine over a few miles). */
     private fun fromLocal(ref: LatLon, eastNm: Double, northNm: Double): LatLon =
         LatLon(ref.lat + northNm / 60.0, norm180(ref.lon + eastNm / 60.0 / cos(ref.lat * DEG)))
 

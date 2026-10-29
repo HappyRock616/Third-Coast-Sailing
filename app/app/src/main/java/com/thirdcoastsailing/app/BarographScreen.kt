@@ -77,8 +77,11 @@ import kotlin.math.roundToInt
 private val BAR_STOPS = listOf(-8.0 to 0xFFD62828, -6.0 to 0xFFD62828, -3.5 to 0xFFF28C28, -1.5 to 0xFFF2C94C,
     0.0 to 0xFF5B6B7D, 1.5 to 0xFF5B6B7D, 3.5 to 0xFF5DADE2, 8.0 to 0xFF2E86C1)
 private const val BAR_RANGE = 8.0                     // the bar runs -8 .. +8 hPa / 3 h
+/** Pressure dots from the nearest NOAA buoy (teal, against the phone's own trace). */
 private val BUOY_DOT = Color(0xFF9BE7DD)
+/** Warning box fill. */
 private val WARN_YELLOW = Color(0xFFF6D44A)
+/** Warning box border. */
 private val WARN_EDGE = Color(0xFFB8860B)
 
 /** Text color for a 3-hour change: one color per tendency band. */
@@ -373,6 +376,7 @@ private fun BaroGraph(pts: List<BaroPoint>, buoy: List<BuoyObs>?, elev: Double, 
     }
 }
 
+/** Round-ended orange "‹" / "›" tab that scrolls the graph by one step. */
 @Composable
 private fun ScrollTab(s: String, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.size(width = 26.dp, height = 52.dp).clip(RoundedCornerShape(13.dp)).background(NavyLight).clickable(onClick = onClick),

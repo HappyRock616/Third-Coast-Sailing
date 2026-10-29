@@ -24,6 +24,7 @@ class NavMask private constructor(
     /** What went into the grid, per layer: "found/read" features (for error messages). */
     val note: String = "",
 ) {
+    /** True when the cell holding (lat, lon) is open water deep enough for the boat (false outside the grid). */
     fun free(lat: Double, lon: Double): Boolean {
         if (lat < lat0 || lon < lon0) return false
         val i = ((lon - lon0) / dLon).toInt()
@@ -149,6 +150,7 @@ class NavMask private constructor(
 class WindLookup(private val repo: WeatherRepo) {
     private val cache = HashMap<Long, Pair<WeatherRepo.Field?, WeatherRepo.Field?>>()
 
+    /** Forecast wind at a point and time: (speed kn, direction from, degrees true), or null. Fields are cached per hour. */
     fun at(tMs: Long, lat: Double, lon: Double): Pair<Double, Double>? {
         val hour = Math.round(tMs / 3_600_000.0)
         val (sf, df) = cache.getOrPut(hour) {
@@ -170,10 +172,18 @@ class WindLookup(private val repo: WeatherRepo) {
  */
 object Router {
 
+    /** Routing failed (no route around land or shallows, no wind forecast, ...); the message is shown to the user. */
     class Failed(msg: String) : Exception(msg)
 
+    /** One search point: position, time, the point it came from, which tack it's on (-1/+1) and the tack penalty still owed (hours). */
     private class Node(val lat: Double, val lon: Double, val t: Long, val parent: Node?, val side: Int, val debtH: Double)
 
+    /**
+     * Fastest route from start through each waypoint in turn, leaving at departMs.
+     * @param cruise fraction of the polar speed used (cruise mode, e.g. 0.85)
+     * @param tackMin time lost per tack or gybe, in minutes
+     * @throws Failed when a leg can't be routed
+     */
     fun route(start: GeoPt, waypoints: List<GeoPt>, departMs: Long, polar: Polar, wind: WindLookup, mask: NavMask,
               cruise: Double, tackMin: Double, cancel: () -> Boolean): RouteResult {
         val path = mutableListOf(RoutePoint(start.lat, start.lon, departMs))
@@ -199,6 +209,7 @@ object Router {
     /** Signed angle -180..180 (positive = wind on starboard side). */
     private fun signed(a: Double): Double { var x = (a % 360 + 360) % 360; if (x > 180) x -= 360; return x }
 
+    /** Fastest way along one leg (isochrone search): steps of about 1/15 of the leg's time at 5 kn, fanning out across headings and keeping the furthest-reaching point in each direction. */
     private fun leg(a: GeoPt, b: GeoPt, number: Int, t0: Long, polar: Polar, wind: WindLookup, mask: NavMask,
                     cruise: Double, tackH: Double, cancel: () -> Boolean): List<RoutePoint> {
         val legNm = distNm(a, b)

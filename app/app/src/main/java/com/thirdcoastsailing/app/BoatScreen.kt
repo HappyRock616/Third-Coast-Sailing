@@ -69,6 +69,11 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
 import kotlin.math.cos
 import kotlin.math.sin
 
+/*
+ * Boat & Polars screen: the user's boats (name, draft, minimum depth, template, spinnakers), the polar drawn from
+ * them, the owner's own speed measurements that refit it, and .pol export.
+ */
+
 private const val CRUISE_FACTOR = 0.85      // cruise mode uses 85% of the active polar
 
 /** Full-screen Boat & Polars editor. */
@@ -81,7 +86,9 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
     var showTable by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    /** Replace the saved state and write it to the phone. */
     fun update(newState: BoatStore.State) { state = newState; store.save(newState) }
+    /** Save changes to one boat (matched by id). */
     fun edit(b: Boat) = update(state.copy(boats = state.boats.map { if (it.id == b.id) b else it }))
 
     val polar = remember(boat) { store.polar(boat) }
@@ -199,6 +206,7 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
     }
 }
 
+/** A titled, rounded card on the boat screen. */
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     Column(
@@ -210,6 +218,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
     }
 }
 
+/** A label with an on/off switch, full width. */
 @Composable
 private fun ToggleRow(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -246,6 +255,7 @@ private fun NumberOrText(label: String, value: String, key: Any, numeric: Boolea
     )
 }
 
+/** A small one-line number field (decimal keyboard) for the manual-measurement rows. */
 @Composable
 private fun SmallField(label: String, value: String, modifier: Modifier, onChange: (String) -> Unit) {
     OutlinedTextField(

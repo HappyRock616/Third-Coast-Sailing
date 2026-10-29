@@ -78,6 +78,7 @@ fun destination(from: GeoPt, bearingDeg: Double, nm: Double): GeoPt {
     return GeoPt(Math.toDegrees(p2), ((Math.toDegrees(l2) + 540.0) % 360.0) - 180.0)
 }
 
+/** Great-circle distance between two points in nautical miles (haversine). */
 fun distNm(a: GeoPt, b: GeoPt): Double {
     val p1 = Math.toRadians(a.lat); val p2 = Math.toRadians(b.lat)
     val dp = p2 - p1; val dl = Math.toRadians(b.lon - a.lon)
@@ -105,17 +106,20 @@ fun hoursText(h: Double): String {
     return if (mins < 60) "$mins min" else "${mins / 60} h %02d".format(mins % 60)
 }
 
+/** Local clock time as "HH:mm". */
 fun clockText(ms: Long): String = SimpleDateFormat("HH:mm", Locale.US).format(Date(ms))
 
 // ---------------------------------------------------------------------------------------- storage
 
 /** The laid-in route points, kept in app preferences so they survive a restart. */
 class RouteStore(private val prefs: SharedPreferences) {
+    /** The saved route points ("lat,lon;lat,lon;..."), empty when none; unreadable entries are skipped. */
     fun load(): List<GeoPt> = (prefs.getString("route", "") ?: "").split(';').mapNotNull {
         val p = it.split(',')
         if (p.size == 2) runCatching { GeoPt(p[0].toDouble(), p[1].toDouble()) }.getOrNull() else null
     }
 
+    /** Save the route points (6 decimals, about 0.1 m). */
     fun save(points: List<GeoPt>) {
         prefs.edit().putString("route", points.joinToString(";") { "%.6f,%.6f".format(Locale.US, it.lat, it.lon) }).apply()
     }
@@ -227,7 +231,9 @@ const val POINT_REACHED_NM = 0.1
 
 /** How far above the point (its tip) a route pin's head is drawn, in dp; also used to pick pins up by the head. */
 const val ROUTE_PIN_HEAD_DP = 24f
+/** Start pin color. */
 private val StartGreen = Color(0xFF2E9E4F)
+/** Finish flag and pin outline color. */
 private val PinBlack = Color(0xFF1B1F24)
 
 /** Push pin standing on the point: gray needle, colored round head with a white rim and shine, optional number. */
@@ -281,6 +287,7 @@ fun calculatedStats(r: RouteResult, nowMs: Long): RouteStats {
     return RouteStats(r.distanceNm, vmg, left, r.endMs)
 }
 
+/** State of the route calculation button: nothing calculated, calculating, or a calculated route shown. */
 enum class CalcState { IDLE, WORKING, DONE }
 
 /**

@@ -109,6 +109,7 @@ import kotlin.math.sin
 
 /** Star finder catalog, loaded once from assets. */
 object FinderCatalog {
+    /** The catalog, parsed from the three CSV files the first time it is needed. */
     @Volatile private var cached: StarCatalog? = null
     fun load(context: Context): StarCatalog = cached ?: synchronized(this) {
         cached ?: StarCatalog.parse(
@@ -119,6 +120,11 @@ object FinderCatalog {
     }
 }
 
+/**
+ * Full-screen star finder: the sky drawn the way the phone points, the boat below the horizon, and an orange arrow to the suggested body.
+ * @param position where the sky is drawn for (GPS, or the workbook's assumed position)
+ * @param onPick called with the body chosen with "Use", when pickLabel is set
+ */
 @Composable
 fun StarFinderScreen(
     position: LatLon,
@@ -165,6 +171,7 @@ fun StarFinderScreen(
     var dragAlt by remember { mutableStateOf(15.0) }
 
     val heading by rememberUpdatedState(boatHeadingDeg)              // the GPS course can change while open
+    /** Send the latest phone pose, zoom and boat heading to the renderer and redraw. */
     fun push() {
         // boat camera follows the phone's compass direction; hold it when the phone points almost straight up or down
         if (abs(pose.forward.z) < 0.95) yaw = pose.azDeg
@@ -317,6 +324,7 @@ fun StarFinderScreen(
     }
 }
 
+/** Small one-line hint on a dark pill over the sky. */
 @Composable
 private fun Note(text: String) {
     Text(text, color = Foam, fontSize = 12.sp,

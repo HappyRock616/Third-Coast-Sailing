@@ -48,6 +48,7 @@ class BoatLocation(
     /** True when the phone's Location switch is on. */
     fun locationEnabled(): Boolean = lm.isLocationEnabled
 
+    /** Start GPS updates (once a second) and satellite-status callbacks. Call when the app becomes visible. */
     @SuppressLint("MissingPermission")
     fun start() {
         // Register GPS even if Location is currently off: updates begin as soon as it is switched on
@@ -60,6 +61,7 @@ class BoatLocation(
         // in with GPS it made the trip track zigzag.
     }
 
+    /** Stop GPS updates and satellite callbacks. Call when the app goes to the background. */
     fun stop() {
         lm.removeUpdates(listener)
         lm.unregisterGnssStatusCallback(gnss)

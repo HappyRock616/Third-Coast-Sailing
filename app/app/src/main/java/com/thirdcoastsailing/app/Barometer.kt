@@ -41,11 +41,15 @@ object Baro {
         private set
 
     private var cache: MutableList<BaroPoint>? = null
+    /** The barograph log file: one "time,hPa" line per reading. */
     private fun file(c: Context) = File(c.filesDir, "baro_log.csv")
+    /** Barograph settings and warning state. */
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** True when the phone has a pressure sensor (many phones don't). */
     fun hasSensor(c: Context): Boolean = (c.getSystemService(Context.SENSOR_SERVICE) as SensorManager).getDefaultSensor(Sensor.TYPE_PRESSURE) != null
 
+    /** True when the user has switched barograph logging on. */
     fun isOn(c: Context) = prefs(c).getBoolean("on", false)
 
     /** All readings, oldest first (station pressure at the phone). */
@@ -62,6 +66,7 @@ object Baro {
         return pts.toList()
     }
 
+    /** Add one reading, dropping readings older than KEEP_MS (the file is rewritten only now and then). */
     @Synchronized
     fun add(c: Context, p: BaroPoint) {
         val pts = cache ?: log(c).toMutableList().also { cache = it }
@@ -74,6 +79,7 @@ object Baro {
         version++
     }
 
+    /** Clear the log and the warning state (hold-to-reset on the barograph page). */
     @Synchronized
     fun reset(c: Context) {
         cache = mutableListOf(); runCatching { file(c).delete() }
@@ -83,11 +89,13 @@ object Baro {
 
     /** Lake surface height for sea-level pressure, from the last known position. */
     fun elevationM(c: Context) = prefs(c).getFloat("elevM", 176f).toDouble()
+    /** Set the lake surface elevation (m) for the boat's position, used to convert the phone's reading to sea-level pressure. */
     fun setPosition(c: Context, lat: Double, lon: Double) {
         val e = BaroMath.lakeElevationM(lat, lon).toFloat()
         if (e != prefs(c).getFloat("elevM", 176f)) { prefs(c).edit().putFloat("elevM", e).apply(); version++ }
     }
 
+    /** Switch logging on or off (starts or stops the background service). */
     fun setOn(c: Context, on: Boolean) {
         prefs(c).edit().putBoolean("on", on).apply()
         if (on) BaroService.start(c) else BaroService.stop(c)
@@ -173,11 +181,13 @@ class BaroService : Service() {
         return START_NOT_STICKY
     }
 
+    /** Wake the service again in inMs (an inexact alarm, allowed while the phone is idle). */
     private fun schedule(inMs: Long) {
         // allowed while the phone is idle, no special permission; Android may delay it a little, fine for weather
         alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + inMs, pending())
     }
 
+    /** The PendingIntent the alarm uses to restart this service. */
     private fun pending(): PendingIntent = PendingIntent.getService(this, 7, Intent(this, BaroService::class.java),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
@@ -190,6 +200,7 @@ class BaroService : Service() {
         super.onDestroy()
     }
 
+    /** The low-priority ongoing "Barograph logging" notification (creates its channel the first time); tapping it opens the app. */
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null)

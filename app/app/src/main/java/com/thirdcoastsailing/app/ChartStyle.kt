@@ -78,6 +78,7 @@ object ChartStyle {
             .toString()
     }
 
+    /** Depth-shaded water: the approximate-depth grid underneath, charted depth areas on top, shallower than the boat's limit in red. */
     private fun addWaterLayers(layers: JSONArray, src: String, p: Palette, limitM: Double) {
         // Approximate depth (NCEI grid) underneath the charted data; charted depth areas draw on top
         // Water shallower than the minimum depth gets the red-tinted color in the same fill (no overlay layer,
@@ -89,6 +90,7 @@ object ChartStyle {
     /** First land layer of the style: map overlays added below it draw on water only. */
     fun landAnchor(lakes: List<Lake>): String? = lakes.firstOrNull()?.let { "lake_${it.id}_land" }
 
+    /** Land, coastline, depth contours (with the boat's limit contour in red), structures and hazards for one lake. */
     private fun addLakeLayers(layers: JSONArray, src: String, p: Palette, limitM: Double) {
         layers.put(fill("${src}_land", src, "land", p.land))
         layers.put(line("${src}_coast", src, "coastline", p.coast, width = 0.8))
@@ -128,21 +130,25 @@ object ChartStyle {
             .put(ramp)
     }
 
+    /** Common part of every layer: id, type, source, source layer and optional minimum zoom. */
     private fun base(id: String, type: String, src: String, layer: String, minzoom: Double?) =
         JSONObject().put("id", id).put("type", type).put("source", src).put("source-layer", layer).also {
             if (minzoom != null) it.put("minzoom", minzoom)
         }
 
+    /** A fill layer (no antialiasing, so neighboring polygons don't show seams). */
     private fun fill(id: String, src: String, layer: String, color: Any, opacity: Double = 1.0,
                      minzoom: Double? = null) =
         base(id, "fill", src, layer, minzoom).put("paint", JSONObject()
             .put("fill-color", color).put("fill-opacity", opacity).put("fill-antialias", false))
 
+    /** A line layer, optionally filtered. */
     private fun line(id: String, src: String, layer: String, color: String, width: Double,
                      minzoom: Double? = null, filter: JSONArray? = null) =
         base(id, "line", src, layer, minzoom).put("paint", JSONObject()
             .put("line-color", color).put("line-width", width)).also { if (filter != null) it.put("filter", filter) }
 
+    /** A circle layer, with an optional thin outline. */
     private fun circle(id: String, src: String, layer: String, color: String, radius: Double,
                        minzoom: Double? = null, stroke: String? = null) =
         base(id, "circle", src, layer, minzoom).put("paint", JSONObject()

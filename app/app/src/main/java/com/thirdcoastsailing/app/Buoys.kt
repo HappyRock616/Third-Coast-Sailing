@@ -47,7 +47,9 @@ data class BuoyObs(
     val airF: Double?, val waterF: Double?,
 )
 
+/** Map source id of the live buoy markers. */
 const val BUOY_SOURCE = "buoys_live"
+/** Map layer id of the live buoy markers. */
 const val BUOY_LAYER = "buoys_live_layer"
 private const val STALE_MS = 2 * 3_600_000L                 // no report for 2 h = gray marker
 private const val HISTORY_BYTES = 25_000                     // newest ~24 h of a station's 10-minute file
@@ -239,6 +241,7 @@ fun buoyLines(s: String, o: BuoyObs?, nowMs: Long): List<String> {
     return out
 }
 
+/** Wave height line on the buoy graph. */
 private val WaveLine = Color(0xFF7FD3F0)
 
 /**

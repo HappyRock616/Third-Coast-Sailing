@@ -39,6 +39,7 @@ import kotlin.math.sin
 /** Today's sun times (ms, null when the sun doesn't rise or set that day) and the moon's phase. */
 data class SunMoonDay(val sunriseMs: Long?, val sunsetMs: Long?, val moonLitFraction: Double, val moonWaxing: Boolean)
 
+/** Sunrise, sunset and moon phase for the boat's position, cached per local day. */
 object SunMoon {
     private var cacheDay = Long.MIN_VALUE
     private var cache: SunMoonDay? = null
@@ -63,8 +64,11 @@ object SunMoon {
     }
 }
 
+/** Sun glyph color. */
 private val SUN_YELLOW = Color(0xFFF2C14E)
+/** Lit part of the moon glyph. */
 private val MOON_LIT = Color(0xFFE9E4D4)
+/** Dark part of the moon glyph. */
 private val MOON_DARK = Color(0xFF33475F)
 
 /** "▲ 8:03a ▼ 6:55p ◐" in one short row: sun glyphs with the times, then the moon in its phase (worked out once a day). */

@@ -15,6 +15,7 @@ object Gpkg {
 
     private const val CHUNK = 1_000_000
 
+    /** Open a GeoPackage read-only, or null if the file is missing or not a valid database. */
     fun open(f: File): SQLiteDatabase? =
         if (!f.exists()) null
         else runCatching { SQLiteDatabase.openDatabase(f.path, null, SQLiteDatabase.OPEN_READONLY) }.getOrNull()
@@ -41,6 +42,7 @@ object Gpkg {
 
     private val indexes = HashMap<String, BoxIndex>()
 
+    /** Bounding boxes of one table's features, read once and cached until the file changes (key = path, size and time). */
     @Synchronized
     private fun index(db: SQLiteDatabase, table: String, valueCol: String?, orderBy: String?): BoxIndex? {
         val f = File(db.path)
@@ -113,6 +115,7 @@ object Gpkg {
         readPolygons(ByteBuffer.wrap(blob, 8 + envBytes, blob.size - 8 - envBytes))
     }.getOrDefault(emptyList())
 
+    /** Read one WKB Polygon (type 3) or MultiPolygon (type 6) from the buffer; other types give nothing. */
     private fun readPolygons(b: ByteBuffer): List<List<DoubleArray>> {
         b.order(if (b.get() == 1.toByte()) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN)
         return when (b.int % 1000) {

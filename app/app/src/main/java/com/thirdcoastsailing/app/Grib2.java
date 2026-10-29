@@ -149,6 +149,7 @@ public final class Grib2 {
         return out;
     }
 
+    /** Read a grid definition section; only template 3.30 (Lambert conformal, the NDFD and GLWU grids) is supported, otherwise null. */
     private static Lambert lambert(byte[] b, int p) {
         int tmpl = u16(b, p + 12);
         if (tmpl != 30) return null;                       // only Lambert conformal is needed
@@ -174,6 +175,7 @@ public final class Grib2 {
         return g;
     }
 
+    /** Read a product definition section: the quantity (category, number) and its valid time. */
     private static void product(byte[] b, int p, Message m) {
         int tmpl = u16(b, p + 7);
         m.category = b[p + 9] & 0xFF;
@@ -332,21 +334,29 @@ public final class Grib2 {
         void align() { bit = (bit + 7) & ~7L; }
     }
 
+    /** Offset of the next "GRIB" message start at or after `from`, or -1. */
     private static int find(byte[] b, int from) {
         for (int i = from; i + 3 < b.length; i++)
             if (b[i] == 'G' && b[i + 1] == 'R' && b[i + 2] == 'I' && b[i + 3] == 'B') return i;
         return -1;
     }
 
+    /** Unsigned 16-bit big-endian integer at p. */
     private static int u16(byte[] b, int p) { return ((b[p] & 0xFF) << 8) | (b[p + 1] & 0xFF); }
+    /** Unsigned 32-bit big-endian integer at p. */
     private static long u32(byte[] b, int p) {
         return ((long) (b[p] & 0xFF) << 24) | ((b[p + 1] & 0xFF) << 16) | ((b[p + 2] & 0xFF) << 8) | (b[p + 3] & 0xFF);
     }
+    /** Unsigned 64-bit big-endian integer at p (message lengths). */
     private static long u64(byte[] b, int p) { return (u32(b, p) << 32) | u32(b, p + 4); }
+    /** Signed 16-bit integer at p in GRIB's sign-and-magnitude form (top bit = minus). */
     private static int s16(byte[] b, int p) { int v = u16(b, p); return (v & 0x8000) != 0 ? -(v & 0x7FFF) : v; }
+    /** Signed 32-bit integer at p in GRIB's sign-and-magnitude form. */
     private static long s32(byte[] b, int p) { long v = u32(b, p); return (v & 0x80000000L) != 0 ? -(v & 0x7FFFFFFFL) : v; }
+    /** Longitude moved into -180..180. */
     private static double lon180(double lon) { while (lon > 180) lon -= 360; return lon; }
 
+    /** UTC milliseconds of a date and time. */
     private static long utc(int y, int mo, int d, int h, int mi, int s) {
         Calendar c = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         c.clear();

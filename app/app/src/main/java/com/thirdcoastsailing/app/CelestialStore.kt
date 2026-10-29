@@ -47,6 +47,7 @@ data class LogFix(val timeMs: Long, val position: LatLon, val saved: Boolean, va
  */
 data class CelestialPlot(val works: List<SightWork>, val lops: List<WorkLop>, val fix: WorkFix?, val log: List<LogFix> = emptyList())
 
+/** Everything the chart draws for the celestial trainer: the current workbook's lines of position and fix, plus the trip log of saved fixes. */
 fun celestialPlot(s: CelestialState): CelestialPlot {
     val works = s.sights.map { runCatching { Workbook.work(it, s.settings) }.getOrNull() ?: SightWork(it, null, 0, emptyList(), emptyList(), null) }
     val lops = works.mapNotNull { it.lop }
@@ -59,6 +60,7 @@ fun celestialPlot(s: CelestialState): CelestialPlot {
 /** A saved fix's workbook, worked again for viewing (read-only). */
 fun savedPlot(f: SavedFix): CelestialPlot = celestialPlot(CelestialState(settings = f.settings, sights = f.sights))
 
+/** The celestial trainer's saved state (settings, workbook sights, trip log), kept in app preferences and observable by Compose. */
 class CelestialStore(context: Context) {
 
     private val prefs = context.getSharedPreferences("tcs_celestial", Context.MODE_PRIVATE)
@@ -66,20 +68,24 @@ class CelestialStore(context: Context) {
     var state by mutableStateOf(load())
         private set
 
+    /** Change the state and save it. */
     fun update(f: (CelestialState) -> CelestialState) {
         state = f(state)
         prefs.edit().putString(KEY, toJson(state).toString()).apply()
     }
 
+    /** Change one workbook sight (matched by id). */
     fun updateSight(id: Long, f: (WorkbookSight) -> WorkbookSight) =
         update { st -> st.copy(sights = st.sights.map { if (it.id == id) f(it) else it }) }
 
+    /** Add a sight of a body to the workbook; returns its id. */
     fun addSight(body: SkyBody): Long {
         val id = state.nextId
         update { it.copy(sights = it.sights + WorkbookSight(id, body), nextId = id + 1) }
         return id
     }
 
+    /** Remove one sight from the workbook. */
     fun removeSight(id: Long) = update { st -> st.copy(sights = st.sights.filter { it.id != id }) }
 
     /** Keep the current fix and its workbook in the trip log, and start a fresh workbook for the next fix. */
@@ -91,6 +97,7 @@ class CelestialStore(context: Context) {
     /** The reset arrow: clear the current sights, every saved fix and the fix log (settings stay). */
     fun clearAll() = update { it.copy(sights = emptyList(), saved = emptyList()) }
 
+    /** Read the saved state, or a fresh one if there is none or it can't be read. */
     private fun load(): CelestialState =
         runCatching { prefs.getString(KEY, null)?.let { fromJson(JSONObject(it)) } }.getOrNull() ?: CelestialState()
 

@@ -13,8 +13,8 @@ android {
         applicationId = "com.thirdcoastsailing.app"
         minSdk = 34                       // Android 14 and newer
         targetSdk = 37
-        versionCode = 16
-        versionName = "0.8.2"
+        versionCode = 17
+        versionName = "0.8.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -27,8 +27,13 @@ android {
     buildTypes {
         release {
             optimization {
-                // Off: R8 shrinking broke Kotlin's text classes in 0.7 (crash on start, IllegalAccessError in kotlin.text)
-                enable = false
+                // R8 (code and resource optimization) for the whole app, full mode. It shrinks, optimizes and renames
+                // the code; Google Play requires this for apps with more than 10 MB of code (from February 2027).
+                // Keep rules: src/main/keepRules/rules.keep. Resources kept by name: src/main/res/raw/keep.xml.
+                // History: 0.7 used `packageScope` (only androidx, kotlin and kotlinx optimized) without
+                // android.r8.gradual.support in gradle.properties and crashed on start (IllegalAccessError in
+                // kotlin.text). Optimizing the whole app keeps every caller consistent with the optimized library code.
+                enable = true
             }
         }
     }

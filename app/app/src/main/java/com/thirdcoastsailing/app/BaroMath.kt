@@ -28,6 +28,7 @@ data class BaroTrend(
     val shownRate: Double? get() = rate3h ?: rate1h?.let { it * 3 }
 }
 
+/** Pressure trend arithmetic for the barograph: cleaning the log, rates of change, squalls and the Met Office tendency words. */
 object BaroMath {
     const val MINUTE = 60_000L
     const val HOUR = 3_600_000L
@@ -95,7 +96,9 @@ object BaroMath {
         return (n * sxy - sx * sy) / d
     }
 
+    /** Pressure change over the last hour (hPa per hour, least-squares slope), or null without enough readings. */
     fun rate1h(pts: List<BaroPoint>, end: Long): Double? = slope(pts, end, HOUR, 50 * MINUTE)
+    /** Pressure change over the last 3 hours (hPa per 3 h), or null without enough readings. */
     fun rate3h(pts: List<BaroPoint>, end: Long): Double? = slope(pts, end, 3 * HOUR, (2.5 * HOUR).toLong())?.let { it * 3 }
 
     /** Time a squall jump was confirmed at or before `end` (looking back an hour), or null. */

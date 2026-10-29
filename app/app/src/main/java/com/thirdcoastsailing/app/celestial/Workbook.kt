@@ -53,6 +53,7 @@ enum class FieldKind {
     NM,         // intercept, nautical miles, + toward / - away
 }
 
+/** How a workbook line's value is written and checked (angle, altitude, declination, minutes, ...). */
 fun Field.kind(): FieldKind = when (this) {
     Field.GHA_HOUR, Field.INCREMENT, Field.SHA, Field.GHA, Field.LHA -> FieldKind.ANGLE
     Field.HA, Field.HO, Field.HC -> FieldKind.ALTITUDE
@@ -91,6 +92,7 @@ enum class SightCondition(val title: String, val description: String, val scatte
     fun sightErrorMin(shots: Int): Double = sqrt(scatterMin * scatterMin / shots.coerceAtLeast(1) + fixedMin * fixedMin)
 }
 
+/** The limb a body is usually shot by: lower limb for the Sun and Moon, the center for stars and planets. */
 fun defaultLimb(b: SkyBody): Limb = if (b == SkyBody.Sun || b == SkyBody.Moon) Limb.LOWER else Limb.CENTER
 
 /** Settings that apply to every sight. */
@@ -112,6 +114,7 @@ enum class EyePosition(val title: String, val heightFt: Double) {
     STANDING_CABIN_TOP("Standing on the cabin top", 11.0),
 }
 
+/** Result of checking a typed value: worked out by the app, not typed yet, correct, or wrong. */
 enum class Check { AUTO, EMPTY, OK, WRONG }
 
 /**
@@ -144,6 +147,7 @@ data class SightWork(
     val extract: List<ExtractLine>,
     val lop: WorkLop?,
 ) {
+    /** The line for one field, or null if this sight has none. */
     fun line(f: Field) = lines.firstOrNull { it.field == f }
     val errors: Int get() = lines.count { it.check == Check.WRONG }
 }
@@ -162,6 +166,7 @@ data class WorkLop(
     val shotsUsed: Int = 1,
 ) {
     val footPoint: LatLon get() = travel(assumed, znDeg, interceptNm)
+    /** The line of position as a segment through its foot point, at right angles to Zn (10 nm each way by default). */
     fun segment(halfLengthNm: Double = 10.0): Pair<LatLon, LatLon> =
         Pair(travel(footPoint, znDeg - 90.0, halfLengthNm), travel(footPoint, znDeg + 90.0, halfLengthNm))
 }
@@ -194,6 +199,7 @@ data class FixUncertainty(
     val lines: List<WorkLop>,               // each with its sigmaNm, condition and shots used
 )
 
+/** Sight reduction the way a navigator does it by hand, line by line, with the almanac values it uses. */
 object Workbook {
 
     private const val HOUR = 3_600_000L
@@ -403,6 +409,7 @@ object Workbook {
         return SightWork(s, shot, used, lines, extract, lop)
     }
 
+    /** A star's SHA for the day (from the noon page, as the book prints it), or 0 for the Sun, Moon and planets. */
     private fun uShaOr(isStar: Boolean, body: SkyBody, t: Long): Double {
         if (!isStar) return 0.0
         val noon = floor(t.toDouble() / (24 * HOUR)).toLong() * 24 * HOUR + 12 * HOUR
@@ -437,6 +444,7 @@ object Workbook {
         return Shot(t, hs, near.dr, near.gps)
     }
 
+    /** Number of shots kept for the sight. */
     private fun usedShots(shots: List<Shot>) = keptShots(shots).size
 
     /** Shots kept after a straight-line fit of Hs against time drops any more than 3' off the line (3 or more shots). */
@@ -599,22 +607,35 @@ object Workbook {
         if (m >= 59.95) { d = (d + 1) % 360; m = 0.0 }
         return "%d°%04.1f′".format(d, m)
     }
+    /** Altitude as "25°30.9′" (with a minus sign below the horizon). */
     fun alt(deg: Double): String = (if (r1(deg) < 0) "−" else "") + dmAbs(deg)
+    /** Declination as "N 9°10.6′" / "S 9°10.6′". */
     fun decText(deg: Double): String = (if (deg < 0) "S " else "N ") + dmAbs(deg)
+    /** Latitude as "N 42°50.8′". */
     fun latText(deg: Double): String = (if (deg < 0) "S " else "N ") + dmAbs(deg)
+    /** Longitude as "W 85°36.2′". */
     fun lonText(deg: Double): String = (if (deg < 0) "W " else "E ") + dmAbs(deg)
+    /** A correction in minutes, signed: "+3.1′" / "−3.1′". */
     fun mins(m: Double): String = (if (m < 0) "−" else "+") + "%.1f′".format(abs(m))
+    /** Degrees and minutes to 0.1′, without a sign. */
     private fun dmAbs(deg: Double): String {
         val a = abs(r1(deg)); var d = floor(a).toInt(); var m = (a - d) * 60.0
         if (m >= 59.95) { d += 1; m = 0.0 }
         return "%d°%04.1f′".format(d, m)
     }
+    /** Latitude in whole degrees, for short labels. */
     private fun latShort(deg: Double) = "%.0f°".format(deg)
+    /** Declination to 0.1°, for short labels. */
     private fun decShort(deg: Double) = "%.1f°".format(deg)
+    /** Hour of the day (UTC) of a time. */
     private fun hhInt(ms: Long) = ((ms / HOUR) % 24).toInt()
+    /** Hour of the day as "07". */
     private fun hh(ms: Long) = "%02d".format(hhInt(ms))
+    /** Minutes and seconds past the hour as "4m 07s". */
     private fun mmss(ms: Long): String { val s = ms / 1000; return "%dm %02ds".format(s / 60, s % 60) }
+    /** A fraction of an hour as minutes, "7.5". */
     private fun minutesPast(dtH: Double) = "%.1f".format(dtH * 60.0)
+    /** UTC date of a time as the book prints it (civil date worked out from the day number, no java.time). */
     private fun dayText(ms: Long): String {
         val days = ms / (24 * HOUR)
         // civil date from days since 1970-01-01 (Howard Hinnant's algorithm), no java.time needed

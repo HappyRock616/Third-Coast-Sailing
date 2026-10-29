@@ -89,7 +89,9 @@ data class AlmanacTarget(
     val dipFt: Double? = null,      // dip table row
 )
 
+/** One day in milliseconds. */
 private const val DAY_MS = 86_400_000L
+/** One hour in milliseconds. */
 private const val HOUR_MS = 3_600_000L
 
 /** The page and row a workbook line's value comes from (null for lines that aren't read from the almanac). */
@@ -114,10 +116,15 @@ fun almanacTarget(body: SkyBody, timeMs: Long, field: Field): AlmanacTarget? {
     }
 }
 
+/** Page color (almanac paper). */
 private val PAPER = Color(0xFFF6F1E2)
+/** Highlight of the row being looked up. */
 private val YELLOW = Color(0xFFF7ECBE)
+/** Printed text. */
 private val INK = Color(0xFF191919)
+/** Rules between columns and groups. */
 private val RULE = Color(0xFF787364)
+/** Highlight of the exact value used. */
 private val MARK = Color(0xFFFFD696)
 
 /** 25°30.9′ as the book prints it: "25 30.9". */
@@ -125,6 +132,11 @@ private fun g(deg: Double): String = Workbook.ang(deg).replace("°", " ").replac
 /** Declination as printed: "S 9 10.6". */
 private fun dc(deg: Double): String = Workbook.decText(deg).replace("°", " ").replace("′", "")
 
+/**
+ * The almanac tab: printed-style daily pages (Sun and Moon, Aries and planets, stars), increments and corrections, and the dip table, with search.
+ * @param target page and row to open at (from a workbook line), or null for today
+ * @param sights the workbook's sights, so search can jump to their pages
+ */
 @Composable
 fun AlmanacBook(target: AlmanacTarget?, sights: List<WorkbookSight>) {
     val now = System.currentTimeMillis()
@@ -138,6 +150,7 @@ fun AlmanacBook(target: AlmanacTarget?, sights: List<WorkbookSight>) {
     var searching by remember { mutableStateOf(false) }
     var scale by remember { mutableStateOf(1f) }
 
+    /** Turn to the page and row of a lookup target. */
     fun open(t: AlmanacTarget) {
         day = t.dayStartUtc; section = t.section; hour = t.hour; star = t.star
         t.minute?.let { minute = it }; second = t.second; dipFt = t.dipFt; searching = false
@@ -207,9 +220,11 @@ private class BookStyle(val scale: Float) {
     val body = (13f * scale).sp
     val head = (12f * scale).sp
     val title = (17f * scale).sp
+    /** A column width scaled to the zoom. */
     fun w(dp: Int): Dp = (dp * scale).dp
 }
 
+/** Page heading: what the page is on the left, the date or table name on the right. */
 @Composable
 private fun PageTitle(left: String, right: String, b: BookStyle) {
     Row(Modifier.padding(bottom = 8.dp)) {
@@ -244,9 +259,11 @@ private fun BookRow(cells: List<String>, widths: List<Int>, b: BookStyle, highli
     }
 }
 
+/** A small gap after every `every` rows, as the printed tables group hours in sixes. */
 @Composable
 private fun GroupGap(i: Int, every: Int = 6) { if (i > 0 && i % every == 0) Spacer(Modifier.height(6.dp)) }
 
+/** Daily page: Sun GHA and declination, Moon GHA, v, declination, d and HP, for each hour UT. */
 @Composable
 private fun SunMoonPage(p: DailyPage, b: BookStyle, hour: Int?, onMark: (Float) -> Unit) {
     PageTitle("SUN · MOON", bookDate(p.dayStartUtcMs), b)
@@ -262,6 +279,7 @@ private fun SunMoonPage(p: DailyPage, b: BookStyle, hour: Int?, onMark: (Float) 
         color = INK, fontFamily = FontFamily.Serif, fontSize = b.head)
 }
 
+/** Daily page: Aries GHA and the GHA and declination of Venus, Mars, Jupiter and Saturn, for each hour UT. */
 @Composable
 private fun AriesPlanetsPage(p: DailyPage, b: BookStyle, hour: Int?, onMark: (Float) -> Unit) {
     PageTitle("ARIES · PLANETS", bookDate(p.dayStartUtcMs), b)
@@ -278,6 +296,7 @@ private fun AriesPlanetsPage(p: DailyPage, b: BookStyle, hour: Int?, onMark: (Fl
         color = INK, fontFamily = FontFamily.Serif, fontSize = b.head)
 }
 
+/** Daily page: SHA and declination of the 57 navigational stars (and Polaris). */
 @Composable
 private fun StarsPage(p: DailyPage, b: BookStyle, star: String?, onMark: (Float) -> Unit) {
     PageTitle("STARS", bookDate(p.dayStartUtcMs), b)
@@ -289,6 +308,7 @@ private fun StarsPage(p: DailyPage, b: BookStyle, star: String?, onMark: (Float)
     }
 }
 
+/** Increments and corrections for one minute: GHA increments by second for the Sun and planets, Aries and the Moon. */
 @Composable
 private fun IncrementsPage(minute: Int, b: BookStyle, second: Int?, onMark: (Float) -> Unit) {
     PageTitle("${minute}m", "INCREMENTS AND CORRECTIONS", b)
@@ -308,6 +328,7 @@ private fun IncrementsPage(minute: Int, b: BookStyle, second: Int?, onMark: (Flo
     }
 }
 
+/** Dip table: height of eye (ft) to dip (minutes), subtracted from the sextant reading. */
 @Composable
 private fun CorrectionsPage(b: BookStyle, dipFt: Double?, onMark: (Float) -> Unit) {
     PageTitle("DIP", "height of eye → dip (subtract)", b)
@@ -366,8 +387,10 @@ private fun AlmanacSearch(day: Long, sights: List<WorkbookSight>, onOpen: (Alman
     }
 }
 
+/** Month abbreviations recognized by the date search. */
 private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 
+/** Search the almanac: a body name, a star, or a date opens the matching page (sights in the workbook first). */
 private fun search(query: String, day: Long, sights: List<WorkbookSight>): List<Hit> {
     val q = query.trim().lowercase()
     if (q.length < 2) return emptyList()
@@ -428,6 +451,7 @@ private fun search(query: String, day: Long, sights: List<WorkbookSight>): List<
 private fun parseDate(q: String): Long? {
     val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     val year = cal.get(Calendar.YEAR)
+    /** 00:00 UT of a calendar date, or null for an impossible one. */
     fun at(y: Int, m: Int, d: Int): Long? {
         if (m !in 1..12 || d !in 1..31) return null
         return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { clear(); set(y, m - 1, d) }.timeInMillis
@@ -443,7 +467,11 @@ private fun parseDate(q: String): Long? {
     return null
 }
 
+/** A date formatter in UTC. */
 private fun utcFmt(p: String) = SimpleDateFormat(p, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+/** "Fri 16 Oct 2026". */
 private fun dayLong(ms: Long) = utcFmt("EEE d MMM yyyy").format(Date(ms))
+/** "16 Oct". */
 private fun dayShort(ms: Long) = utcFmt("d MMM").format(Date(ms))
+/** "2026 OCTOBER 16 (FRI.)" as the book prints its page date. */
 private fun bookDate(ms: Long) = utcFmt("yyyy MMMM d (EEE.)").format(Date(ms)).uppercase()

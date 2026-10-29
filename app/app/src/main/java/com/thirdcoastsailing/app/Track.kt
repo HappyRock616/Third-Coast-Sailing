@@ -43,12 +43,14 @@ private const val TRACK_STEP_M = 15.0
 
 /** Below this speed (kn) a point is only recorded after a larger move, so drifting at the dock adds nothing. */
 private const val TRACK_SLOW_KN = 0.3f
+/** ...the larger move needed below TRACK_SLOW_KN (m). */
 private const val TRACK_SLOW_STEP_M = 50.0
 
 /** A jump is impossible when it implies more than twice the reported speed plus this margin (kn)... */
 private const val JUMP_MARGIN_KN = 5.0
 /** ...with this floor (kn), and this speed assumed when the GPS reports none. */
 private const val JUMP_FLOOR_KN = 15.0
+/** Speed assumed for the jump test when the GPS gives none (kn). */
 private const val JUMP_NO_SOG_KN = 30.0
 /** Track points are the moving average of the last 3 fixes; a gap longer than this (ms) starts the average fresh. */
 const val TRACK_AVG_GAP_MS = 30_000L

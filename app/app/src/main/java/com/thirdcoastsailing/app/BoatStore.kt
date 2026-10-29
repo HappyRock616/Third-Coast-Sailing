@@ -8,6 +8,7 @@ import java.util.UUID
 
 /** Minimum-depth choices (ft): the depth steps NOAA Great Lakes charts carry, so the shading matches real chart data. */
 val MIN_DEPTH_CHOICES_FT = listOf(6.0, 12.0, 18.0, 24.0, 30.0)
+/** Default minimum water depth in feet for a new boat: routing avoids, and the chart shades red, anything shallower. */
 const val DEFAULT_MIN_DEPTH_FT = 24.0
 
 /** A saved boat: which template it starts from, sail options, and the owner's own measurements. */
@@ -31,8 +32,10 @@ class BoatStore(private val context: Context) {
     private val file = File(context.filesDir, "boats.json")
     private val polDir = File(context.filesDir, "polars").apply { mkdirs() }
 
+    /** Everything saved: the boats and the id of the one in use (null when none is chosen). */
     data class State(val boats: List<Boat>, val activeId: String?)
 
+    /** Read the saved boats; on first run create and save one boat from the default template. */
     fun load(): State {
         if (!file.exists()) {
             // First run: one boat from the default template
@@ -45,6 +48,7 @@ class BoatStore(private val context: Context) {
         return State(boats, root.optString("active").ifEmpty { boats.firstOrNull()?.id })
     }
 
+    /** Save all boats (written to a temporary file first, then renamed, so a crash never leaves half a file). */
     fun save(state: State) {
         val a = JSONArray()
         state.boats.forEach { a.put(toJson(it)) }
@@ -58,8 +62,10 @@ class BoatStore(private val context: Context) {
     fun polar(b: Boat): Polar =
         PolarMath.refit(PolarTemplates.load(context, b.template, b.symSpinnaker, b.asymSpinnaker), b.manual)
 
+    /** File-safe version of a boat name (letters, digits, '.', '_' and '-' only; "boat" if nothing is left). */
     private fun safeName(n: String) = n.replace(Regex("[^A-Za-z0-9._-]+"), "_").ifEmpty { "boat" }
 
+    /** One boat as JSON, for the saved file. */
     private fun toJson(b: Boat) = JSONObject()
         .put("id", b.id).put("name", b.name).put("draftFt", b.draftFt).put("minDepthFt", b.minDepthFt).put("template", b.template)
         .put("sym", b.symSpinnaker).put("asym", b.asymSpinnaker)
@@ -67,6 +73,7 @@ class BoatStore(private val context: Context) {
             b.manual.forEach { m -> a.put(JSONObject().put("aws", m.awsKn).put("awa", m.awaDeg).put("bsp", m.bspKn)) }
         })
 
+    /** One boat from its saved JSON; missing fields fall back to the defaults. */
     private fun fromJson(o: JSONObject) = Boat(
         id = o.getString("id"), name = o.getString("name"), draftFt = o.optDouble("draftFt", 4.9),
         minDepthFt = o.optDouble("minDepthFt", DEFAULT_MIN_DEPTH_FT),

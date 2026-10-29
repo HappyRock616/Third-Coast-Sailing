@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Resources the release build's resource shrinker must keep.
+    The sextant guide loads its step pictures by name (Resources.getIdentifier in GuideScreen.kt, names listed in
+    celestial/Coach.kt), which the shrinker can't follow, so every sextant_step_* drawable is kept explicitly.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/sextant_step_*" />

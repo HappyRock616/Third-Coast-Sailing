@@ -31,12 +31,15 @@ import java.util.Locale
  * Tapping any fix opens the workbook; the workbook's reset arrow (↺) removes them all.
  */
 
+/** Line and fix color by day. */
 private val CEL_DAY = Color(0xFF6A3FB5)
+/** Line and fix color at night. */
 private val CEL_NIGHT = Color(0xFFC9A6FF)
 
 /** Half length of each drawn line of position (nm). */
 private const val LOP_HALF_NM = 8.0
 
+/** Draws the celestial lines of position, the fix with its uncertainty circle, and the trip's saved fixes on the chart. */
 @Composable
 fun CelestialOverlay(map: MapLibreMap?, tick: Int, plot: CelestialPlot?, night: Boolean) {
     val measurer = rememberTextMeasurer()

@@ -46,6 +46,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     @Volatile private var skyVersion = 0
     private var uploadedVersion = -1
 
+    /** Replace the sky (stars, constellation lines, bodies) drawn from the next frame. */
     fun setSky(s: Sky3D) { sky = s; skyVersion++ }
 
     private var width = 1
@@ -321,10 +322,13 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     private fun floats(a: FloatArray): FloatBuffer =
         ByteBuffer.allocateDirect(a.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(a); position(0) }
 
+    /** Location of a shader uniform. */
     private fun loc(p: Int, name: String) = GLES20.glGetUniformLocation(p, name)
 
+    /** Set a 4x4 matrix uniform. */
     private fun uniformMat(p: Int, name: String, m: Mat4) = GLES20.glUniformMatrix4fv(loc(p, name), 1, false, m.toFloats(), 0)
 
+    /** Point a shader attribute at part of a float buffer. */
     private fun attrib(p: Int, name: String, buf: FloatBuffer, size: Int, strideFloats: Int, offsetFloats: Int) {
         val a = GLES20.glGetAttribLocation(p, name); if (a < 0) return
         buf.position(offsetFloats)
@@ -333,16 +337,19 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
         buf.position(0)
     }
 
+    /** Point a shader attribute at part of the bound vertex buffer. */
     private fun vboAttrib(p: Int, name: String, size: Int, strideBytes: Int, offsetFloats: Int) {
         val a = GLES20.glGetAttribLocation(p, name); if (a < 0) return
         GLES20.glVertexAttribPointer(a, size, GLES20.GL_FLOAT, false, strideBytes, offsetFloats * 4)
         GLES20.glEnableVertexAttribArray(a)
     }
 
+    /** Turn off a shader attribute after drawing. */
     private fun disable(p: Int, name: String) {
         val a = GLES20.glGetAttribLocation(p, name); if (a >= 0) GLES20.glDisableVertexAttribArray(a)
     }
 
+    /** Compile and link a vertex and fragment shader into a GL program (errors are logged). */
     private fun program(vs: String, fs: String): Int {
         fun shader(type: Int, src: String): Int {
             val s = GLES20.glCreateShader(type)

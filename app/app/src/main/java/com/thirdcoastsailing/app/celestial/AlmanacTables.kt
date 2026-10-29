@@ -23,8 +23,10 @@ data class HourRow(
     val planets: Map<String, Pair<Double, Double>>,   // name -> (GHA, Dec)
 )
 
+/** One star on the daily page: number, name, SHA, declination and magnitude. */
 data class StarRow(val number: Int, val name: String, val sha: Double, val dec: Double, val mag: Double)
 
+/** One printed-style daily page of the almanac. */
 data class DailyPage(
     val dayStartUtcMs: Long,
     val hours: List<HourRow>,
@@ -36,8 +38,10 @@ data class DailyPage(
     val moonAgeDays: Double, val moonIllumPct: Double,
 )
 
+/** One row of the increments table: seconds, and the GHA increment for the Sun and planets, Aries and the Moon. */
 data class IncrementRow(val second: Int, val sunPlanets: Double, val aries: Double, val moon: Double)
 
+/** Builds the printed-style almanac pages from the same computations the workbook uses. */
 object AlmanacTables {
 
     private const val HOUR = 3_600_000L

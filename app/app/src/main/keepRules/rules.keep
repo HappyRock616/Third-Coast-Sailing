@@ -1,12 +1,24 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
-#
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# R8 keep rules for Third Coast Sailing (release builds).
+# AGP combines every *.keep file in src/main/keepRules and passes it to R8, together with the default Android rules
+# (equivalent to proguard-android-optimize.txt) and the rules libraries ship in their AARs (MapLibre has its own).
+# See https://developer.android.com/topic/performance/app-optimization/keep-rules-overview
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ---- Crash reports: keep file names and line numbers so stack traces can be traced back to the source
+# (the names R8 shortens are restored from mapping.txt, which Android Studio writes next to the build and puts in
+# the .aab for Google Play).
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# ---- Kotlin text functions: the 0.7 release crashed on start with IllegalAccessError in kotlin.text (called from
+# Polar.parse). That build only optimized some packages (packageScope); the whole app is optimized now, which should
+# avoid it, but kotlin.text is kept as it is for safety. Small cost; remove after a few releases without problems.
+-keep class kotlin.text.** { *; }
+
+# ---- Map engine: MapLibre's native (C++) code calls back into its Java classes by name. MapLibre ships its own keep
+# rules; keeping all of it as well costs some size but rules out a map that fails to draw in release builds only.
+-keep class org.maplibre.** { *; }
+-dontwarn org.maplibre.**
+
+# ---- Saved settings: enum constant names are written to the phone (e.g. the celestial skill level and sight
+# conditions, read back with valueOf), so the app's enum names must not change between versions.
+-keepclassmembers enum com.thirdcoastsailing.app.** { <fields>; }

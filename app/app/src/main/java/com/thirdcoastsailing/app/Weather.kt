@@ -24,6 +24,7 @@ private const val MAX_FORECAST_BYTES = 100_000_000L
 /** Largest NOMADS directory listing accepted. */
 private const val MAX_LISTING_BYTES = 2_000_000
 
+/** Downloads NOAA wind (NDFD) and wave (GLWU) forecasts for the installed lakes into files/weather/, and reads them back as fields that can be sampled at any point and time. */
 class WeatherRepo(private val context: Context) {
 
     private val dir = File(context.filesDir, "weather").apply { mkdirs() }
@@ -114,6 +115,7 @@ class WeatherRepo(private val context: Context) {
         return null
     }
 
+    /** Result of one download: new file (with the server's Last-Modified), unchanged since last time, or failed. */
     private sealed class Fetch {
         data class Ok(val lastModified: String?) : Fetch()
         object NotModified : Fetch()
@@ -148,6 +150,7 @@ class WeatherRepo(private val context: Context) {
         return Fetch.Failed
     }
 
+    /** GET a small text page (a NOMADS directory listing), or null on any failure. */
     private fun text(url: String): String? = runCatching {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 20_000; readTimeout = 30_000; setRequestProperty("User-Agent", ua)
@@ -157,6 +160,7 @@ class WeatherRepo(private val context: Context) {
         finally { c.disconnect() }
     }.getOrNull()
 
+    /** Saved update state (last update time, Last-Modified per file), or null before the first update. */
     private fun readMeta(): JSONObject? = runCatching { JSONObject(metaFile.readText()) }.getOrNull()
 
     // ------------------------------------------------------------------ reading the downloaded files
@@ -169,6 +173,7 @@ class WeatherRepo(private val context: Context) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Entry, FloatArray>?) = size > 32
     }
 
+    /** Which forecast quantity a GRIB2 message holds (by WMO discipline, category and parameter number), or null for ones the app doesn't use. */
     private fun kindOf(m: Grib2.Message): Wx? = when {
         m.discipline == 0 && m.category == 2 && m.number == 1 -> Wx.WIND_SPEED
         m.discipline == 0 && m.category == 2 && m.number == 0 -> Wx.WIND_DIR
@@ -179,6 +184,7 @@ class WeatherRepo(private val context: Context) {
         else -> null
     }
 
+    /** Every usable forecast message in the downloaded files, indexed once and kept until the next update. */
     @Synchronized
     private fun entries(): List<Entry> {
         loaded?.let { return it }
@@ -198,6 +204,7 @@ class WeatherRepo(private val context: Context) {
         return list
     }
 
+    /** Decoded grid values of one message (kept in a small least-recently-used cache). */
     @Synchronized
     private fun values(e: Entry): FloatArray = cache.getOrPut(e) { Grib2.decode(e.bytes, e.msg) }
 
@@ -242,6 +249,7 @@ class WeatherRepo(private val context: Context) {
         return s * MS_TO_KN to ((d % 360) + 360) % 360.0
     }
 
+    /** Forecast gust (knots) at a point and time, or null. */
     fun gustKn(timeMs: Long, lat: Double, lon: Double): Double? =
         sample(Wx.GUST, timeMs, lat, lon).takeIf { !it.isNaN() }?.let { it * MS_TO_KN }
 

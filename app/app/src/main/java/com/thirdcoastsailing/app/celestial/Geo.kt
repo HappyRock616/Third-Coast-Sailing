@@ -16,7 +16,9 @@ import kotlin.math.sqrt
 /** A position. lat north +, lon east + (degrees). */
 data class LatLon(val lat: Double, val lon: Double)
 
+/** Degrees to radians factor. */
 internal const val DEG = PI / 180.0
+/** Radians to degrees factor. */
 internal const val RAD = 180.0 / PI
 
 /** Normalize an angle to [0, 360). */
@@ -51,11 +53,13 @@ fun bearing(a: LatLon, b: LatLon): Double {
 
 /** Degrees as navigators write them: 42°31.4'N / 086°12.0'W. */
 fun formatLat(lat: Double): String = dm(kotlin.math.abs(lat), 2) + if (lat >= 0) "N" else "S"
+/** Longitude as "085°36.2'W". */
 fun formatLon(lon: Double): String = dm(kotlin.math.abs(lon), 3) + if (lon >= 0) "E" else "W"
 
 /** An angle as degrees and decimal minutes, e.g. 42°31.4'. Negative values get a leading minus. */
 fun formatDm(deg: Double, width: Int = 1): String = (if (deg < 0) "-" else "") + dm(kotlin.math.abs(deg), width)
 
+/** Unsigned degrees and decimal minutes, the degrees zero-padded to `width` digits. */
 private fun dm(a: Double, width: Int): String {
     var d = a.toInt(); var m = (a - d) * 60.0
     if (m >= 59.95) { d += 1; m = 0.0 }

@@ -114,13 +114,18 @@ private val windStops = listOf(
 )
 const val FIELD_OPACITY = 0.45f              // color field transparency on the chart
 
+/** Wind barb fill. */
 private val BarbNavy = Color(0xFF0F2742)
+/** Wind barb outline, so barbs read on any color. */
 private val BarbEdge = Color(0xFFF4F1EA)
 
 // Wave crest colors: under 2 ft, 2-4 ft, 4-6 ft, 6 ft and up
 private val WaveLow = Color(0xFFE6F2FF)
+/** Waves 2–4 ft. */
 private val WaveMid = Color(0xFF7FD3F0)
+/** Waves 4–6 ft. */
 private val WaveHigh = Color(0xFFF2C14E)
+/** Waves 6 ft and up. */
 private val WaveBig = Color(0xFFE5484D)
 
 private const val WAVE_FRAME_MS = 100L      // wave animation step: about 10 updates a second
@@ -140,6 +145,7 @@ fun windColor(kn: Double): Color {
     return windStops.last().second
 }
 
+/** Crest color for a wave height in feet. */
 private fun waveColor(ft: Double) = when {
     ft < 2 -> WaveLow; ft < 4 -> WaveMid; ft < 6 -> WaveHigh; else -> WaveBig
 }
@@ -149,7 +155,9 @@ private fun waveColor(ft: Double) = when {
 /** Color field as an image with its lat/lon corners, for a MapLibre image source (so it pans and zooms with the chart). */
 class FieldImage(val bitmap: Bitmap, val quad: LatLngQuad)
 
+/** Web-Mercator y of a latitude (the map's vertical scale). */
 private fun mercY(lat: Double) = ln(tan(PI / 4 + Math.toRadians(lat) / 2))
+/** Latitude of a Web-Mercator y. */
 private fun mercLat(y: Double) = Math.toDegrees(2 * atan(exp(y)) - PI / 2)
 
 /**
@@ -381,6 +389,7 @@ fun WeatherPanel(
 ) {
     if (!layers.any) return
     val shape = RoundedCornerShape(12.dp)
+    /** The rounded navy box shared by the weather boxes (orange border when offline). */
     fun Modifier.box() = this.widthIn(max = 200.dp).clip(shape).background(Navy.copy(alpha = 0.93f), shape)
         .then(if (offline) Modifier.border(2.5.dp, SignalOrange, shape) else Modifier)
         .padding(horizontal = 10.dp, vertical = 7.dp)
@@ -398,6 +407,7 @@ fun WeatherPanel(
         else -> WeatherRepo.stamp(lastUpdateMs)
     }
 
+    /** Bottom line of a weather box: when the forecast was updated; tap to update now. */
     @Composable
     fun UpdateLine() {
         HorizontalDivider(color = NavyLight, modifier = Modifier.padding(top = 4.dp, bottom = 3.dp))
@@ -409,6 +419,7 @@ fun WeatherPanel(
         }
     }
 
+    /** Top line of a weather box: name, unit and the forecast time shown (or "no forecast"). */
     @Composable
     fun Header(title: String, unit: String) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

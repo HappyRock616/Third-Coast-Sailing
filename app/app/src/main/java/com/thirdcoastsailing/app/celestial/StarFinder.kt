@@ -23,6 +23,7 @@ import kotlin.math.sin
 
 data class CatalogStar(val raDeg: Double, val decDeg: Double, val mag: Double, val hr: Int)
 data class ConstellationLine(val abbr: String, val rank: Int, val points: List<Pair<Double, Double>>)  // (ra, dec) degrees
+/** A constellation's name label: abbreviation, full name, size rank (bigger first) and where to draw the name. */
 data class ConstellationName(val abbr: String, val name: String, val rank: Int, val raDeg: Double, val decDeg: Double)
 
 /** The star finder's catalog, parsed once from the three CSV assets. */
@@ -33,6 +34,7 @@ class StarCatalog(
 ) {
     /** HR numbers of the navigational stars, so the drawing can skip them (they're drawn from the almanac). */
     private val navHr: Set<Int> = NAV_STARS.map { it.hr }.toSet()
+    /** True for a catalog star that is one of the 57 navigational stars (or Polaris). */
     fun isNavStar(s: CatalogStar) = s.hr in navHr
 
     /** Constellations that contain a navigational star (these get their names drawn). */
@@ -58,6 +60,7 @@ class StarCatalog(
     }
 }
 
+/** What a dot on the flat star finder is, which sets its look and label. */
 enum class SkyObjectKind { STAR, NAV_STAR, PLANET, SUN, MOON }
 
 /** A dot on the star finder. x, y in the unit disc (y down, facing direction at the top). */
@@ -70,12 +73,16 @@ data class SkyObject(
     val body: SkyBody?,             // for tapping through to a sight
 )
 
+/** A constellation stick-figure segment on the flat star finder (unit-disc coordinates). */
 data class SkySegment(val abbr: String, val x1: Double, val y1: Double, val x2: Double, val y2: Double)
 
+/** What a label on the flat star finder names. */
 enum class SkyLabelKind { CONSTELLATION, NAV_STAR, PLANET, CARDINAL }
 
+/** A label on the flat star finder (unit-disc coordinates). */
 data class SkyLabel(val kind: SkyLabelKind, val text: String, val x: Double, val y: Double)
 
+/** Everything the flat (2D) star finder draws for one time, place and facing direction. */
 data class SkyView(
     val timeMs: Long, val position: LatLon, val headingDeg: Double,
     val objects: List<SkyObject>,       // faint first, so bright ones are drawn on top
@@ -96,12 +103,14 @@ data class Sky3DSegment(val abbr: String, val alt1: Double, val az1: Double, val
 /** A constellation name; `nav` = contains a navigational star (drawn brighter). */
 data class Sky3DName(val name: String, val nav: Boolean, val altDeg: Double, val azDeg: Double)
 
+/** Everything the 3D star finder draws for one time and place, as altitude / azimuth (the renderer turns it with the phone). */
 data class Sky3D(
     val timeMs: Long, val position: LatLon,
     val objects: List<Sky3DObject>, val segments: List<Sky3DSegment>, val names: List<Sky3DName>,
     val sunAltDeg: Double, val sunAzDeg: Double,
 )
 
+/** Works out the sky for the star finder: where every star, planet, the Sun and Moon, and the constellation figures are. */
 object StarFinder {
 
     /**
@@ -214,6 +223,7 @@ object StarFinder {
     fun project(altDeg: Double, azDeg: Double, headingDeg: Double): Pair<Double, Double>? =
         if (altDeg < 0.0) null else projectAny(altDeg, azDeg, headingDeg)
 
+    /** Flat-disc position of an altitude / azimuth, facing headingDeg at the top (horizon at radius 1); also below the horizon. */
     private fun projectAny(altDeg: Double, azDeg: Double, headingDeg: Double): Pair<Double, Double> {
         val r = (90.0 - altDeg) / 90.0
         val a = (azDeg - headingDeg) * DEG

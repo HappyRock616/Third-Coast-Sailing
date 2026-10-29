@@ -30,9 +30,13 @@ enum class BodyKind { SUN, MOON, PLANET, STAR }
 
 /** Anything a sight can be taken of. */
 sealed class SkyBody(val name: String, val kind: BodyKind) {
+    /** The Sun. */
     object Sun : SkyBody("Sun", BodyKind.SUN)
+    /** The Moon. */
     object Moon : SkyBody("Moon", BodyKind.MOON)
+    /** One of the four navigational planets (Venus, Mars, Jupiter, Saturn). */
     class Planet internal constructor(name: String, internal val body: Body) : SkyBody(name, BodyKind.PLANET)
+    /** One of the navigational stars. */
     class Star(val star: NavStar) : SkyBody(star.name, BodyKind.STAR)
 
     override fun toString() = name
@@ -67,6 +71,7 @@ data class AlmanacEntry(
     val mag: Double,
 )
 
+/** Almanac values (GHA, declination, SHA, semi-diameter, HP, ...) worked out for any instant from Astronomy Engine. */
 object Almanac {
 
     private const val EARTH_RADIUS_KM = 6378.14
@@ -75,6 +80,7 @@ object Almanac {
     private const val SUN_SD_1AU_ARCSEC = 959.63
     private const val SOLAR_PARALLAX_1AU_ARCSEC = 8.794
 
+    /** Astronomy Engine's time for a Unix time in milliseconds. */
     fun time(ms: Long): Time = Time.fromMillisecondsSince1970(ms)
 
     /** Greenwich Hour Angle of Aries (the first point of Aries): apparent sidereal time in degrees. */
@@ -113,6 +119,7 @@ object Almanac {
 
     /** Moon phase angle (0 new, 90 first quarter, 180 full, 270 last quarter) and age in days. */
     fun moonPhaseDeg(ms: Long): Double = moonPhase(time(ms))
+    /** Age of the Moon in days since new moon. */
     fun moonAgeDays(ms: Long): Double = moonPhaseDeg(ms) / 360.0 * 29.530589
 
     /** Fraction of the Moon's disc that is lit (0..1). */

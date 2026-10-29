@@ -74,12 +74,19 @@ object GuideMemory {
     private var step = 0
     private var atMs = 0L
 
+    /** The step last shown for this kind of body, if it was within KEEP_MS (so reopening the guide continues where it was). */
     fun recall(k: BodyKind): Int? =
         if (kind == k && System.currentTimeMillis() - atMs < KEEP_MS) step else null
 
+    /** Remember the step being shown for this kind of body. */
     fun save(k: BodyKind, s: Int) { kind = k; step = s; atMs = System.currentTimeMillis() }
 }
 
+/**
+ * Step-by-step sextant guide for one sight, one page per step, with a jump list.
+ * @param includeIndexError include the index-error step (beginner level)
+ * @param note optional line shown above the steps (e.g. the suggested preset altitude)
+ */
 @SuppressLint("DiscouragedApi")
 @Composable
 fun SightGuide(body: SkyBody, includeIndexError: Boolean, note: String?, onClose: () -> Unit) {
@@ -90,6 +97,7 @@ fun SightGuide(body: SkyBody, includeIndexError: Boolean, note: String?, onClose
     var menu by remember { mutableStateOf(false) }
     LaunchedEffect(pager.currentPage) { GuideMemory.save(body.kind, pager.currentPage) }
     BackHandler(onBack = onClose)
+    /** Animate to step i (kept within range). */
     fun go(i: Int) { scope.launch { pager.animateScrollToPage(i.coerceIn(0, steps.size - 1)) } }
 
     Column(Modifier.fillMaxSize().background(NavyDeep).safeDrawingPadding()) {
@@ -136,10 +144,12 @@ fun SightGuide(body: SkyBody, includeIndexError: Boolean, note: String?, onClose
     }
 }
 
+/** One guide page: picture(s), title and text. */
 @SuppressLint("DiscouragedApi")
 @Composable
 private fun StepPage(step: SextantStep) {
     val context = LocalContext.current
+    /** Drawable resource id from its name (0 if missing). */
     fun res(name: String) = context.resources.getIdentifier(name, "drawable", context.packageName)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         val pics = listOfNotNull(step.graphic, step.graphic2).map { res(it) }.filter { it != 0 }

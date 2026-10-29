@@ -45,10 +45,15 @@ object CatalogTrust {
     private val STATION = Regex("^[A-Z0-9]{3,8}$")
     private val HEX64 = Regex("^[0-9a-f]{64}$")
 
+    /** True for a plain lake id ("michigan"). */
     fun validId(s: String) = ID.matches(s)
+    /** True for a plain file name that can't leave its folder ("michigan_20261022_chart.pmtiles"). */
     fun validName(s: String) = NAME.matches(s)
+    /** True for a plain NOAA station id ("45007"). */
     fun validStation(s: String) = STATION.matches(s)
+    /** True for a 64-character lowercase hex SHA-256. */
     fun validSha(s: String) = HEX64.matches(s)
+    /** True for a download link on this project's charts release with a plain file name. */
     fun validUrl(s: String) = s.startsWith(RELEASE_PREFIX) && validName(s.removePrefix(RELEASE_PREFIX))
 
     /** True when `sigBase64` is a valid signature of exactly `data` by the catalog key. */

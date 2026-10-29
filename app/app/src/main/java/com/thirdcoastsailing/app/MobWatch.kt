@@ -81,6 +81,7 @@ object MobWatch {
     const val LEEWAY_CROSSWIND = 0.0054
     private const val PREFS = "tcs_mob"
 
+    /** The MOB mark: where and when, plus the forecast wind at the pin for the drift triangle. No pin = MOB not active. */
     data class State(
         val pin: GeoPt? = null,                  // where the person went in
         val timeMs: Long = 0L,                   // when MOB was pressed
@@ -101,6 +102,7 @@ object MobWatch {
         private set
     private var loaded = false
 
+    /** Restore a MOB mark saved before the app was closed (only once per app start). */
     fun load(context: Context) {
         if (loaded) return
         loaded = true
@@ -110,6 +112,7 @@ object MobWatch {
             p.getString("wkn", null)?.toDoubleOrNull(), p.getString("wdir", null)?.toDoubleOrNull())
     }
 
+    /** Write the current mark to the phone, or clear it when MOB is reset. */
     private fun save(context: Context) {
         val s = state
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
@@ -134,12 +137,14 @@ object MobWatch {
         save(context)
     }
 
+    /** End MOB: clear the mark and the saved copy. */
     fun reset(context: Context) { state = State(); save(context) }
 }
 
 private val MOB_SOFT = Color(0xFFF6C9C9)        // soft red fill
 private val MOB_RED = Color(0xFFD62828)         // border, pin, line
 private val MOB_DARK = Color(0xFF7A1010)        // text, hold-progress shade
+/** Drift triangle fill. */
 private val DRIFT_ORANGE = Color(0xFFF28C28)
 
 /** "214°T · 0.42 nm" from the boat to the pin, or "No GPS". */

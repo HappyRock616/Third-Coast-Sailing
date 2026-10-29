@@ -34,6 +34,7 @@ class LakeStore(private val context: Context) {
             .mapNotNull { read(it) }
             .sortedBy { order.indexOf(it.id).let { i -> if (i < 0) 99 else i } }
 
+    /** One installed lake from its folder: needs a chart file; dates come from manifest.json when it is there. */
     private fun read(dir: File): Lake? {
         val pm = dir.listFiles()?.firstOrNull { it.name.endsWith("_chart.pmtiles") } ?: return null
         var built = ""

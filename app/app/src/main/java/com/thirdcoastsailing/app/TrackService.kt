@@ -17,7 +17,9 @@ import android.os.Looper
 /** GPS interval while the trip track records with the app in the background or the screen off. */
 private const val BACKGROUND_FIX_MS = 5 * 60_000L
 
+/** Notification channel for the trip-track notification. */
 private const val CHANNEL_ID = "trip_track"
+/** Id of the trip-track notification (one per app). */
 private const val NOTE_ID = 1
 
 /**
@@ -69,6 +71,7 @@ class TrackService : Service() {
         super.onDestroy()
     }
 
+    /** The ongoing "Recording trip track" notification (creates its channel the first time); tapping it opens the app. */
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {

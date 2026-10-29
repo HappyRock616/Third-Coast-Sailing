@@ -16,11 +16,13 @@ class DepthLookup(private val lakes: () -> List<Lake>) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<List<DoubleArray>>>?) = size > 64
     }
 
+    /** The open routing file of a lake (opened on first use and kept open), or null if it is missing. */
     private fun db(lake: Lake): SQLiteDatabase? {
         open[lake.id]?.let { return it }
         return Gpkg.open(File(lake.pmtiles.parentFile, "${lake.id}_hazards.gpkg"))?.also { open[lake.id] = it }
     }
 
+    /** Close every open routing file and forget the cached polygons (before chart files are replaced). */
     @Synchronized
     fun close() { open.values.forEach { it.close() }; open.clear(); polys.clear() }
 

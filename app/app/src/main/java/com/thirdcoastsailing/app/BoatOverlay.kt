@@ -26,14 +26,23 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
+/*
+ * The boat on the chart: an orange top-down sloop at the GPS position, turned to the course, with the course line
+ * and 1, 2 and 3-hour marks spaced by the 15-minute average speed.
+ */
+
+/** Boat marker fill (brand orange). */
 private val Orange = Color(0xFFF28C28)
+/** Boat marker outline (navy). */
 private val NavyInk = Color(0xFF0F2742)
+/** Speed label text (off-white). */
 private val White = Color(0xFFF4F1EA)
 
 /** Speed over ground averaged over the last 15 minutes (time-weighted). */
 class SpeedAverage(private val windowMs: Long = 15 * 60_000L) {
     private val samples = ArrayDeque<Pair<Long, Float>>()
 
+    /** Add one GPS speed sample and drop samples older than the averaging window. Null speeds are ignored. */
     fun add(timeMs: Long, sogKn: Float?) {
         if (sogKn == null) return
         samples.addLast(timeMs to sogKn)

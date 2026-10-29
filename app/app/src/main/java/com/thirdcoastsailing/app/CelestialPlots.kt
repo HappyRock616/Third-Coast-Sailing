@@ -83,9 +83,13 @@ import kotlin.math.sin
  */
 
 private val PAPER = Color(0xFFECF1F5)
+/** Plot ink (navy). */
 private val INK = Color(0xFF0F2742)
+/** Assumed-position marks and the GPS position. */
 private val BLUE = Color(0xFF286ED2)
+/** Fix and its uncertainty circle. */
 private val PURPLE = Color(0xFF6A3FB5)
+/** One color per body, so each line of position matches its sight. */
 private val BODY_COLORS = listOf(Color(0xFF148C78), BLUE, Color(0xFFC84682), Color(0xFFB07A10), Color(0xFF5A8F29), Color(0xFF8A4FC8))
 
 /** Course over ground for the plot: from the shots' own positions if the boat moved, else the live GPS course. */
@@ -97,6 +101,7 @@ fun plotCourse(shots: List<Shot>, gps: BoatFix?): Double? {
 
 /** Flat local frame in nautical miles (east, north) round an origin; fine over the few miles a plot covers. */
 private class Local(val o: LatLon) {
+    /** A position in nm east and north of the origin. */
     fun en(p: LatLon) = Offset((norm180(p.lon - o.lon) * 60.0 * cos(Math.toRadians(o.lat))).toFloat(), ((p.lat - o.lat) * 60.0).toFloat())
 }
 
@@ -105,7 +110,9 @@ private fun dir(brgDeg: Double) = Offset(sin(Math.toRadians(brgDeg)).toFloat(), 
 
 /** Maps the local frame to the canvas: `c` (nm) at the canvas center, `s` px per nm, north up. */
 private class View(val c: Offset, val s: Float, val size: Size) {
+    /** Canvas pixel of a point in the local frame. */
     fun px(p: Offset) = Offset(size.width / 2f + (p.x - c.x) * s, size.height / 2f - (p.y - c.y) * s)
+    /** True when a canvas point is at least marginPx inside the canvas edges. */
     fun inside(p: Offset, marginPx: Float) = p.x in marginPx..(size.width - marginPx) && p.y in marginPx..(size.height - marginPx)
 }
 
@@ -115,6 +122,7 @@ private fun DrawScope.boat(at: Offset, hdgDeg: Double?, k: Float) {
         drawCircle(Color.White, 5f * k, at); drawCircle(INK, 5f * k, at, style = Stroke(1.2f * k)); return
     }
     val a = Math.toRadians(hdgDeg)
+    /** Hull point (x across, y along the boat), rotated to the heading and scaled, in canvas pixels. */
     fun p(x: Float, y: Float) = Offset(at.x + ((x * cos(a) + y * sin(a)) * k).toFloat(), at.y - ((-x * sin(a) + y * cos(a)) * k).toFloat())
     val hull = listOf(p(0f, 15f), p(3.5f, 7.5f), p(4f, -2f), p(3f, -10f), p(-3f, -10f), p(-4f, -2f), p(-3.5f, 7.5f))
     val path = Path().apply { moveTo(hull[0].x, hull[0].y); hull.drop(1).forEach { lineTo(it.x, it.y) }; close() }

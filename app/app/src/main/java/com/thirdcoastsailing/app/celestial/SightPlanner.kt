@@ -83,6 +83,7 @@ data class SightPlan(
     val notes: List<String>,
 )
 
+/** Plans the day's sights: Sun sights through the day and star sessions at morning and evening twilight. */
 object SightPlanner {
 
     const val MIN_ALT = 15.0
@@ -141,6 +142,7 @@ object SightPlanner {
         return out
     }
 
+    /** A star session at twilight: the best spread of bright stars at a good altitude around the middle of nautical twilight. */
     private fun starSession(pos: LatLon, start: Long, end: Long, evening: Boolean, tw: Twilight): StarSession? {
         val a = min(start, end); val b = maxOf(start, end)
         val plan = (a + b) / 2                                   // Sun about 9° below the horizon

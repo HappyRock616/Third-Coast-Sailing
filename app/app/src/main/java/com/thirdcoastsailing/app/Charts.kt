@@ -54,6 +54,7 @@ class ChartRepo(context: Context) {
     private val cacheSig = File(context.filesDir, "catalog.json.sig")
     private val ua = "ThirdCoastSailing/0.7 (Android)"
 
+    /** Thrown when the user cancels a download. */
     class Stopped : IOException("Download stopped")
 
     /** Download the catalog (and keep a copy for offline use). Throws on failure. */
@@ -105,6 +106,7 @@ class ChartRepo(context: Context) {
     fun installedBuilt(id: String): String =
         runCatching { JSONObject(File(File(packages, id), "manifest.json").readText()).optString("built_utc") }.getOrDefault("")
 
+    /** True when a lake has a chart file installed. */
     fun isInstalled(id: String): Boolean =
         File(packages, id).listFiles()?.any { it.name.endsWith("_chart.pmtiles") } == true
 

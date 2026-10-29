@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3 (2026-10-29)
+
+### Changed
+- **Release builds are optimized with R8 again** (whole app, full mode): a much smaller app with faster installs and updates. Google Play requires this for apps with more than 10 MB of code from February 2027 (this app had about 25 MB). Keep rules are in `src/main/keepRules/rules.keep`; the sextant guide pictures, loaded by name, are kept in `res/raw/keep.xml`.
+- Code comments: every class, function and constant now has a short description (KDoc / Javadoc), and every source file a header saying what it does.
+
 ## 0.8.2 (2026-10-29)
 
 Needs the signed chart list: upload `catalog.json` and `catalog.json.sig` to the charts release before publishing this version.

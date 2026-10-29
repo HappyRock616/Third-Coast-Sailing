@@ -35,13 +35,21 @@ import kotlin.math.sin
 
 // Gauge palette (matches the app theme)
 private val GNavy = Color(0xFF0F2742)
+/** Ring lines. */
 private val GLine = Color(0xFF2C5078)
+/** Heading box border and target dot. */
 private val GOrange = Color(0xFFF28C28)
+/** Main text. */
 private val GFoam = Color(0xFFF4F1EA)
+/** Secondary text and greyed-out parts. */
 private val GMist = Color(0xFFAFC2D6)
+/** Forecast wind triangle and wind line. */
 private val GBlue = Color(0xFF2F6FA3)
+/** Polar curve. */
 private val GPolar = Color(0xFF8FBCE0)
+/** Starboard no-go arc (green, right of the bow). */
 private val GGreen = Color(0xFF3DBE6B)
+/** Port no-go arc (red, left of the bow). */
 private val GRed = Color(0xFFE5484D)
 
 /** Live values the gauge shows. Anything null is drawn as "—" or left out. */
@@ -103,6 +111,7 @@ fun WindGauge(
 /** Radius of the gauge's touch circle on the 640-unit layout (compass ring outer edge 215 plus a margin). */
 private const val TOUCH_R = 225f
 
+/** Draw the whole gauge on the 640-unit layout; k = pixels per layout unit. */
 private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
     val c = Offset(320f * k, 330f * k)
     val rOut = 215f * k
@@ -112,10 +121,12 @@ private fun DrawScope.drawGauge(d: GaugeData, k: Float, tm: TextMeasurer) {
 
     // screen angle (degrees clockwise from up) of a true bearing, heading-up
     fun screen(trueDeg: Double) = ((trueDeg - heading) % 360 + 360) % 360
+    /** Screen point at radius r and screen angle (degrees clockwise from up) around the gauge center. */
     fun at(r: Float, screenDeg: Double): Offset {
         val a = Math.toRadians(screenDeg - 90)
         return Offset(c.x + r * cos(a).toFloat(), c.y + r * sin(a).toFloat())
     }
+    /** Draw text centered on a point, optionally rotated (ring numbers). */
     fun text(s: String, center: Offset, size: Float, color: Color, bold: Boolean = true, rotateDeg: Float = 0f) {
         val layout = tm.measure(s, TextStyle(color = color, fontSize = (size * k).toSp(),
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal))

@@ -29,6 +29,7 @@ object NavStyle {
     private const val MEDIUM = "roboto-medium"
     private const val ITALIC = "roboto-italic"
 
+    /** Label and line colors for one theme: text, text halo, water names, land names, magenta (course lines, fog signals). */
     private data class Ink(val text: String, val halo: String, val water: String, val land: String, val magenta: String)
     private val DAY = Ink("#1B1F23", "#FFFFFF", "#2C5A86", "#6E6048", "#B0207E")
     private val NIGHT = Ink("#E6E8EA", "#1B1F23", "#8FB7DA", "#B0B4B8", "#E05AB8")
@@ -39,6 +40,7 @@ object NavStyle {
     /** Tap targets in priority order: lights, then buoys and beacons, then landmarks and CG stations. */
     fun tapLayers(src: String) = lightLayers(src) + listOf("${src}_aid", "${src}_lmk1", "${src}_lmk2", "${src}_cg")
 
+    /** Add the nav-aid layers of one lake source to the style, in drawing order (course lines first, light text last). */
     fun addLayers(layers: JSONArray, src: String, night: Boolean) {
         val k = if (night) NIGHT else DAY
         // course lines: magenta dashed, bearing along the line
@@ -129,23 +131,28 @@ object NavStyle {
         "[\"==\", [\"get\", \"colour\"], \"3\"], \"nav_nun_3\", [\"==\", [\"get\", \"colour\"], \"4\"], \"nav_can_4\", " +
         "[\"==\", [\"get\", \"colour\"], \"6\"], \"nav_dia_6\", \"nav_dia_1\"]"
 
+    /** Common part of every layer: id, type, source, source layer and minimum zoom. */
     private fun base(id: String, type: String, src: String, layer: String, minZoom: Double) =
         JSONObject().put("id", id).put("type", type).put("source", src).put("source-layer", layer).put("minzoom", minZoom)
 
+    /** Text colors with a halo, so labels read on any background. */
     private fun textPaint(color: String, halo: String) = JSONObject()
         .put("text-color", color).put("text-halo-color", halo).put("text-halo-width", 1.4)
 
+    /** An icon with its label beside it; the label moves to another side, or is left out, rather than overlap. */
     private fun iconText(icon: String, text: String, font: String, size: Double, anchor: String, offset: Double) = JSONObject()
         .put("icon-image", icon).put("icon-allow-overlap", true).put("icon-ignore-placement", true)
         .put("text-field", JSONArray(text)).put("text-font", JSONArray().put(font)).put("text-size", size)
         .put("text-variable-anchor", JSONArray("[\"$anchor\", \"right\", \"top\", \"bottom\"]")).put("text-radial-offset", offset)
         .put("text-optional", true)
 
+    /** A label that can sit on any side of its point, left out rather than overlap. */
     private fun varText(text: String, font: String, size: Double) = JSONObject()
         .put("text-field", JSONArray(text)).put("text-font", JSONArray().put(font)).put("text-size", size)
         .put("text-variable-anchor", JSONArray("[\"left\", \"right\", \"top-left\", \"bottom-left\", \"top\", \"bottom\"]"))
         .put("text-radial-offset", 1.1).put("text-optional", true)
 
+    /** Place names of one kind (town, water, land) from a given zoom. */
     private fun place(src: String, kind: String, minZoom: Double, font: String, size: Double, color: String, halo: String) =
         base("${src}_place_$kind", "symbol", src, "place", minZoom)
             .put("filter", JSONArray("[\"==\", [\"get\", \"kind\"], \"$kind\"]"))
@@ -177,6 +184,7 @@ object NavStyle {
         return out
     }
 
+    /** An antialiased Paint for drawing the symbol bitmaps. */
     private fun paint() = Paint(Paint.ANTI_ALIAS_FLAG)
 
     /**

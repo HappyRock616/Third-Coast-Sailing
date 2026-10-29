@@ -27,12 +27,17 @@ import kotlin.math.tan
 
 /** 3-vector. */
 data class V3(val x: Double, val y: Double, val z: Double) {
+    /** Vector sum. */
     operator fun plus(o: V3) = V3(x + o.x, y + o.y, z + o.z)
+    /** Vector difference. */
     operator fun minus(o: V3) = V3(x - o.x, y - o.y, z - o.z)
+    /** Vector scaled by k. */
     operator fun times(k: Double) = V3(x * k, y * k, z * k)
     infix fun dot(o: V3) = x * o.x + y * o.y + z * o.z
     infix fun cross(o: V3) = V3(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x)
+    /** Length of the vector. */
     fun length() = sqrt(this dot this)
+    /** The same direction with length 1 (straight up for a zero vector). */
     fun unit(): V3 { val l = length(); return if (l > 1e-12) this * (1.0 / l) else V3(0.0, 0.0, 1.0) }
 
     companion object {
@@ -51,9 +56,12 @@ fun V3.azDeg(): Double = norm360(atan2(x, y) * RAD)
 
 /** 4x4 matrix, column-major (OpenGL order): m[col * 4 + row]. */
 class Mat4(val m: DoubleArray = DoubleArray(16)) {
+    /** Element at row, col. */
     operator fun get(row: Int, col: Int) = m[col * 4 + row]
+    /** Set the element at row, col. */
     operator fun set(row: Int, col: Int, v: Double) { m[col * 4 + row] = v }
 
+    /** Matrix product (this × o). */
     operator fun times(o: Mat4): Mat4 {
         val r = Mat4()
         for (i in 0..3) for (j in 0..3) { var s = 0.0; for (k in 0..3) s += this[i, k] * o[k, j]; r[i, j] = s }
@@ -63,6 +71,7 @@ class Mat4(val m: DoubleArray = DoubleArray(16)) {
     /** Transform a point (w = 1); returns x, y, z, w. */
     fun transform(p: V3, w: Double = 1.0): DoubleArray = DoubleArray(4) { i -> this[i, 0] * p.x + this[i, 1] * p.y + this[i, 2] * p.z + this[i, 3] * w }
 
+    /** The matrix as 16 floats, column-major, for OpenGL. */
     fun toFloats(): FloatArray = FloatArray(16) { m[it].toFloat() }
 
     /** General inverse (Gauss-Jordan); identity if singular. */
@@ -214,6 +223,7 @@ class FinderCameras(val pose: PhonePose, val widthPx: Int, val heightPx: Int, va
         return toScreen(c, topPx, boatViewportHeight, heightPx)
     }
 
+    /** Clip-space coordinates to a screen point inside a viewport of vpH pixels starting topPx from the top (points behind the camera are pushed far off-screen). */
     private fun toScreen(c: DoubleArray, topPx: Int, vpH: Int, screenH: Int): ScreenPt {
         val w = c[3]
         val inFront = w > 1e-6

@@ -116,12 +116,17 @@ import java.util.TimeZone
  */
 
 private const val DEFAULT_LAT = 44.0          // middle of Lake Michigan, when there's no GPS and no DR typed in
+/** Longitude used with DEFAULT_LAT when there is no GPS fix and no position typed in. */
 private const val DEFAULT_LON = -87.0
 private const val MB_PER_INHG = 33.8639        // millibars per inch of mercury
 
 /** Star finder request: which body to point at (BEGINNER arrow) and what a pick does. */
 private data class FinderRequest(val target: SkyBody?, val forSightId: Long?, val pickToAdd: Boolean)
 
+/**
+ * The celestial trainer: Plan (suggested sights), Workbook (sights and the fix) and Almanac tabs.
+ * @param gps the live fix, used as the assumed position and to compare with the celestial fix
+ */
 @Composable
 fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
     val st = store.state
@@ -253,6 +258,7 @@ private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, heightOfEyeF
     }
 }
 
+/** One suggested sight: time, body, preset altitude and bearing, with Find in sky, Add to workbook and the how-to guide. */
 @Composable
 private fun SuggestionCard(s: Suggestion, level: SkillLevel, onFind: (SkyBody) -> Unit, onAdd: (SkyBody) -> Unit,
                            onGuide: (SkyBody, String?) -> Unit) {
@@ -421,6 +427,11 @@ private fun EyeDropdown(current: Double, onPick: (Double) -> Unit) {
     }
 }
 
+/**
+ * One workbook sight: its shots, the worked reduction (shown according to the skill level) and its line of position.
+ * @param typed text being typed in the number boxes, kept across recompositions
+ * @param readOnly true for a saved fix in the trip log
+ */
 @Composable
 private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: LatLon, store: CelestialStore,
                       typed: MutableMap<String, String>, onFind: (SkyBody, Long) -> Unit,
@@ -601,6 +612,7 @@ private fun ConditionDropdown(current: SightCondition, onPick: (SightCondition) 
     }
 }
 
+/** The almanac figures used for a sight, in fixed-width text, with the ones that matter highlighted. */
 @Composable
 private fun Extract(w: SightWork) {
     Column(Modifier.fillMaxWidth().background(Navy, RoundedCornerShape(8.dp)).horizontalScroll(rememberScrollState()).padding(8.dp)) {
@@ -645,6 +657,7 @@ private fun WorkRow(s: WorkbookSight, line: WorkLine, level: SkillLevel, store: 
     }
 }
 
+/** Example format shown in an empty number box for each kind of value. */
 private fun hintFor(k: FieldKind) = when (k) {
     FieldKind.ANGLE, FieldKind.ALTITUDE -> "d mm.m"
     FieldKind.DEC, FieldKind.LAT -> "N d mm.m"
@@ -654,6 +667,7 @@ private fun hintFor(k: FieldKind) = when (k) {
     FieldKind.NM -> "+toward / −away"
 }
 
+/** The fix from the workbook's lines of position: position, uncertainty and distance from GPS, with the plot and "Save fix". */
 @Composable
 private fun FixCard(plot: CelestialPlot, gps: BoatFix?, onSave: (() -> Unit)?) {
     if (plot.lops.isEmpty()) return
@@ -713,6 +727,7 @@ private fun Card(content: @Composable () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
 }
 
+/** Label on the left, value on the right in fixed-width digits. */
 @Composable
 private fun KeyValue(k: String, v: String) {
     Row { Text(k, color = Mist, fontSize = 13.sp, modifier = Modifier.weight(1f)); Text(v, color = Foam, fontSize = 13.sp, fontFamily = FontFamily.Monospace) }
@@ -752,10 +767,15 @@ private fun TypedBox(hint: String, text: String, check: Check, onChange: (String
 
 /** "19:52 · 17 Oct" for a saved fix. */
 private fun fixLabel(ms: Long) = SimpleDateFormat("HH:mm · d MMM", Locale.getDefault()).format(Date(ms))
+/** Local time as "HH:mm". */
 private fun hhmm(ms: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
+/** Local time as "HH:mm:ss". */
 private fun hhmmss(ms: Long) = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(ms))
+/** UTC time as "HH:mm:ss" (what the almanac uses). */
 private fun utc(ms: Long) = SimpleDateFormat("HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
+/** UTC date as "Fri 16 Oct 2026". */
 private fun dateUtc(ms: Long) = SimpleDateFormat("EEE d MMM yyyy", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
+/** Midnight UTC at the start of the day of ms. */
 private fun utcDayStart(ms: Long) = ms - Math.floorMod(ms, 86_400_000L)
 
 /** Midnight at the start of today, local time (UTC ms). */

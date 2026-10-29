@@ -113,12 +113,14 @@ object CrashWatch {
 class CourseAverager(private val windowMs: Long = 30_000L) {
     private val fixes = ArrayDeque<BoatFix>()
 
+    /** Add a GPS fix (ignored if not newer than the last) and drop fixes older than the averaging window. */
     fun add(f: BoatFix) {
         if (fixes.isNotEmpty() && f.time <= fixes.last().time) return
         fixes.addLast(f)
         while (fixes.isNotEmpty() && f.time - fixes.first().time > windowMs) fixes.removeFirst()
     }
 
+    /** Average course over the window (vector mean, so 350° and 10° give 0°), or null with no course data. */
     fun cog(): Double? {
         var x = 0.0; var y = 0.0
         for (f in fixes) { val c = f.cogDeg ?: continue; x += sin(Math.toRadians(c.toDouble())); y += cos(Math.toRadians(c.toDouble())) }
@@ -142,7 +144,9 @@ fun CrashOverlay(map: MapLibreMap?, tick: Int) {
     }
 }
 
+/** Crash mark stroke color. */
 private val CRASH_RED = Color(0xFFD62828)
+/** Crash mark fill (white, so the mark reads on any background). */
 private val CRASH_FILL = Color.White.copy(alpha = 0.92f)
 
 /**
@@ -152,8 +156,10 @@ private val CRASH_FILL = Color.White.copy(alpha = 0.92f)
  */
 fun DrawScope.drawBrokenBoat(c: Offset, dp: Float) {
     val k = 1.2f * dp
+    /** Point on the 40 x 40 drawing grid, in screen pixels. */
     fun o(x: Float, y: Float) = Offset(c.x + (x - 20f) * k, c.y + (y - 22f) * k)
     val st = Stroke(1.5f * k, join = StrokeJoin.Round, cap = StrokeCap.Round)
+    /** Draw one closed shape of the mark: optional white fill, then the red outline. */
     fun shape(fill: Boolean, build: Path.() -> Unit) {
         val p = Path().apply(build)
         if (fill) drawPath(p, CRASH_FILL)

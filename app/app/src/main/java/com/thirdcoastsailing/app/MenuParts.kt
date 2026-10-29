@@ -52,12 +52,18 @@ enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, NIGHT, GAUGE, OFFLINE, BO
 // Wind color stops (knots), the same scale as the map field and the buoy fill
 private val KEY_WIND = listOf(0 to Color(0xFF3B6FB6), 8 to Color(0xFF3DBE6B), 14 to Color(0xFFF2D028),
     20 to Color(0xFFF28C28), 25 to Color(0xFFE5484D))
+/** Chart key: buoy with no recent report. */
 private val STALE_GRAY = Color(0xFF8A8F96)
+/** Chart key: buoy ring for waves over 3 ft. */
 private val RING_YELLOW = Color(0xFFF2C14E)
+/** Chart key: buoy ring for waves over 5 ft; also the barograph trace. */
 private val RING_RED = Color(0xFFE5484D)
+/** Outlines and ink on light symbols. */
 private val KEY_INK = Color(0xFF1B1F23)
+/** Celestial fix symbol. */
 private val FIX_PURPLE = Color(0xFFC9A6FF)
 
+/** One menu icon, drawn in code (no image files), 24 dp by default. */
 @Composable
 fun MenuIconView(icon: MenuIcon, modifier: Modifier = Modifier.size(24.dp)) {
     Canvas(modifier) { drawMenuIcon(icon) }
@@ -66,6 +72,7 @@ fun MenuIconView(icon: MenuIcon, modifier: Modifier = Modifier.size(24.dp)) {
 /** Draws one icon to fill the canvas (designed on a 24 x 24 grid). */
 private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
     val k = size.minDimension / 24f
+    /** Point on the 24 x 24 icon grid, in pixels. */
     fun o(x: Float, y: Float) = Offset(x * k, y * k)
     val w = 2f * k
     val line = Stroke(w, cap = StrokeCap.Round)
@@ -257,6 +264,7 @@ fun DrawScope.drawMarina() {
     drawRoundRect(SignalOrange, tl, sz, CornerRadius(6f * k))
     drawRoundRect(KEY_INK, tl, sz, CornerRadius(6f * k), style = Stroke(1.6f * k))
     val ox = tl.x - 1.5f * k; val oy = tl.y - 1.5f * k
+    /** Point on the marina tile's 30 x 30 grid, in pixels. */
     fun o(x: Float, y: Float) = Offset(ox + x * k, oy + y * k)
     val st = Stroke(2.6f * k, cap = StrokeCap.Round)
     drawCircle(Navy, 2.2f * k, o(15f, 7.5f), style = st)
