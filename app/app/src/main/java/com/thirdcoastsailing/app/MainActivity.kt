@@ -158,8 +158,8 @@ class MainActivity : ComponentActivity() {
 
 /** Name of the app's main settings file (SharedPreferences). */
 private const val PREFS = "tcs"
-/** Version shown on the About screen and in the menu; keep in step with versionName in build.gradle.kts. */
-private const val APP_VERSION = "0.8.3"
+/** Version shown on the About screen and in the menu (versionName in build.gradle.kts). */
+private val APP_VERSION = BuildConfig.VERSION_NAME
 private const val MAX_ZOOM = 17.0           // cap so charts are not stretched past their scale (refined per chart later)
 /** One hour in milliseconds. */
 private const val HOUR_MS = 3_600_000L
@@ -1283,7 +1283,9 @@ private fun InfoCard(info: Info, modifier: Modifier, buoyObs: Map<String, BuoyOb
                     runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${info.phone.substringBefore(" x")}"))) }
                 }) { Text("Call ${info.phone}", fontSize = 13.sp) }
                 if (info.website.isNotBlank()) OutlinedButton(onClick = {
-                    val url = if (info.website.startsWith("http")) info.website else "https://${info.website}"
+                    // only web links: anything that isn't http:// or https:// is treated as a bare address
+                    val w = info.website.trim()
+                    val url = if (w.startsWith("https://", ignoreCase = true) || w.startsWith("http://", ignoreCase = true)) w else "https://$w"
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                 }) { Text("Website", color = SignalOrange, fontSize = 13.sp) }
             }

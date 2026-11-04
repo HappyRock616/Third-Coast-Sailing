@@ -29,7 +29,7 @@ class WeatherRepo(private val context: Context) {
 
     private val dir = File(context.filesDir, "weather").apply { mkdirs() }
     private val metaFile = File(dir, "meta.json")
-    private val ua = "ThirdCoastSailing/0.4 (Android)"
+    private val ua = "ThirdCoastSailing/${BuildConfig.VERSION_NAME} (Android)"
 
     // NDFD sectors needed to cover each lake (from the coverage trial)
     private val sectors = mapOf(

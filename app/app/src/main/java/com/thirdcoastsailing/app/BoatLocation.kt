@@ -11,6 +11,8 @@ import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
+import android.os.Handler
 import android.os.Looper
 
 /** Boat fix as the app uses it. */
@@ -55,7 +57,9 @@ class BoatLocation(
         if (LocationManager.GPS_PROVIDER in lm.allProviders) {
             lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { listener.onLocationChanged(it) }
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper())
-            lm.registerGnssStatusCallback(context.mainExecutor, gnss)
+            // Android 10 only has the Handler form of the satellite callback
+            if (Build.VERSION.SDK_INT >= 30) lm.registerGnssStatusCallback(context.mainExecutor, gnss)
+            else lm.registerGnssStatusCallback(gnss, Handler(Looper.getMainLooper()))
         }
         // GPS only: no network (cell / Wi-Fi) location. It is rough (often 100 m+ off), useless offshore, and mixed
         // in with GPS it made the trip track zigzag.

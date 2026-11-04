@@ -66,7 +66,7 @@ class BuoyRepo(context: Context) {
     private val dir = File(context.filesDir, "weather").apply { mkdirs() }
     private val latestFile = File(dir, "ndbc_latest.txt")
     private val lmFile = File(dir, "ndbc_latest.lm")
-    private val ua = "ThirdCoastSailing/0.6 (Android)"
+    private val ua = "ThirdCoastSailing/${BuildConfig.VERSION_NAME} (Android)"
 
     @Volatile private var latest: Map<String, BuoyObs>? = null
 

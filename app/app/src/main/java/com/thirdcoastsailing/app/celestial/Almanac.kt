@@ -51,8 +51,11 @@ sealed class SkyBody(val name: String, val kind: BodyKind) {
         val planets: List<Planet> = listOf(Venus, Mars, Jupiter, Saturn)
         val stars: List<Star> = NAV_STARS.map { Star(it) }
 
-        /** Every body the almanac covers. */
-        val all: List<SkyBody> = listOf(Sun, Moon) + planets + stars
+        /**
+         * Every body the almanac covers. Lazy: built on first use, after Sun and Moon exist. An eager list built
+         * while SkyBody.Sun was still initializing held null in its place, and byName / the almanac search crashed.
+         */
+        val all: List<SkyBody> by lazy { listOf(Sun, Moon) + planets + stars }
 
         fun byName(name: String): SkyBody? = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
     }

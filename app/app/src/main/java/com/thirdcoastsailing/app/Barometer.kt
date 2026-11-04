@@ -13,6 +13,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -172,7 +173,9 @@ class BaroService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTE_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        // "special use" type exists from Android 14; older versions take the plain foreground service
+        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTE_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        else startForeground(NOTE_ID, notification())
         if (!Baro.isOn(this) || !Baro.hasSensor(this)) { stopSelf(); return START_NOT_STICKY }
         Baro.burst(this) { v ->
             if (v != null) Baro.add(this, BaroPoint(System.currentTimeMillis(), v))

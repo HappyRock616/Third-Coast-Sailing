@@ -11,10 +11,10 @@ android {
 
     defaultConfig {
         applicationId = "com.thirdcoastsailing.app"
-        minSdk = 34                       // Android 14 and newer
+        minSdk = 29                       // Android 10 and newer
         targetSdk = 37
-        versionCode = 17
-        versionName = "0.8.3"
+        versionCode = 18
+        versionName = "0.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -43,6 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true                // BuildConfig.VERSION_NAME: the one place the app version is set
     }
 }
 

@@ -135,7 +135,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 ## 📲 Getting the app
 
-**[Download the latest version](../../releases/latest)** and open the `.apk` file on your phone (Android 14 or newer). On first launch, pick your lakes; the charts download inside the app from the [charts release](../../releases/tag/charts).
+**[Download the latest version](../../releases/latest)** and open the `.apk` file on your phone (Android 10 or newer). On first launch, pick your lakes; the charts download inside the app from the [charts release](../../releases/tag/charts).
 
 To get updates automatically, add this repository to [Obtainium](https://github.com/ImranR98/Obtainium).
 
@@ -145,7 +145,7 @@ To get updates automatically, add this repository to [Obtainium](https://github.
 2. Open the `app/` folder.
 3. Connect a phone with USB debugging on and press **Run**.
 
-Requirements: Android 14 (API 34) or newer. The build fails on purpose if any Google Play Services or Firebase library is added.
+Requirements: Android 10 (API 29) or newer. The build fails on purpose if any Google Play Services or Firebase library is added.
 
 ## 🙏 Data sources and credits
 

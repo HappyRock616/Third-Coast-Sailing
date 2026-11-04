@@ -35,6 +35,6 @@ SAFETY AND MORE
 • Marinas with call and website buttons
 • Sunrise, sunset and moon phase
 
-Charts, weather and buoys cover the Great Lakes and connected inland lakes only. Requires Android 14 or newer.
+Charts, weather and buoys cover the Great Lakes and connected inland lakes only. Requires Android 10 or newer.
 
 Not for navigation. Official NOAA charts and notices govern.

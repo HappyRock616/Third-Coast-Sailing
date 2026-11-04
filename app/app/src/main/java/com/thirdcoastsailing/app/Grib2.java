@@ -133,7 +133,7 @@ public final class Grib2 {
                         }
                         break;
                     case 7:
-                        if (pending != null && pending.grid != null) {
+                        if (pending != null && pending.grid != null && sizesOk(b, pending)) {
                             pending.sec7 = p; pending.sec7len = len;
                             out.add(pending);
                         }
@@ -149,6 +149,24 @@ public final class Grib2 {
         return out;
     }
 
+    /**
+     * Largest grid accepted (points). Even the full NDFD CONUS grid is about 3 million points (the sectors and GLWU
+     * are smaller); a size read from a damaged file is refused so decoding can't try to allocate gigabytes.
+     */
+    private static final long MAX_POINTS = 20_000_000L;
+
+    /** True when a message's packed-value count (and, for complex packing, group count) fits its grid. */
+    private static boolean sizesOk(byte[] b, Message m) {
+        long npts = (long) m.grid.nx * m.grid.ny;
+        if (m.sec5 <= 0 || m.numPacked < 0 || m.numPacked > npts) return false;
+        int tmpl = u16(b, m.sec5 + 9);
+        if (tmpl == 2 || tmpl == 3) {
+            long ng = u32(b, m.sec5 + 31);
+            if (ng > m.numPacked) return false;
+        }
+        return true;
+    }
+
     /** Read a grid definition section; only template 3.30 (Lambert conformal, the NDFD and GLWU grids) is supported, otherwise null. */
     private static Lambert lambert(byte[] b, int p) {
         int tmpl = u16(b, p + 12);
@@ -160,6 +178,7 @@ public final class Grib2 {
         else g.radius = 6367470.0;
         g.nx = (int) u32(b, p + 30);
         g.ny = (int) u32(b, p + 34);
+        if (g.nx <= 0 || g.ny <= 0 || (long) g.nx * g.ny > MAX_POINTS) return null;   // damaged or unexpected grid: skip it
         g.la1 = s32(b, p + 38) * 1e-6;
         g.lo1 = lon180(u32(b, p + 42) * 1e-6);
         g.lov = lon180(u32(b, p + 51) * 1e-6);

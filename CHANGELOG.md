@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0 (2026-11-04)
+
+Includes 0.8.2 and 0.8.3, which were not released on their own. Needs the signed chart list: upload the new `catalog.json` and `catalog.json.sig` to the charts release before publishing (see 0.8.2).
+
+### Changed
+- **Runs on Android 10 and newer** (was Android 14). Vibration, the GPS satellite callback and the barograph's background service use the older Android calls where needed.
+- **Anchor alarm ignores single GPS glitches**: a fix outside the circle only within its own GPS error is checked again at once with fresh fixes (up to 30 s; no fresh fix means alarm). A clear move outside still sounds the bell immediately.
+- The app version is set in one place (build.gradle.kts) and shown from there; downloads identify the app with its real version.
+- Libraries updated: Android Gradle Plugin 9.5.0, Gradle 9.8.0, Kotlin 2.4.21, Compose BOM 2026.09.00, core-ktx 1.19.1, lifecycle 2.11.0, activity-compose 1.13.0, documentfile 1.1.0. MapLibre stays at 12.1.3.
+
+### Fixed
+- The almanac search (and looking a body up by name) could crash: the list of bodies was built before the Sun and Moon existed.
+
+### Security
+- Forecast files with impossible grid or value counts are skipped instead of decoded (no huge memory allocations from a damaged file).
+- A marina's Website button only opens http:// or https:// links.
+
 ## 0.8.3 (2026-10-29)
 
 ### Changed

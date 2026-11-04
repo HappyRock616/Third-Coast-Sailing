@@ -15,17 +15,21 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
+import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -111,7 +115,8 @@ import kotlin.math.sin
  *    dashed line of the boat's GPS positions as it swings.
  *  - Top of the chart: a large yellow box with the distance and true bearing to the anchor, "GPS fix lost" when there
  *    has been no fix for 10 minutes, and in an alarm a red border with "Alarm Silence" in bold.
- *  - Alarm: outside the radius, or no GPS fix for 10 minutes. A ship's bell struck in pairs (made in code) on the
+ *  - Alarm: outside the radius, or no GPS fix for 10 minutes. A fix outside only within its own GPS error is checked
+ *    again at once with a fresh fix (up to 30 s; no fresh fix = alarm), so one glitch doesn't ring the bell. A ship's bell struck in pairs (made in code) on the
  *    alarm sound channel, which sounds even on silent or Do Not Disturb, plus vibration. Silence it with either
  *    volume button while the app is on screen, by tapping the yellow box, or with "Silence 15 min" on the
  *    notification. It re-arms after 15 minutes and sounds again if the boat is still outside the circle.
@@ -247,6 +252,8 @@ private const val ANCHOR_NOTE_ID = 2
 private const val ACTION_SILENCE = "com.thirdcoastsailing.app.ANCHOR_SILENCE"
 /** Alarm action: take a fix and check the radius. */
 private const val ACTION_CHECK = "com.thirdcoastsailing.app.ANCHOR_CHECK"
+/** Longest wait for a fresh fix when a borderline fix is rechecked; no fix by then = alarm. */
+private const val RECHECK_MS = 30_000L
 
 /**
  * Keeps the anchor watch running with the screen off: one GPS fix every 2 minutes, the radius checked on each, a
@@ -260,12 +267,49 @@ class AnchorService : Service() {
     private var bell: ThirdCoastShipsBell? = null
     private var wake: PowerManager.WakeLock? = null
     private var lastFixMs = 0L
+    private var rechecking = false
+    private var recheckWake: PowerManager.WakeLock? = null
+    private val handler = Handler(Looper.getMainLooper())
+    /** Recheck got no fresh fix in time: take the borderline fix as real and alarm. */
+    private val recheckTimeout = Runnable { endRecheck(); evaluate() }
 
-    private val listener = LocationListener { loc ->
+    private val listener = LocationListener { loc -> onLocation(loc) }
+
+    /**
+     * A GPS fix. A fix that is outside the circle only within its own error (could be a glitch) is checked again at
+     * once with a fresh fix instead of sounding the bell; a clear move outside alarms immediately, as before.
+     */
+    private fun onLocation(loc: Location) {
         val sogKn = if (loc.hasSpeed()) loc.speed * 1.943844f else null
         lastFixMs = System.currentTimeMillis()
         AnchorWatch.onFix(this, BoatFix(loc.latitude, loc.longitude, null, sogKn, loc.time))
+        val s = AnchorWatch.state
+        val d = s.toAnchor()?.first
+        val errFt = if (loc.hasAccuracy()) loc.accuracy * 3.28084 else 0.0      // no accuracy given: taken as exact
+        val borderline = d != null && d > s.radiusFt && d - errFt <= s.radiusFt
+        if (borderline && !rechecking && !s.alarming && lastFixMs >= s.snoozedUntilMs) { startRecheck(); return }
+        if (rechecking) endRecheck()                                           // this fresh fix decides
         evaluate()
+    }
+
+    /** Ask for fixes every second (GPS is still warm) and keep the phone awake until one arrives or 30 s pass. */
+    @SuppressLint("MissingPermission")
+    private fun startRecheck() {
+        rechecking = true
+        recheckWake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ThirdCoast:anchorRecheck").apply { acquire(RECHECK_MS + 5_000L) }
+        runCatching { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper()) }
+        handler.postDelayed(recheckTimeout, RECHECK_MS)
+        updateNotification()
+    }
+
+    /** Back to one fix every 2 minutes. */
+    @SuppressLint("MissingPermission")
+    private fun endRecheck() {
+        rechecking = false
+        handler.removeCallbacks(recheckTimeout)
+        runCatching { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, AnchorWatch.FIX_MS, 0f, listener, Looper.getMainLooper()) }
+        recheckWake?.let { if (it.isHeld) it.release() }; recheckWake = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -295,7 +339,8 @@ class AnchorService : Service() {
     private fun evaluate() {
         val s = AnchorWatch.state
         val now = System.currentTimeMillis()
-        if ((s.outside || s.fixLost) && now >= s.snoozedUntilMs) startAlarm()
+        // a borderline fix waiting for its recheck doesn't sound the bell from the timer either
+        if (((s.outside && !rechecking) || s.fixLost) && now >= s.snoozedUntilMs) startAlarm()
         scheduleCheck()
         updateNotification()
     }
@@ -349,6 +394,8 @@ class AnchorService : Service() {
     override fun onDestroy() {
         runCatching { lm.removeUpdates(listener) }
         runCatching { alarms.cancel(servicePending(ACTION_CHECK)) }
+        handler.removeCallbacks(recheckTimeout)                    // stop a recheck in progress
+        recheckWake?.let { if (it.isHeld) it.release() }
         stopAlarm()
         super.onDestroy()
     }
@@ -412,7 +459,9 @@ class AnchorService : Service() {
 private class ThirdCoastShipsBell(private val context: Context) {
     private var track: AudioTrack? = null
     private val audio = context.getSystemService(AudioManager::class.java)
-    private val vibrator = context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    private val vibrator: Vibrator? =
+        if (Build.VERSION.SDK_INT >= 31) context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        else context.getSystemService(Vibrator::class.java)                     // Android 10–11
     private var savedVolume = -1
 
     /** Ring the bell at full alarm volume (the previous volume is restored on stop), with vibration. */
@@ -434,7 +483,10 @@ private class ThirdCoastShipsBell(private val context: Context) {
         runCatching {
             // two pulses with the two strikes, then rest; repeats until stopped
             val effect = VibrationEffect.createWaveform(longArrayOf(0, 350, 120, 350, 1780), intArrayOf(0, 255, 0, 255, 0), 0)
-            vibrator?.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM))
+            if (Build.VERSION.SDK_INT >= 33)
+                vibrator?.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM))
+            else                                                                // Android 10–12: same alarm usage
+                vibrator?.vibrate(effect, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
         }
     }
 

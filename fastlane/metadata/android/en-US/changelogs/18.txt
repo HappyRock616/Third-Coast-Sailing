@@ -1,0 +1,6 @@
+• Runs on Android 10 and newer
+• Anchor alarm double-checks a borderline GPS fix before ringing
+• Signed chart downloads and safer imports
+• Smaller, optimized app
+• Almanac search crash fixed
+• Updated libraries

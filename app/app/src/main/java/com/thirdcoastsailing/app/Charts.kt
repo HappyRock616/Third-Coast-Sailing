@@ -52,7 +52,7 @@ class ChartRepo(context: Context) {
     private val staging = File(context.filesDir, "staging").apply { mkdirs() }
     private val cacheFile = File(context.filesDir, "catalog.json")
     private val cacheSig = File(context.filesDir, "catalog.json.sig")
-    private val ua = "ThirdCoastSailing/0.7 (Android)"
+    private val ua = "ThirdCoastSailing/${BuildConfig.VERSION_NAME} (Android)"
 
     /** Thrown when the user cancels a download. */
     class Stopped : IOException("Download stopped")
