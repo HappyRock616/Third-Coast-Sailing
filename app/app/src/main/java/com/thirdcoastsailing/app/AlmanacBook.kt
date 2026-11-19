@@ -91,8 +91,6 @@ data class AlmanacTarget(
 
 /** One day in milliseconds. */
 private const val DAY_MS = 86_400_000L
-/** One hour in milliseconds. */
-private const val HOUR_MS = 3_600_000L
 
 /** The page and row a workbook line's value comes from (null for lines that aren't read from the almanac). */
 fun almanacTarget(body: SkyBody, timeMs: Long, field: Field): AlmanacTarget? {

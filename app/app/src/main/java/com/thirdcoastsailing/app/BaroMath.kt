@@ -81,8 +81,10 @@ object BaroMath {
         val from = end - window
         var n = 0; var sx = 0.0; var sy = 0.0; var sxx = 0.0; var sxy = 0.0
         var first = Long.MAX_VALUE; var last = Long.MIN_VALUE; var prevT = Long.MIN_VALUE
-        for (p in pts) {
-            if (p.t <= from || p.t > end) continue
+        // the readings are in time order: start at the first one inside the window instead of scanning the whole log
+        for (i in countUpTo(pts, from) until pts.size) {
+            val p = pts[i]
+            if (p.t > end) break
             if (prevT != Long.MIN_VALUE && p.t - prevT > MAX_GAP_MS) return null
             prevT = p.t
             val x = (p.t - end) / HOUR.toDouble()
@@ -96,6 +98,13 @@ object BaroMath {
         return (n * sxy - sx * sy) / d
     }
 
+    /** How many readings have a time at or before `t` (binary search; the readings are in time order). */
+    fun countUpTo(pts: List<BaroPoint>, t: Long): Int {
+        var lo = 0; var hi = pts.size
+        while (lo < hi) { val mid = (lo + hi) ushr 1; if (pts[mid].t <= t) lo = mid + 1 else hi = mid }
+        return lo
+    }
+
     /** Pressure change over the last hour (hPa per hour, least-squares slope), or null without enough readings. */
     fun rate1h(pts: List<BaroPoint>, end: Long): Double? = slope(pts, end, HOUR, 50 * MINUTE)
     /** Pressure change over the last 3 hours (hPa per 3 h), or null without enough readings. */
@@ -103,15 +112,14 @@ object BaroMath {
 
     /** Time a squall jump was confirmed at or before `end` (looking back an hour), or null. */
     fun squall(pts: List<BaroPoint>, end: Long): Long? {
-        for (j in pts.indices.reversed()) {
+        val last = countUpTo(pts, end) - 1                     // newest reading at or before `end`
+        for (j in last downTo 1) {
             val p = pts[j]
-            if (p.t > end) continue
             if (end - p.t > HOUR) break
-            if (j == 0) break
             val before = pts[j - 1]
             if (p.t - before.t > SQUALL_GAP_MS || p.hPa - before.hPa < SQUALL_HPA) continue
             // still up a little later?
-            val held = pts.firstOrNull { it.t >= p.t + SQUALL_HOLD_MS && it.t <= end }
+            val held = pts.getOrNull(countUpTo(pts, p.t + SQUALL_HOLD_MS - 1))?.takeIf { it.t <= end }
             if (held != null && held.hPa - before.hPa >= SQUALL_HPA) return held.t
         }
         return null
@@ -186,12 +194,17 @@ object BaroMath {
 
     // ---------------------------------------------------------------- sea level
 
-    /** Lake surface height (m) for a position: Ontario 75, Erie 174, Superior 183, Michigan / Huron 176 (default). */
+    /**
+     * Height (m) of the water surface the phone is on: Ontario 75, Erie 174, Superior 183, Michigan / Huron 176;
+     * 0 (sea level) outside the Great Lakes box (the US coast). No position yet: Michigan / Huron.
+     */
     fun lakeElevationM(lat: Double?, lon: Double?): Double {
         if (lat == null || lon == null) return 176.0
+        if (lat !in 40.5..49.5 || lon !in -93.0..-75.0) return 0.0     // the coast: same box as GreatLakes.contains
         return when {
-            lon > -79.9 -> 74.7                                   // Lake Ontario (east of the Niagara River)
+            lon > -79.9 && lat >= 43.1 -> 74.7                    // Lake Ontario (east of the Niagara River, north of Erie)
             lat < 42.95 && lon > -83.6 -> 174.2                   // Lake Erie
+            lat < 43.1 && lon > -79.9 -> 174.2                    // Lake Erie's east end (Dunkirk, Buffalo)
             lat > 46.4 && lon < -84.3 -> 183.4                    // Lake Superior
             else -> 176.0                                         // Lakes Michigan and Huron
         }

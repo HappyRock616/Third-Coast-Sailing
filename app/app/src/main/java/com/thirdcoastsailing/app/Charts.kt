@@ -61,7 +61,7 @@ class ChartRepo(context: Context) {
     fun fetchCatalog(): List<CatalogLake> {
         val bytes = get(CATALOG_URL, CatalogTrust.MAX_CATALOG_BYTES)
         val sig = String(get("$CATALOG_URL.sig", CatalogTrust.MAX_SIG_BYTES), Charsets.US_ASCII)
-        if (!CatalogTrust.verifyCatalog(bytes, sig)) throw IOException("Chart list failed its signature check")
+        if (!CatalogTrust.verifyCatalog(bytes, sig)) throw CatalogTrust.Refused("Chart list failed its signature check")
         val lakes = parse(String(bytes, Charsets.UTF_8))           // throws if it is not a valid catalog
         cacheFile.writeBytes(bytes)
         cacheSig.writeText(sig)
@@ -80,7 +80,7 @@ class ChartRepo(context: Context) {
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             val id = o.getString("id")
-            if (!CatalogTrust.validId(id)) throw IOException("Bad lake id in chart list")
+            if (!CatalogTrust.validId(id)) throw CatalogTrust.Refused("Bad lake id in chart list")
             val fa = o.getJSONArray("files")
             CatalogLake(
                 id = id, name = o.optString("name", id).take(40),
@@ -95,7 +95,7 @@ class ChartRepo(context: Context) {
                         file.size in 1..CatalogTrust.MAX_CHART_FILE_BYTES && CatalogTrust.validSha(file.sha256) &&
                         (file.sizeRaw == null || file.sizeRaw in 1..CatalogTrust.MAX_CHART_FILE_BYTES) &&
                         (file.sha256Raw == null || CatalogTrust.validSha(file.sha256Raw))
-                    if (!ok) throw IOException("Bad file entry in chart list")
+                    if (!ok) throw CatalogTrust.Refused("Bad file entry in chart list")
                     file
                 },
             )
@@ -119,16 +119,23 @@ class ChartRepo(context: Context) {
      * @param beforeSwap called just before the new files replace the old (close open files there)
      */
     fun install(lake: CatalogLake, progress: (Long, Long) -> Unit, beforeSwap: () -> Unit, cancel: () -> Boolean) {
+        // a catalog entry without a chart file would replace an installed region with an empty one
+        if (lake.files.none { it.name.endsWith("_chart.pmtiles") }) throw IOException("${lake.name}: no chart file in the chart list")
         val stamp = lake.built.filter { it.isDigit() }.ifEmpty { "0" }
         val stage = File(staging, "${lake.id}_$stamp").apply { mkdirs() }
         // drop partial downloads of older builds of this lake
-        staging.listFiles()?.filter { it.name.startsWith("${lake.id}_") && it != stage }?.forEach { it.deleteRecursively() }
+        val older = Regex(Regex.escape(lake.id) + "_\\d+")              // this region's id + a build stamp, exactly
+        staging.listFiles()?.filter { it != stage && older.matches(it.name) }?.forEach { it.deleteRecursively() }
 
         val total = lake.size
         var before = 0L
         for (f in lake.files) {
             val done = File(stage, f.name)
-            if (done.exists() && File(stage, f.name + ".ok").exists()) { before += f.size; continue }
+            // finished earlier: trusted only for the same file (the .ok holds its checksum; a republished catalog
+            // with new checksums downloads it again)
+            val ok = File(stage, f.name + ".ok")
+            if (done.exists() && ok.exists() && runCatching { ok.readText() }.getOrNull() == f.sha256) { before += f.size; continue }
+            done.delete(); ok.delete()
             val dl = File(stage, f.name + ".dl")
             val base = before
             fetchResumable(f.url, dl, f.size, { n -> progress(base + n, total) }, cancel)
@@ -140,15 +147,18 @@ class ChartRepo(context: Context) {
                 val tmp = File(stage, f.name + ".tmp")
                 // unpacked size is capped (catalog size, or a fixed limit for older catalogs) and checked when known
                 val cap = f.sizeRaw ?: CatalogTrust.MAX_CHART_FILE_BYTES
-                GZIPInputStream(dl.inputStream().buffered(1 shl 16)).use { i -> tmp.outputStream().use { o -> CatalogTrust.copyCapped(i, o, cap) } }
+                // a failed unpack (damaged data, storage full) leaves no big half-written file behind
+                try {
+                    GZIPInputStream(dl.inputStream().buffered(1 shl 16)).use { i -> tmp.outputStream().use { o -> CatalogTrust.copyCapped(i, o, cap) } }
+                } catch (e: Exception) { tmp.delete(); throw e }
                 if (f.sha256Raw != null && CatalogTrust.sha256(tmp) != f.sha256Raw) {
                     tmp.delete(); dl.delete()
                     throw IOException("${f.name}: unpacked file damaged (checksum mismatch). Try again.")
                 }
-                tmp.renameTo(done)
+                if (!tmp.renameTo(done)) throw IOException("${f.name}: could not save the file (storage full?)")
                 dl.delete()
-            } else dl.renameTo(done)
-            File(stage, f.name + ".ok").writeText("ok")
+            } else if (!dl.renameTo(done)) throw IOException("${f.name}: could not save the file (storage full?)")
+            ok.writeText(f.sha256)
             before += f.size
             progress(before, total)
         }

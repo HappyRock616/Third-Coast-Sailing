@@ -71,8 +71,8 @@ class Mat4(val m: DoubleArray = DoubleArray(16)) {
     /** Transform a point (w = 1); returns x, y, z, w. */
     fun transform(p: V3, w: Double = 1.0): DoubleArray = DoubleArray(4) { i -> this[i, 0] * p.x + this[i, 1] * p.y + this[i, 2] * p.z + this[i, 3] * w }
 
-    /** The matrix as 16 floats, column-major, for OpenGL. */
-    fun toFloats(): FloatArray = FloatArray(16) { m[it].toFloat() }
+    /** The matrix as 16 floats, column-major, for OpenGL, written into `out` (reused every frame); returns `out`. */
+    fun toFloats(out: FloatArray = FloatArray(16)): FloatArray { for (i in 0..15) out[i] = m[i].toFloat(); return out }
 
     /** General inverse (Gauss-Jordan); identity if singular. */
     fun inverse(): Mat4 {
@@ -233,15 +233,6 @@ class FinderCameras(val pose: PhonePose, val widthPx: Int, val heightPx: Int, va
         val y = (topPx + (1.0 - ny) / 2.0 * vpH).toFloat()
         val on = inFront && x in 0f..widthPx.toFloat() && y in 0f..screenH.toFloat()
         return ScreenPt(x, y, inFront, on)
-    }
-
-    /** Direction in the sky under a screen point (for tapping). */
-    fun unprojectSky(xPx: Float, yPx: Float): V3 {
-        val nx = xPx / widthPx.toDouble() * 2.0 - 1.0
-        val ny = 1.0 - yPx / heightPx.toDouble() * 2.0
-        val inv = skyViewProj.inverse()
-        val p = inv.transform(V3(nx, ny, 1.0))
-        return V3(p[0] / p[3], p[1] / p[3], p[2] / p[3]).unit()
     }
 
     companion object {

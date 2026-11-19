@@ -42,7 +42,7 @@ private const val LOP_HALF_NM = 8.0
 /** Draws the celestial lines of position, the fix with its uncertainty circle, and the trip's saved fixes on the chart. */
 @Composable
 fun CelestialOverlay(map: MapLibreMap?, tick: Int, plot: CelestialPlot?, night: Boolean) {
-    val measurer = rememberTextMeasurer()
+    val measurer = rememberTextMeasurer(cacheSize = 64)                // labels for every line and fix, redrawn as the chart moves
     Canvas(Modifier.fillMaxSize()) {
         tick                                                         // read so camera moves redraw
         val m = map ?: return@Canvas

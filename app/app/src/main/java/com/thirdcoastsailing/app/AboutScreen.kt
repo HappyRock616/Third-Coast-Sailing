@@ -71,10 +71,14 @@ private val CREDITS = listOf(
     listOf("Charts (ENC)", "NOAA Office of Coast Survey", "US Government work, public domain", "https://nauticalcharts.noaa.gov"),
     listOf("Lake bathymetry", "NOAA NCEI", "Public domain", ""),
     listOf("Wind forecasts", "NOAA National Weather Service (NDFD)", "Public domain", ""),
-    listOf("Wave forecasts", "NOAA NCEP (GLWU)", "Public domain", ""),
+    listOf("Wave forecasts", "NOAA NCEP (GLWU, GFS-Wave)", "Public domain", ""),
+    listOf("Great Lakes currents", "NOAA GLERL, Great Lakes Coastal Forecasting System", "Public domain", "https://www.glerl.noaa.gov/res/glcfs/"),
     listOf("Buoy observations", "NOAA National Data Buoy Center", "Public domain", "https://www.ndbc.noaa.gov"),
     listOf("Marinas, clubs, docks, anchorages", "© OpenStreetMap contributors", "Open Database License (ODbL) 1.0", "https://www.openstreetmap.org/copyright"),
+    listOf("Outline map of North America", "Natural Earth", "Public domain", "https://www.naturalearthdata.com"),
     listOf("Map engine", "MapLibre Native", "BSD 2-Clause", "https://maplibre.org"),
+    listOf("Map label font", "Roboto, Google", "Apache License 2.0", "https://github.com/googlefonts/roboto"),
+    listOf("App libraries", "AndroidX, Jetpack Compose, Kotlin", "Apache License 2.0", "https://www.apache.org/licenses/LICENSE-2.0"),
     listOf("Almanac calculations", "Astronomy Engine, Don Cross", "MIT", "https://github.com/cosinekitty/astronomy"),
     listOf("Star positions", "Yale Bright Star Catalogue, 5th ed.", "Public domain", ""),
     listOf("Constellation figures and names", "d3-celestial, Olaf Frohn", "BSD 3-Clause", "https://github.com/ofrohn/d3-celestial"),
@@ -121,12 +125,12 @@ fun AboutScreen(version: String, onClose: () -> Unit) {
                     modifier = Modifier.padding(top = 4.dp).clickable { open(PRIVACY_URL) })
             }
             Section("Data and credits") {
-                for ((what, who, terms, url) in CREDITS) Column(Modifier.padding(vertical = 4.dp)
+                for ((what, who, terms, url) in CREDITS) Column(Modifier.padding(vertical = 2.dp)
                     .then(if (url.isNotEmpty()) Modifier.clickable { open(url) } else Modifier)) {
-                    Text(what, color = Foam, fontSize = 14.sp)
-                    Text("$who · $terms", color = if (url.isNotEmpty()) SignalOrange else Mist, fontSize = 12.sp)
+                    Text(what, color = Foam, fontSize = 12.sp)                          // small print
+                    Text("$who · $terms", color = if (url.isNotEmpty()) SignalOrange else Mist, fontSize = 10.sp)
                 }
-                Text("Harbor data derived from OpenStreetMap is available under the ODbL.", color = Mist, fontSize = 12.sp,
+                Text("Harbor data derived from OpenStreetMap is available under the ODbL.", color = Mist, fontSize = 10.sp,
                     modifier = Modifier.padding(top = 4.dp))
             }
         }

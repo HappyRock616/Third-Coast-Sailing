@@ -38,6 +38,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,7 +77,6 @@ import kotlin.math.sin
  * them, the owner's own speed measurements that refit it, and .pol export.
  */
 
-private const val CRUISE_FACTOR = 0.85      // cruise mode uses 85% of the active polar
 
 /** Full-screen Boat & Polars editor. */
 @Composable
@@ -86,8 +88,24 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
     var showTable by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    /** Replace the saved state and write it to the phone. */
-    fun update(newState: BoatStore.State) { state = newState; store.save(newState) }
+    // Saved half a second after the last change, off the main thread (saving refits and writes every boat's polar),
+    // and once more when the screen closes, so typing a name doesn't save on every key.
+    var dirty by remember { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        if (!dirty) return@LaunchedEffect
+        kotlinx.coroutines.delay(500)
+        val s = state
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { store.save(s) } }
+        dirty = false
+    }
+    val latest by rememberUpdatedState(state)
+    val latestDirty by rememberUpdatedState(dirty)
+    DisposableEffect(Unit) { onDispose { if (latestDirty) runCatching { store.save(latest) } } }
+    /** Close: save first if a change is still waiting, so the app reads the boat as it was left. */
+    fun close() { if (dirty) { runCatching { store.save(state) }; dirty = false }; onClose() }
+
+    /** Replace the state; it is written to the phone shortly after. */
+    fun update(newState: BoatStore.State) { state = newState; dirty = true }
     /** Save changes to one boat (matched by id). */
     fun edit(b: Boat) = update(state.copy(boats = state.boats.map { if (it.id == b.id) b else it }))
 
@@ -96,7 +114,7 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
         if (uri != null) context.contentResolver.openOutputStream(uri)?.use { it.write(polar.toPol().toByteArray()) }
     }
 
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()
                 .verticalScroll(rememberScrollState()).padding(16.dp),
@@ -104,7 +122,7 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Boat & Polars", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = onClose) { Text("Done", color = SignalOrange, fontSize = 16.sp) }
+                TextButton(onClick = { close() }) { Text("Done", color = SignalOrange, fontSize = 16.sp) }
             }
 
             // ---- boats
@@ -131,8 +149,8 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
             // ---- selected boat settings
             Section("Boat settings") {
                 NumberOrText("Name", boat.name, boat.id, numeric = false) { edit(boat.copy(name = it.ifBlank { "Boat" })) }
-                NumberOrText("Draft (ft)", "%.1f".format(boat.draftFt), boat.id) { s ->
-                    s.toDoubleOrNull()?.let { edit(boat.copy(draftFt = it)) }
+                NumberOrText("Draft (ft)", String.format(java.util.Locale.US, "%.1f", boat.draftFt), boat.id) { s ->
+                    s.toDecimalOrNull()?.let { edit(boat.copy(draftFt = it)) }
                 }
                 MinDepthPicker(boat.minDepthFt) { edit(boat.copy(minDepthFt = it)) }
                 Text("Starting template (by length)", color = Mist, fontSize = 13.sp)
@@ -169,9 +187,9 @@ fun BoatScreen(store: BoatStore, onClose: () -> Unit) {
                     SmallField("AWA °", awa, Modifier.weight(1f)) { awa = it }
                     SmallField("Boat kn", bsp, Modifier.weight(1f)) { bsp = it }
                 }
-                val ok = aws.toDoubleOrNull() != null && awa.toDoubleOrNull() != null && bsp.toDoubleOrNull() != null
+                val ok = aws.toDecimalOrNull() != null && awa.toDecimalOrNull() != null && bsp.toDecimalOrNull() != null
                 Button(enabled = ok, onClick = {
-                    edit(boat.copy(manual = boat.manual + ManualPoint(aws.toDouble(), awa.toDouble(), bsp.toDouble())))
+                    edit(boat.copy(manual = boat.manual + ManualPoint(aws.toDecimalOrNull()!!, awa.toDecimalOrNull()!!, bsp.toDecimalOrNull()!!)))
                     aws = ""; awa = ""; bsp = ""
                 }) { Text("Add measurement") }
                 for ((i, m) in boat.manual.withIndex()) {

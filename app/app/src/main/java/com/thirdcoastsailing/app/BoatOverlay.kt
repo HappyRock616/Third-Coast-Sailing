@@ -75,58 +75,103 @@ fun destination(lat: Double, lon: Double, bearingDeg: Double, distNm: Double): L
     return LatLng(Math.toDegrees(p2), Math.toDegrees(l2))
 }
 
+/** Dark blue of the current predictor line. */
+private val PredictorBlue = Color(0xFF14365C)
+/** Time marks on the heading and predictor lines (minutes). */
+private val MARK_MIN = listOf(15, 30, 60)
+
 /**
- * Boat overlay drawn over the chart: sloop symbol pointing along course over ground, a fixed-length
- * course line, and dots where the boat will be in 1, 2 and 3 hours at its 15-minute average speed.
- * The line is always the same length on screen; only the dots move. A dot beyond the end of the line is not drawn.
+ * Boat overlay drawn over the chart: the sloop symbol, a thin dashed heading line projecting ahead with small dots
+ * at 15 min, 30 min and 1 h at the boat's speed, and, when Currents is on, the current predictor line.
+ *
+ * GPS course and speed are over the ground, so they already include the current at the boat. With currents on the
+ * current there is taken out to get the boat's heading and speed through the water (the orange line), and the dark
+ * blue predictor line steps ahead minute by minute adding the current wherever the boat will be: the two lines start
+ * together and fan apart as the current changes, and the gap between matching marks is the push from the current.
+ * Without currents the orange line is the GPS course, as before.
  * @param tick changes whenever the map camera moves, so the overlay redraws in step with the chart
  */
 @Composable
-fun BoatOverlay(map: MapLibreMap?, fix: BoatFix?, avgSogKn: Double?, tick: Int, modifier: Modifier = Modifier) {
+fun BoatOverlay(map: MapLibreMap?, fix: BoatFix?, avgSogKn: Double?, tick: Int, currents: CurrentField? = null,
+                modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
     Canvas(modifier.fillMaxSize()) {
         tick                                          // read so a camera move triggers a redraw
         val m = map ?: return@Canvas
         val f = fix ?: return@Canvas
         val boat = m.projection.toScreenLocation(LatLng(f.lat, f.lon)).let { Offset(it.x, it.y) }
-        val lineLen = 150.dp.toPx()
         val cog = f.cogDeg?.toDouble()
+        val sog = avgSogKn ?: 0.0
+        fun xy(ll: LatLng) = m.projection.toScreenLocation(ll).let { Offset(it.x, it.y) }
 
-        // Screen direction of the course: project a point 1 nm ahead (handles map rotation and latitude)
-        var angleRad: Float? = null
-        if (cog != null) {
-            val ahead = m.projection.toScreenLocation(destination(f.lat, f.lon, cog, 1.0))
-            angleRad = atan2(ahead.y - boat.y, ahead.x - boat.x)
+        // heading and speed through the water (= over the ground when there is no current data here)
+        var headDeg = cog
+        var waterKn = sog
+        val here = if (cog != null) currents?.at(f.lat, f.lon) else null
+        if (cog != null && here != null && sog >= 0.3) {
+            val ge = sog * sin(Math.toRadians(cog)); val gn = sog * cos(Math.toRadians(cog))
+            val we = ge - here.u * MS_TO_KN; val wn = gn - here.v * MS_TO_KN
+            waterKn = hypot(we, wn)
+            headDeg = (Math.toDegrees(atan2(we, wn)) + 360) % 360
         }
 
-        if (angleRad != null) {
-            val end = boat + Offset(cos(angleRad) * lineLen, sin(angleRad) * lineLen)
-            drawLine(NavyInk, boat, end, strokeWidth = 5.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(Orange, boat, end, strokeWidth = 2.5.dp.toPx(), cap = StrokeCap.Round,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f)))
+        var angleRad: Float? = null
+        if (headDeg != null) {
+            val ahead = xy(destination(f.lat, f.lon, headDeg, 1.0))
+            angleRad = atan2(ahead.y - boat.y, ahead.x - boat.x)
+            // the line reaches the 1 h mark (at least 120 dp, at most most of the screen)
+            val oneHour = if (waterKn >= 0.3) xy(destination(f.lat, f.lon, headDeg, waterKn)) else null
+            val reach = (oneHour?.let { hypot(it.x - boat.x, it.y - boat.y) } ?: 0f)
+                .coerceIn(120.dp.toPx(), 0.8f * maxOf(size.width, size.height))
+            val end = boat + Offset(cos(angleRad) * reach, sin(angleRad) * reach)
+            val dash = PathEffect.dashPathEffect(floatArrayOf(16.dp.toPx(), 7.dp.toPx()))
+            drawLine(NavyInk.copy(alpha = 0.7f), boat, end, strokeWidth = 3.2.dp.toPx(), cap = StrokeCap.Round, pathEffect = dash)
+            drawLine(Orange, boat, end, strokeWidth = 1.6.dp.toPx(), cap = StrokeCap.Round, pathEffect = dash)
+            if (waterKn >= 0.3) for (min in MARK_MIN) {
+                val o = xy(destination(f.lat, f.lon, headDeg, waterKn * min / 60.0))
+                if (hypot(o.x - boat.x, o.y - boat.y) > reach + 1f) continue
+                drawCircle(NavyInk, 3.6.dp.toPx(), o)
+                drawCircle(Orange, 2.4.dp.toPx(), o)
+                if (currents == null) drawText(measurer, if (min == 60) "1h" else "${min}m", o + Offset(6.dp.toPx(), -14.dp.toPx()),
+                    TextStyle(color = NavyInk, fontSize = 10.sp, fontWeight = FontWeight.Bold, background = White.copy(alpha = 0.7f)))
+            }
 
-            // 1 h, 2 h, 3 h at the average speed
-            val sog = avgSogKn ?: 0.0
-            if (sog >= 0.3) for (h in 1..3) {
-                val p = m.projection.toScreenLocation(destination(f.lat, f.lon, cog!!, sog * h))
-                val off = Offset(p.x, p.y)
-                if (hypot(off.x - boat.x, off.y - boat.y) <= lineLen) {
-                    drawCircle(NavyInk, 6.dp.toPx(), off)
-                    drawCircle(Orange, 4.5.dp.toPx(), off)
-                    drawText(measurer, "${h}h", off + Offset(7.dp.toPx(), -16.dp.toPx()),
-                        TextStyle(color = NavyInk, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                            background = White.copy(alpha = 0.75f)))
+            // current predictor: where the boat goes over the next hour with the current added along the way
+            if (currents != null && here != null && waterKn >= 0.3) {
+                val we = waterKn * sin(Math.toRadians(headDeg)); val wn = waterKn * cos(Math.toRadians(headDeg))
+                var lat = f.lat; var lon = f.lon
+                val path = Path().apply { moveTo(boat.x, boat.y) }
+                val marks = ArrayList<Pair<Int, Offset>>()
+                for (minute in 1..60) {
+                    val c = currents.at(lat, lon)
+                    val e = we + (c?.u ?: 0f) * MS_TO_KN; val n = wn + (c?.v ?: 0f) * MS_TO_KN
+                    val nm = hypot(e, n) / 60.0
+                    val brg = (Math.toDegrees(atan2(e, n)) + 360) % 360
+                    val next = destination(lat, lon, brg, nm)
+                    lat = next.latitude; lon = next.longitude
+                    val o = xy(next)
+                    path.lineTo(o.x, o.y)
+                    if (minute in MARK_MIN) marks += minute to o
+                }
+                val dash2 = PathEffect.dashPathEffect(floatArrayOf(12.dp.toPx(), 6.dp.toPx()))
+                drawPath(path, White.copy(alpha = 0.6f), style = Stroke(3.4.dp.toPx(), cap = StrokeCap.Round, pathEffect = dash2))
+                drawPath(path, PredictorBlue, style = Stroke(1.8.dp.toPx(), cap = StrokeCap.Round, pathEffect = dash2))
+                for ((min, o) in marks) {
+                    drawCircle(White, 4.dp.toPx(), o)
+                    drawCircle(PredictorBlue, 2.8.dp.toPx(), o)
+                    drawText(measurer, if (min == 60) "1h" else "${min}m", o + Offset(6.dp.toPx(), 2.dp.toPx()),
+                        TextStyle(color = PredictorBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold, background = White.copy(alpha = 0.7f)))
                 }
             }
         }
 
-        // Boat symbol on top; points north (screen up) when no course is known yet
-        val headingDeg = angleRad?.let { Math.toDegrees(it.toDouble()).toFloat() + 90f } ?: 0f
-        rotate(headingDeg, pivot = boat) { drawSloop(boat) }
+        // Boat symbol on top, pointing along the course over ground; north (screen up) when no course is known yet
+        val cogAngle = if (cog != null) xy(destination(f.lat, f.lon, cog, 1.0)).let { atan2(it.y - boat.y, it.x - boat.x) } else null
+        val symDeg = cogAngle?.let { Math.toDegrees(it.toDouble()).toFloat() + 90f } ?: 0f
+        rotate(symDeg, pivot = boat) { drawSloop(boat) }
     }
 }
 
-/** Top-down sloop: pointed bow, transom stern, mast, boom and jib. Drawn bow-up, centered on c. */
 private fun DrawScope.drawSloop(c: Offset) {
     val len = 34.dp.toPx()
     val beam = 13.dp.toPx()

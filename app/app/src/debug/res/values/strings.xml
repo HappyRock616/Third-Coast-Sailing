@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: a different launcher name so the test copy is easy to tell from the signed app. -->
+<resources>
+    <string name="app_name">TCS Debug</string>
+</resources>

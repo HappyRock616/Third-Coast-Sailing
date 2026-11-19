@@ -1,18 +1,20 @@
-Third Coast Sailing puts the Great Lakes on your phone: NOAA charts, wind and wave forecasts, live buoys, weather routing and a celestial navigation trainer. Free and open source, with no ads, no accounts, no tracking and no Google Play Services.
+Third Coast Sailing puts the Great Lakes and the US coast on your phone: NOAA charts, wind, wave and current forecasts, live buoys, weather routing and a celestial navigation trainer. Free and open source, with no ads, no accounts, no tracking and no Google Play Services.
 
 WEATHER ROUTING
 • Drop a start, waypoints and a finish, with each leg's distance and magnetic bearing
+• See the time to each waypoint from your boat's polar, and the forecast wind you'll meet there
 • Calculate a weather-optimized route from your boat's polar, the forecast wind, a tack penalty and your minimum depth
 • Warns where your route or heading crosses water shallower than your depth limit
 
-WIND AND WAVE FORECASTS
+WIND, WAVES AND CURRENTS
 • Wind speed, gusts and barbs over the water, with animated wave crests showing height and direction
-• A 48-hour forecast slider, with data straight from NOAA
+• Great Lakes surface currents from NOAA as animated arrows colored by speed
+• A 48-hour forecast slider with play, with data straight from NOAA
 
 SAILING GAUGE
 • Heading-up wind gauge built from your GPS and the forecast wind, with your boat's polar
-• Course line with 1, 2 and 3-hour marks, plus a GPS track
-• No wind instrument needed
+• Heading line with 15-minute, 30-minute and 1-hour marks, plus a current-predictor line on the Great Lakes
+• GPS trip track; no wind instrument needed
 
 LIVE BUOYS
 • NOAA buoys colored by wind speed and ringed for big waves
@@ -25,16 +27,18 @@ CELESTIAL NAVIGATION TRAINER (works anywhere)
 • Beginner, intermediate and advanced levels
 
 OFFLINE NOAA CHARTS
-• All five lakes stored on the phone, with depth shading and hazards
-• Lights, buoys, beacons and landmarks you can tap for details; after sunset the lights flash in their real colors and patterns
+• The five Great Lakes and 18 US coastal regions: Maine to Texas, the West Coast and Hawaii
+• Download only the regions you sail; they are stored on the phone and work offline
+• Depth shading with shallow water hatched in red, hazards, plus lights, buoys, beacons and landmarks you can tap for details; after sunset the lights flash in their real colors and patterns
+• A built-in outline map of North America, so you can find your charts from anywhere
 
 SAFETY AND MORE
 • Man overboard with a drift search area
-• Anchor alarm that runs all night with the screen off
+• Anchor alarm that keeps watch with the screen off
 • Barograph with pressure-trend warnings
-• Marinas with call and website buttons
+• Marinas, fuel docks and anchorages with call and website buttons
 • Sunrise, sunset and moon phase
 
-Charts, weather and buoys cover the Great Lakes and connected inland lakes only. Requires Android 10 or newer.
+Charts, weather and buoys cover the Great Lakes and the 18 US coastal regions; currents cover the Great Lakes. Coastal depths are charted below mean lower low water (MLLW); the tide is not added. Enclosed waters such as Chesapeake Bay and Puget Sound have wind forecasts but mostly no wave forecast. Requires Android 10 or newer.
 
-Not for navigation. Official NOAA charts and notices govern.
+Not for navigation. Official NOAA charts and notices govern. Map data © OpenStreetMap contributors; outline map from Natural Earth.

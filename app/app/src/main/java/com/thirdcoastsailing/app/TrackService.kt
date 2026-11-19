@@ -2,9 +2,7 @@ package com.thirdcoastsailing.app
 
 import android.annotation.SuppressLint
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -23,43 +21,39 @@ private const val CHANNEL_ID = "trip_track"
 private const val NOTE_ID = 1
 
 /**
- * Fixes taken by [TrackService] while the app isn't on screen. The app drains them into the trip track
- * when it comes back. Same process, so a simple shared list is enough.
- */
-object BackgroundTrack {
-    private val fixes = mutableListOf<BoatFix>()
-
-    @Synchronized fun add(f: BoatFix) { fixes.add(f) }
-
-    @Synchronized fun drain(): List<BoatFix> = fixes.toList().also { fixes.clear() }
-}
-
-/**
  * Low-power position sampling for the trip track: one GPS fix every 5 minutes while Trip track is on.
  * Android only allows this with a visible notification (a "foreground service"). It runs only while
  * Trip track is switched on, and stops when the switch goes off or the app is swiped away.
- * While the app is on screen it keeps its own 1-second GPS; this service just adds the slow samples.
+ * While the app is on screen it keeps its own 1-second GPS; this service just adds the slow samples
+ * (handed to [TripTrack], which keeps the track for the whole app process).
  */
 class TrackService : Service() {
 
     private val lm by lazy { getSystemService(Context.LOCATION_SERVICE) as LocationManager }
 
+    // recorded at once (on the main thread, where the listener runs), so a swipe-away, reboot or flat battery can't
+    // lose hours of background fixes; outside the charted region nothing is drawn, as with live fixes
     private val listener = LocationListener { loc ->
-        val sogKn = if (loc.hasSpeed()) loc.speed * 1.943844f else null
-        BackgroundTrack.add(BoatFix(loc.latitude, loc.longitude, null, sogKn, loc.time))
+        val f = loc.toBoatFix()
+        if (GreatLakes.contains(f.lat, f.lon)) TripTrack.record(f)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     @SuppressLint("MissingPermission")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTE_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        // startForeground first, always: a service started with startForegroundService must call it, or Android
+        // crashes the app (e.g. permission revoked between start() and here); then stop if there is nothing to record
+        val started = runCatching {
+            startForeground(NOTE_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        }.isSuccess
+        if (!started || !hasLocationPermission(this)) { stopSelf(); return START_NOT_STICKY }
         val ok = runCatching {
             lm.removeUpdates(listener)                       // in case of a repeated start
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, BACKGROUND_FIX_MS, 0f, listener, Looper.getMainLooper())
         }.isSuccess
         if (!ok) stopSelf()                                  // no location permission or no GPS: nothing to do
-        return START_NOT_STICKY                              // the track lives in memory; never restart on its own
+        return START_NOT_STICKY                              // never restart on its own (the switch decides)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {        // app swiped away: stop tracking
@@ -71,28 +65,23 @@ class TrackService : Service() {
         super.onDestroy()
     }
 
-    /** The ongoing "Recording trip track" notification (creates its channel the first time); tapping it opens the app. */
+    /** The ongoing "Recording trip track" notification; tapping it opens the app. */
     private fun notification(): Notification {
-        val nm = getSystemService(NotificationManager::class.java)
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Trip track", NotificationManager.IMPORTANCE_LOW))
-        }
-        // Tapping the notification brings the app back
-        val open = PendingIntent.getActivity(this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE)
+        ensureChannel(this, CHANNEL_ID, "Trip track", NotificationManager.IMPORTANCE_LOW)
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("Trip track recording")
             .setContentText("Position every 5 minutes while the app is in the background")
-            .setContentIntent(open)
+            .setContentIntent(openAppIntent(this))
             .setOngoing(true)
             .build()
     }
 
     companion object {
-        fun start(context: Context) {
-            runCatching { context.startForegroundService(Intent(context, TrackService::class.java)) }
+        /** Start the background sampling; false when Android refused (no permission, or not allowed right now). */
+        fun start(context: Context): Boolean {
+            if (!hasLocationPermission(context)) return false
+            return runCatching { context.startForegroundService(Intent(context, TrackService::class.java)) }.isSuccess
         }
 
         fun stop(context: Context) {

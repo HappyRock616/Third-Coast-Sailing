@@ -29,7 +29,7 @@ data class Polar(val tws: List<Double>, val twa: List<Double>, val speed: List<L
     fun toPol(): String = buildString {
         append("TWA\\TWS\t").append(tws.joinToString("\t") { fmt(it) }).append('\n')
         twa.forEachIndexed { i, a ->
-            append(fmt(a)).append('\t').append(speed[i].joinToString("\t") { "%.2f".format(it) }).append('\n')
+            append(fmt(a)).append('\t').append(speed[i].joinToString("\t") { String.format(java.util.Locale.US, "%.2f", it) }).append('\n')
         }
     }
 

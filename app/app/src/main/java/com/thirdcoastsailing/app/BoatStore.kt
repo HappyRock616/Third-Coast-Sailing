@@ -36,6 +36,7 @@ class BoatStore(private val context: Context) {
     data class State(val boats: List<Boat>, val activeId: String?)
 
     /** Read the saved boats; on first run create and save one boat from the default template. */
+    @Synchronized
     fun load(): State {
         if (!file.exists()) {
             // First run: one boat from the default template
@@ -43,18 +44,36 @@ class BoatStore(private val context: Context) {
             save(State(listOf(b), b.id))
             return State(listOf(b), b.id)
         }
-        val root = JSONObject(file.readText())
-        val boats = root.getJSONArray("boats").let { a -> (0 until a.length()).map { fromJson(a.getJSONObject(it)) } }
-        return State(boats, root.optString("active").ifEmpty { boats.firstOrNull()?.id })
+        // a damaged boat is skipped, not fatal; an unreadable or empty file is moved aside (kept, not deleted) and
+        // the app starts again with one default boat, so the Boat screen can always open
+        val text = runCatching { file.readText() }.getOrElse { e ->
+            // can't read it right now (not damaged): keep the file, use a default boat for this session only
+            Status.show("Could not read your boats (${e.message}); using a default boat for now")
+            val b = Boat(name = "My boat")
+            return State(listOf(b), b.id)
+        }
+        val parsed = runCatching {
+            val root = JSONObject(text)
+            val a = root.getJSONArray("boats")
+            val boats = (0 until a.length()).mapNotNull { runCatching { fromJson(a.getJSONObject(it)) }.getOrNull() }
+            State(boats, root.optString("active").ifEmpty { null }?.takeIf { id -> boats.any { it.id == id } } ?: boats.firstOrNull()?.id)
+        }.getOrNull()
+        if (parsed != null && parsed.boats.isNotEmpty()) return parsed
+        runCatching { file.renameTo(File(file.path + ".damaged-" + System.currentTimeMillis())) }
+        Status.show("Your saved boats file was damaged: kept aside, starting with a default boat")
+        val b = Boat(name = "My boat")
+        save(State(listOf(b), b.id))
+        return State(listOf(b), b.id)
     }
 
     /** Save all boats (written to a temporary file first, then renamed, so a crash never leaves half a file). */
+    @Synchronized
     fun save(state: State) {
         val a = JSONArray()
         state.boats.forEach { a.put(toJson(it)) }
         val tmp = File(file.path + ".tmp")
         tmp.writeText(JSONObject().put("boats", a).put("active", state.activeId ?: "").toString(1))
-        tmp.renameTo(file)
+        if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }   // (replaces the old file in one step)
         state.boats.forEach { b -> runCatching { File(polDir, safeName(b.name) + ".pol").writeText(polar(b).toPol()) } }
     }
 

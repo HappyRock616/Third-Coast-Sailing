@@ -47,7 +47,7 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
  */
 
 /** The menu's icons, each drawn on a 24 x 24 grid. */
-enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, NIGHT, GAUGE, OFFLINE, BOAT, SEXTANT, CHARTS, INFO, ANCHOR, BARO }
+enum class MenuIcon { TRACK, WIND, GUST, BARBS, WAVES, CURRENT, NIGHT, GAUGE, OFFLINE, BOAT, SEXTANT, CHARTS, INFO, ANCHOR, BARO }
 
 // Wind color stops (knots), the same scale as the map field and the buoy fill
 private val KEY_WIND = listOf(0 to Color(0xFF3B6FB6), 8 to Color(0xFF3DBE6B), 14 to Color(0xFFF2D028),
@@ -93,6 +93,14 @@ private fun DrawScope.drawMenuIcon(icon: MenuIcon) {
         MenuIcon.WAVES -> {
             drawArc(Color(0xFF7FD3F0), 200f, 140f, false, o(2f, 6f), Size(20f * k, 12f * k), style = line)
             drawArc(RING_YELLOW, 200f, 140f, false, o(2f, 12f), Size(20f * k, 12f * k), style = line)
+        }
+        MenuIcon.CURRENT -> {                                  // two curved arrows, slow (teal) and fast (orange)
+            for ((dy, col) in listOf(7f to Color(0xFF3FC1A5), 15f to Color(0xFFF28C28))) {
+                val p = Path().apply { moveTo(o(2f, dy + 2f).x, o(2f, dy + 2f).y); quadraticTo(o(11f, dy - 3f).x, o(11f, dy - 3f).y, o(20f, dy).x, o(20f, dy).y) }
+                drawPath(p, col, style = line)
+                drawLine(col, o(20f, dy), o(16f, dy - 3.5f), strokeWidth = line.width, cap = StrokeCap.Round)
+                drawLine(col, o(20f, dy), o(16.5f, dy + 3f), strokeWidth = line.width, cap = StrokeCap.Round)
+            }
         }
         MenuIcon.NIGHT -> {
             val p = Path().apply {
@@ -230,7 +238,7 @@ fun ChartKey() {
             }
             KeySwatch("Light", fill = true) { drawKeyFlare() }
             KeySwatch("Aid", fill = true) { drawKeyAid() }
-            KeySwatch("Landmark", fill = true) {
+            KeySwatch("Landmark", fill = true, weight = 1.6f) {
                 drawCircle(Color.White, size.minDimension * 0.22f)
                 drawCircle(KEY_INK, size.minDimension * 0.22f, style = Stroke(1.dp.toPx()))
                 drawCircle(KEY_INK, size.minDimension * 0.07f)
@@ -242,8 +250,8 @@ fun ChartKey() {
 /** One key entry: a 24 dp picture over a short label; `fill` shares the row's width equally (the bottom row of six). */
 @Composable
 private fun RowScope.KeySwatch(label: String, width: androidx.compose.ui.unit.Dp = 30.dp, fill: Boolean = false,
-                               draw: DrawScope.() -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = if (fill) Modifier.weight(1f) else Modifier.width(width)) {
+                               weight: Float = 1f, draw: DrawScope.() -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = if (fill) Modifier.weight(weight) else Modifier.width(width)) {
         Canvas(Modifier.size(22.dp)) { draw() }
         Text(label, color = Mist, fontSize = if (fill) 10.sp else 10.5.sp, maxLines = 1)
     }

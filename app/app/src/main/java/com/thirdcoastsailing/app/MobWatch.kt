@@ -87,8 +87,9 @@ object MobWatch {
         val timeMs: Long = 0L,                   // when MOB was pressed
         val windKn: Double? = null,              // forecast wind at the pin (10 m), knots
         val windFromDeg: Double? = null,         // direction the wind blows from, true
+        val pending: Boolean = false,            // pressed without a fresh fix: the pin moves to the first fresh one
     ) {
-        val active get() = pin != null
+        val active get() = pin != null || pending
 
         /** Drift triangle: (downwind length, crosswind half-width) in nm after `nowMs`, or null without wind. */
         fun drift(nowMs: Long): Pair<Double, Double>? {
@@ -108,8 +109,9 @@ object MobWatch {
         loaded = true
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val lat = p.getString("lat", null)?.toDoubleOrNull(); val lon = p.getString("lon", null)?.toDoubleOrNull()
-        if (lat != null && lon != null) state = State(GeoPt(lat, lon), p.getLong("t", 0L),
-            p.getString("wkn", null)?.toDoubleOrNull(), p.getString("wdir", null)?.toDoubleOrNull())
+        val pending = p.getBoolean("pending", false)
+        if ((lat != null && lon != null) || pending) state = State(if (lat != null && lon != null) GeoPt(lat, lon) else null,
+            p.getLong("t", 0L), p.getString("wkn", null)?.toDoubleOrNull(), p.getString("wdir", null)?.toDoubleOrNull(), pending)
     }
 
     /** Write the current mark to the phone, or clear it when MOB is reset. */
@@ -117,6 +119,7 @@ object MobWatch {
         val s = state
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
             clear()
+            if (s.pending) { putBoolean("pending", true); putLong("t", s.timeMs) }
             if (s.pin != null) {
                 putString("lat", s.pin.lat.toString()); putString("lon", s.pin.lon.toString()); putLong("t", s.timeMs)
                 s.windKn?.let { putString("wkn", it.toString()) }; s.windFromDeg?.let { putString("wdir", it.toString()) }
@@ -124,9 +127,22 @@ object MobWatch {
         }.apply()
     }
 
-    /** Mark the man overboard at the boat's position now. */
-    fun activate(context: Context, at: BoatFix) {
-        state = State(GeoPt(at.lat, at.lon), System.currentTimeMillis())
+    /**
+     * Mark the man overboard at the boat's position now. With no fresh fix (GPS just started, or none at all) the
+     * time starts now and the pin shows the last known position, marked "waiting for GPS", until [onFix] gets a
+     * fresh one: a stale fix could be hours old and miles away.
+     */
+    fun activate(context: Context, at: BoatFix?) {
+        val now = System.currentTimeMillis()
+        state = if (at != null && at.fresh) State(GeoPt(at.lat, at.lon), now)
+        else State(at?.let { GeoPt(it.lat, it.lon) }, now, pending = true)
+        save(context)
+    }
+
+    /** A new GPS fix: the first fresh one after a MOB pressed without a fix places the pin. */
+    fun onFix(context: Context, f: BoatFix) {
+        if (!state.pending || !f.fresh) return
+        state = state.copy(pin = GeoPt(f.lat, f.lon), pending = false)
         save(context)
     }
 
@@ -149,11 +165,12 @@ private val DRIFT_ORANGE = Color(0xFFF28C28)
 
 /** "214°T · 0.42 nm" from the boat to the pin, or "No GPS". */
 private fun mobLine(s: MobWatch.State, boat: BoatFix?): String {
+    if (s.pending) return "Waiting for GPS fix…"
     val pin = s.pin ?: return ""
     if (boat == null) return "No GPS"
     val from = LatLon(boat.lat, boat.lon); val to = LatLon(pin.lat, pin.lon)
     val nm = distanceNm(from, to)
-    val dist = if (nm < 0.1) "%d ft".format((nm * 6076.12).roundToInt()) else "%.2f nm".format(nm)
+    val dist = if (nm < 0.1) "%d ft".format((nm * FT_PER_NM).roundToInt()) else "%.2f nm".format(nm)
     return "%03.0f°T · %s".format(bearing(from, to), dist)
 }
 
@@ -260,7 +277,7 @@ fun MobOverlay(map: MapLibreMap?, tick: Int, boat: BoatFix?) {
 
         // drift area: tip at the pin, opening downwind; length = downwind leeway x time, each side = crosswind leeway x time
         val d = s.drift(now); val from = s.windFromDeg
-        if (d != null && from != null && d.first > 0.0) {
+        if (!s.pending && d != null && from != null && d.first > 0.0) {
             val down = (from + 180.0) % 360.0
             val end = travel(pinLL, down, d.first)
             val left = travel(end, down - 90.0, d.second); val right = travel(end, down + 90.0, d.second)
@@ -270,14 +287,15 @@ fun MobOverlay(map: MapLibreMap?, tick: Int, boat: BoatFix?) {
             drawPath(tri, DRIFT_ORANGE, style = Stroke(2.dp.toPx()))
         }
 
-        // line from the boat to the pin, labeled true bearing and distance
-        if (boat != null) {
+        // line from the boat to the pin, labeled true bearing and distance (not while the pin is only the last
+        // known position, waiting for a fresh fix: that bearing could be hours old and miles off)
+        if (boat != null && !s.pending) {
             val b = xy(LatLon(boat.lat, boat.lon))
             drawLine(MOB_RED, b, c, 3.dp.toPx(), cap = StrokeCap.Round)
             val from2 = LatLon(boat.lat, boat.lon)
             val nm = distanceNm(from2, pinLL)
             val label = "%03.0f°T · %s".format(bearing(from2, pinLL),
-                if (nm < 0.1) "%d ft".format((nm * 6076.12).roundToInt()) else "%.2f nm".format(nm))
+                if (nm < 0.1) "%d ft".format((nm * FT_PER_NM).roundToInt()) else "%.2f nm".format(nm))
             val t = measurer.measure(label, TextStyle(fontSize = 13.sp, color = MOB_RED, fontWeight = FontWeight.Bold))
             val mid = (b + c) / 2f
             drawRect(Color.White.copy(alpha = 0.85f), mid + Offset(6.dp.toPx(), -t.size.height - 2.dp.toPx()),

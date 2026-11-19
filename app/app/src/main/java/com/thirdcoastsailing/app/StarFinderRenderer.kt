@@ -42,12 +42,20 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     data class View(val pose: PhonePose, val fovYDeg: Double, val yawDeg: Double, val boatHeadingDeg: Double)
 
     @Volatile var view: View = View(PhonePose.look(0.0, 15.0), 65.0, 0.0, 0.0)
-    @Volatile private var sky: Sky3D? = null
-    @Volatile private var skyVersion = 0
+    /** A sky and its version, published together as one object so the GL thread never sees one without the other. */
+    private class SkyData(val sky: Sky3D, val version: Int)
+    @Volatile private var skyData: SkyData? = null
     private var uploadedVersion = -1
 
-    /** Replace the sky (stars, constellation lines, bodies) drawn from the next frame. */
-    fun setSky(s: Sky3D) { sky = s; skyVersion++ }
+    /** Replace the sky (stars, constellation lines, bodies) drawn from the next frame. Called on the UI thread. */
+    fun setSky(s: Sky3D) { skyData = SkyData(s, (skyData?.version ?: 0) + 1) }
+
+    // uniform and attribute locations, looked up once per program after linking (cleared with each new GL context)
+    private val uniforms = HashMap<Int, HashMap<String, Int>>()
+    private val attribs = HashMap<Int, HashMap<String, Int>>()
+    // arrays reused every frame instead of allocated
+    private val mat16 = FloatArray(16)
+    private val mat9 = FloatArray(9)
 
     private var width = 1
     private var height = 1
@@ -73,6 +81,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0.04f, 0.06f, 0.12f, 1f)
+        uniforms.clear(); attribs.clear()                          // new GL context: programs and locations are new
         skyProg = program(SKY_VS, SKY_FS)
         pointProg = program(POINT_VS, POINT_FS)
         lineProg = program(LINE_VS, LINE_FS)
@@ -91,8 +100,9 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     override fun onDrawFrame(gl: GL10?) {
         val v = view
         val cam = FinderCameras(v.pose, width, height, v.fovYDeg, v.yawDeg)
-        val s = sky
-        if (s != null && skyVersion != uploadedVersion) { buildSkyArrays(s); uploadedVersion = skyVersion }
+        val sd = skyData
+        val s = sd?.sky
+        if (sd != null && sd.version != uploadedVersion) { buildSkyArrays(sd.sky); uploadedVersion = sd.version }
         val sunAlt = s?.sunAltDeg ?: -30.0
         val sunAz = s?.sunAzDeg ?: 0.0
         val shade = SkyShade.forSun(sunAlt)
@@ -150,7 +160,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
             attrib(pointProg, "aCol", sb, 3, 8, 4)
             attrib(pointProg, "aMoon", sb, 1, 8, 7)
             GLES20.glDrawArrays(GLES20.GL_POINTS, 0, starCount)
-            for (n in listOf("aDir", "aMag", "aCol", "aMoon")) disable(pointProg, n)
+            for (n in POINT_ATTRIBS) disable(pointProg, n)
         }
 
         // ---- 3. boat scene, lower part of the screen
@@ -182,8 +192,10 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
             GLES20.glUseProgram(boatProg)
             uniformMat(boatProg, "uMVP", mvp)
             val r = model.m
-            val n3 = floatArrayOf(r[0].toFloat(), r[1].toFloat(), r[2].toFloat(), r[4].toFloat(), r[5].toFloat(), r[6].toFloat(),
-                r[8].toFloat(), r[9].toFloat(), r[10].toFloat())
+            val n3 = mat9
+            n3[0] = r[0].toFloat(); n3[1] = r[1].toFloat(); n3[2] = r[2].toFloat()
+            n3[3] = r[4].toFloat(); n3[4] = r[5].toFloat(); n3[5] = r[6].toFloat()
+            n3[6] = r[8].toFloat(); n3[7] = r[9].toFloat(); n3[8] = r[10].toFloat()
             GLES20.glUniformMatrix3fv(loc(boatProg, "uNormal"), 1, false, n3, 0)
             GLES20.glUniform3f(loc(boatProg, "uLight"), light.x.toFloat(), light.y.toFloat(), light.z.toFloat())
             GLES20.glUniform1f(loc(boatProg, "uDim"), dim)
@@ -201,7 +213,7 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
             GLES20.glDrawElements(GLES20.GL_TRIANGLES, m.indices.size, GLES20.GL_UNSIGNED_SHORT, 0)
             GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, 0)
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
-            for (n in listOf("aPos", "aNorm", "aCol", "aUv", "aFlag")) disable(boatProg, n)
+            for (n in BOAT_ATTRIBS) disable(boatProg, n)
 
             // rigging
             rigBuf?.let { rb ->
@@ -322,15 +334,20 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     private fun floats(a: FloatArray): FloatBuffer =
         ByteBuffer.allocateDirect(a.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(a); position(0) }
 
-    /** Location of a shader uniform. */
-    private fun loc(p: Int, name: String) = GLES20.glGetUniformLocation(p, name)
+    /** Location of a shader uniform (looked up from GL the first time, then from the cache). */
+    private fun loc(p: Int, name: String): Int =
+        uniforms.getOrPut(p) { HashMap() }.getOrPut(name) { GLES20.glGetUniformLocation(p, name) }
+
+    /** Location of a shader attribute (cached like [loc]); -1 if the program has none by that name. */
+    private fun attribLoc(p: Int, name: String): Int =
+        attribs.getOrPut(p) { HashMap() }.getOrPut(name) { GLES20.glGetAttribLocation(p, name) }
 
     /** Set a 4x4 matrix uniform. */
-    private fun uniformMat(p: Int, name: String, m: Mat4) = GLES20.glUniformMatrix4fv(loc(p, name), 1, false, m.toFloats(), 0)
+    private fun uniformMat(p: Int, name: String, m: Mat4) = GLES20.glUniformMatrix4fv(loc(p, name), 1, false, m.toFloats(mat16), 0)
 
     /** Point a shader attribute at part of a float buffer. */
     private fun attrib(p: Int, name: String, buf: FloatBuffer, size: Int, strideFloats: Int, offsetFloats: Int) {
-        val a = GLES20.glGetAttribLocation(p, name); if (a < 0) return
+        val a = attribLoc(p, name); if (a < 0) return
         buf.position(offsetFloats)
         GLES20.glVertexAttribPointer(a, size, GLES20.GL_FLOAT, false, strideFloats * 4, buf)
         GLES20.glEnableVertexAttribArray(a)
@@ -339,14 +356,14 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
 
     /** Point a shader attribute at part of the bound vertex buffer. */
     private fun vboAttrib(p: Int, name: String, size: Int, strideBytes: Int, offsetFloats: Int) {
-        val a = GLES20.glGetAttribLocation(p, name); if (a < 0) return
+        val a = attribLoc(p, name); if (a < 0) return
         GLES20.glVertexAttribPointer(a, size, GLES20.GL_FLOAT, false, strideBytes, offsetFloats * 4)
         GLES20.glEnableVertexAttribArray(a)
     }
 
     /** Turn off a shader attribute after drawing. */
     private fun disable(p: Int, name: String) {
-        val a = GLES20.glGetAttribLocation(p, name); if (a >= 0) GLES20.glDisableVertexAttribArray(a)
+        val a = attribLoc(p, name); if (a >= 0) GLES20.glDisableVertexAttribArray(a)
     }
 
     /** Compile and link a vertex and fragment shader into a GL program (errors are logged). */
@@ -370,6 +387,9 @@ class StarFinderRenderer(private val context: Context) : GLSurfaceView.Renderer 
     companion object {
         /** Star points are shown down to this magnitude whatever the sky brightness (the catalog stops at 4.5). */
         private const val ALL_STARS_MAG = 5.0f
+        /** Attribute names switched off after drawing (kept as arrays so no list is made each frame). */
+        private val POINT_ATTRIBS = arrayOf("aDir", "aMag", "aCol", "aMoon")
+        private val BOAT_ATTRIBS = arrayOf("aPos", "aNorm", "aCol", "aUv", "aFlag")
 
         private const val PRECISION = """
             #ifdef GL_FRAGMENT_PRECISION_HIGH

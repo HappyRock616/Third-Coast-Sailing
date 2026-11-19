@@ -44,8 +44,12 @@ data class LightPattern(val periodS: Double, val on: List<LightOn>) {
         fun of(chr: String, colours: String, periodS: Double?, seq: String?): LightPattern {
             val cols = colours.split(',').map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("1") }
             val base = chr.removePrefix("AERO ").trim()
-            if (base == "F" || periodS == null || periodS <= 0.0) return LightPattern(1.0, listOf(LightOn(0.0, 1.0, cols[0])))
+            // only a fixed light ("F") is steady. A flashing light charted without a period (common for quick lights)
+            // gets the usual period for its kind, so it is never shown, or described, as a steady light.
+            if (base == "F" || base.isEmpty()) return LightPattern(1.0, listOf(LightOn(0.0, 1.0, cols[0])))
             val parts = seq?.let { parseSeq(it) }
+            // no charted period: NOAA's sequence gives it when there is one, else the usual period for the kind
+            val periodS = periodS?.takeIf { it > 0.0 } ?: parts?.sumOf { it.second }?.takeIf { it > 0.0 } ?: nominalPeriod(base)
             val alternating = base.startsWith("Al")
             val raw = when {
                 parts != null && abs(parts.sumOf { it.second } - periodS) < 0.6 -> parts
@@ -74,26 +78,65 @@ data class LightPattern(val periodS: Double, val on: List<LightOn>) {
             }.takeIf { it.isNotEmpty() && it.any { p -> p.first } }
         }.getOrNull()
 
-        /** Timing by the usual rules when NOAA gives no sequence. */
+        /**
+         * End a list of on/off parts with the dark rest of the period. Parts that need more than the period (unusual
+         * data) are squeezed in, so a pattern never runs past its period.
+         */
+        private fun fit(parts: MutableList<Pair<Boolean, Double>>, per: Double): List<Pair<Boolean, Double>> {
+            val used = parts.sumOf { it.second }
+            if (used > per - 0.1 && used > 0) {
+                val k = (per - 0.1).coerceAtLeast(0.1) / used
+                for (i in parts.indices) parts[i] = Pair(parts[i].first, parts[i].second * k)
+            }
+            parts += Pair(false, (per - parts.sumOf { it.second }).coerceAtLeast(0.0))
+            return parts
+        }
+
+        /** The kind of a pattern: "Fl(2+1)" -> "Fl", "Al Fl" -> "Fl", "Q(6)+LFl" -> "Q". */
+        private fun kindOf(chr: String) = chr.substringBefore('(').substringBefore('+').removePrefix("Al").trim()
+
+        /**
+         * Period used when the chart gives none: a continuous quick light repeats every second (60 a minute), very
+         * quick twice a second, ultra quick faster; other kinds get a typical value (the card says "period not charted").
+         */
+        fun nominalPeriod(chr: String): Double = if ('(' in chr && kindOf(chr) != "Mo") {
+            // a group of flashes ("Q(3)", "VQ(6)+LFl", "Fl(2)"): room for the whole group, then at least as long dark
+            val group = rule(chr, 1000.0).dropLast(1).sumOf { it.second }
+            Math.ceil(group + maxOf(group, 4.0))
+        } else when (kindOf(chr)) {
+            "Q" -> 1.0; "VQ" -> 0.5; "UQ" -> 0.25
+            "IQ" -> 10.0; "IVQ" -> 10.0; "LFl" -> 10.0; "Mo" -> 10.0
+            else -> 4.0                                           // Fl, Iso, Oc
+        }
+
+        /**
+         * Timing by the usual rules when NOAA gives no sequence. Composite groups keep their shape: "Fl(2+1)" is two
+         * flashes, a longer gap, then one; "Q(6)+LFl" (south cardinal) is six quick flashes followed by a long one.
+         */
         fun rule(chr: String, per: Double): List<Pair<Boolean, Double>> {
             val group = Regex("\\(([^)]*)\\)").find(chr)?.groupValues?.get(1) ?: ""
-            val kind = chr.substringBefore('(').removePrefix("Al").trim()
-            fun flashes(n: Int, on: Double, gap: Double): List<Pair<Boolean, Double>> {
+            val kind = kindOf(chr)
+            val longAfter = chr.substringAfter(')', "").contains("LFl")           // "...)+LFl"
+            // flash counts per group: "2+1" -> [2, 1]; none -> one flash
+            val groups = group.split('+').mapNotNull { it.trim().toIntOrNull() }.filter { it > 0 }.ifEmpty { listOf(1) }
+            fun flashes(on: Double, gap: Double): List<Pair<Boolean, Double>> {
                 val out = ArrayList<Pair<Boolean, Double>>()
-                repeat(n) { i -> out += Pair(true, on); if (i < n - 1) out += Pair(false, gap) }
-                val used = n * on + (n - 1) * gap
-                out += Pair(false, maxOf(per - used, 0.1))
-                return out
+                groups.forEachIndexed { g, n ->
+                    repeat(n) { i -> out += Pair(true, on); if (i < n - 1) out += Pair(false, gap) }
+                    if (g < groups.size - 1) out += Pair(false, gap * 2.5)          // longer gap between the groups
+                }
+                if (longAfter) { out += Pair(false, gap); out += Pair(true, 2.0) }  // the long flash that ends the group
+                return fit(out, per)
             }
-            val n = group.split('+').mapNotNull { it.trim().toIntOrNull() }.sum().takeIf { it > 0 } ?: 1
             return when (kind) {
                 "Iso" -> listOf(Pair(true, per / 2), Pair(false, per / 2))
                 "Oc" -> { val off = minOf(maxOf(1.0, per / 4), per / 2); listOf(Pair(true, per - off), Pair(false, off)) }
-                "LFl" -> flashes(n, 2.0, 2.0)
-                "Q", "IQ" -> flashes(n, 0.3, 0.7)
-                "VQ", "IVQ" -> flashes(n, 0.3, 0.2)
+                "LFl" -> flashes(2.0, 2.0)
+                "Q", "IQ" -> flashes(0.3, 0.7)
+                "VQ", "IVQ" -> flashes(0.3, 0.2)
+                "UQ" -> flashes(0.15, 0.1)
                 "Mo" -> morse(group, per)
-                else -> flashes(n, 0.5, 1.0)                    // Fl, Fl(2), and anything unusual
+                else -> flashes(0.5, 1.0)                       // Fl, Fl(2), and anything unusual
             }
         }
 
@@ -105,11 +148,10 @@ data class LightPattern(val periodS: Double, val on: List<LightOn>) {
         /** Morse letter: dot 0.4 s, dash 1.5 s, 0.6 s between, the rest of the period dark. */
         private fun morse(letters: String, per: Double): List<Pair<Boolean, Double>> {
             val code = letters.uppercase().mapNotNull { MORSE[it] }.joinToString("")
-            if (code.isEmpty()) return listOf(Pair(true, 0.5), Pair(false, per - 0.5))
+            if (code.isEmpty()) return fit(arrayListOf(Pair(true, 0.5)), per)
             val out = ArrayList<Pair<Boolean, Double>>()
             code.forEachIndexed { i, c -> out += Pair(true, if (c == '.') 0.4 else 1.5); if (i < code.length - 1) out += Pair(false, 0.6) }
-            out += Pair(false, maxOf(per - out.sumOf { it.second }, 0.5))
-            return out
+            return fit(out, per)
         }
 
         /** "white", "red" ... */
@@ -123,13 +165,22 @@ data class LightPattern(val periodS: Double, val on: List<LightOn>) {
             val cols = colours.split(',').map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("1") }
             val words = cols.map { colourWord(it) }
             val c = words.first().replaceFirstChar { it.uppercase() }
-            val per = periodS?.let { fmt(it) }
+            val charted = periodS?.takeIf { it > 0.0 }
+            val per = charted?.let { fmt(it) }
             val base = chr.removePrefix("AERO ").trim()
             val group = Regex("\\(([^)]*)\\)").find(base)?.groupValues?.get(1) ?: ""
             val kind = base.substringBefore('(').trim()
             val aero = if (chr.startsWith("AERO")) " (aviation light)" else ""
+            val longAfter = base.substringAfter(')', "").contains("LFl")
             return when {
-                kind == "F" || per == null -> "Steady ${words.joinToString(" and ")} light$aero"
+                kind == "F" || base.isEmpty() -> "Steady ${words.joinToString(" and ")} light$aero"
+                (kind == "Q" || kind == "VQ") && group.isNotEmpty() ->
+                    "${if (kind == "Q") "Quick" else "Very quick"} ${words.first()} flashes in groups of $group" +
+                        (if (longAfter) ", then a long flash" else "") + (per?.let { ", every $it s" } ?: "") + aero
+                kind == "Q" -> "Quick ${words.first()} flashes, 60 a minute$aero"
+                kind == "VQ" -> "Very quick ${words.first()} flashes, 120 a minute$aero"
+                // flashing, but the chart gives no period: say so rather than call it steady
+                per == null -> "$c light, $base (period not charted)$aero"
                 kind.startsWith("Al") -> {
                     val flashesPerPeriod = seq?.let { parseSeq(it) }?.count { it.first } ?: words.size
                     val every = fmt((periodS ?: 0.0) / flashesPerPeriod.coerceAtLeast(1))
@@ -138,8 +189,6 @@ data class LightPattern(val periodS: Double, val on: List<LightOn>) {
                 kind == "Fl" && group.isNotEmpty() && group != "1" -> "$c flashes in groups of $group, every $per s$aero"
                 kind == "Fl" -> "$c flash every $per s$aero"
                 kind == "LFl" -> "Long ${words.first()} flash every $per s$aero"
-                kind == "Q" -> "Quick ${words.first()} flashes, 60 a minute$aero"
-                kind == "VQ" -> "Very quick ${words.first()} flashes, 120 a minute"
                 kind == "IQ" -> "Quick ${words.first()} flashes, with breaks, every $per s"
                 kind == "Iso" -> "$c, equal on and off, every $per s"
                 kind == "Oc" -> "$c, on longer than off, every $per s"

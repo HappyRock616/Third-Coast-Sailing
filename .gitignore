@@ -27,3 +27,11 @@ keystore.properties
 .DS_Store
 Thumbs.db
 *.swp
+
+# ---- ...except the built-in outline map, which ships inside the app (F-Droid builds from this repo)
+!app/app/src/main/assets/basemap/*.pmtiles
+
+# ---- Local working folders
+_moved_aside/
+app/release/
+app/app/release/

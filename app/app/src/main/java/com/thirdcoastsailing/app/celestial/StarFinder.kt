@@ -2,7 +2,6 @@ package com.thirdcoastsailing.app.celestial
 
 import io.github.cosinekitty.astronomy.rotationEqjEqd
 import io.github.cosinekitty.astronomy.siderealTime
-import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -15,10 +14,9 @@ import kotlin.math.sin
  *  - stars.csv: every star down to magnitude 4.5 (about 900), Yale Bright Star Catalogue 5 (public domain)
  *  - constellation_lines.csv, constellations.csv: stick figures and names, d3-celestial (BSD 3-Clause)
  *
- * The view is a "looking up" disc: zenith in the center, horizon at radius 1, the direction you face at the top
- * (azimuthal equidistant: distance from the center is proportional to 90° minus altitude). Navigational stars,
- * planets, Sun and Moon come from the almanac (full accuracy); the background stars and lines use a quick
- * precession-only conversion (good to about 1 arc-minute, plenty for a picture).
+ * Everything comes out as altitude / true azimuth; the 3D renderer (StarFinderRenderer) turns it with the phone.
+ * Navigational stars, planets, Sun and Moon come from the almanac (full accuracy); the background stars and lines
+ * use a quick precession-only conversion (good to about 1 arc-minute, plenty for a picture).
  */
 
 data class CatalogStar(val raDeg: Double, val decDeg: Double, val mag: Double, val hr: Int)
@@ -60,36 +58,8 @@ class StarCatalog(
     }
 }
 
-/** What a dot on the flat star finder is, which sets its look and label. */
+/** What a dot in the star finder is, which sets its look and label. */
 enum class SkyObjectKind { STAR, NAV_STAR, PLANET, SUN, MOON }
-
-/** A dot on the star finder. x, y in the unit disc (y down, facing direction at the top). */
-data class SkyObject(
-    val kind: SkyObjectKind,
-    val name: String?,              // navigational stars, planets, Sun, Moon
-    val navNumber: Int?,            // Nautical Almanac star number (0 = Polaris)
-    val altDeg: Double, val azDeg: Double, val mag: Double,
-    val x: Double, val y: Double,
-    val body: SkyBody?,             // for tapping through to a sight
-)
-
-/** A constellation stick-figure segment on the flat star finder (unit-disc coordinates). */
-data class SkySegment(val abbr: String, val x1: Double, val y1: Double, val x2: Double, val y2: Double)
-
-/** What a label on the flat star finder names. */
-enum class SkyLabelKind { CONSTELLATION, NAV_STAR, PLANET, CARDINAL }
-
-/** A label on the flat star finder (unit-disc coordinates). */
-data class SkyLabel(val kind: SkyLabelKind, val text: String, val x: Double, val y: Double)
-
-/** Everything the flat (2D) star finder draws for one time, place and facing direction. */
-data class SkyView(
-    val timeMs: Long, val position: LatLon, val headingDeg: Double,
-    val objects: List<SkyObject>,       // faint first, so bright ones are drawn on top
-    val segments: List<SkySegment>,     // constellation stick figures (above the horizon)
-    val labels: List<SkyLabel>,
-    val sunAltDeg: Double,              // < -12: dark; -12..-6 nautical twilight; -6..0 civil twilight
-)
 
 /** An object in the 3D star finder (altitude / true azimuth in degrees). */
 data class Sky3DObject(
@@ -112,69 +82,6 @@ data class Sky3D(
 
 /** Works out the sky for the star finder: where every star, planet, the Sun and Moon, and the constellation figures are. */
 object StarFinder {
-
-    /**
-     * The sky from `pos` at `ms`, with `headingDeg` (the direction you're facing) at the top.
-     * @param maxMag      faintest background star to include (4.5 = everything in the catalog)
-     * @param allConstellationNames draw every constellation's name, not just those with navigational stars
-     */
-    fun view(
-        catalog: StarCatalog, pos: LatLon, ms: Long, headingDeg: Double = 0.0,
-        maxMag: Double = 4.5, allConstellationNames: Boolean = false,
-    ): SkyView {
-        val conv = Converter(pos, ms)
-        val objects = mutableListOf<SkyObject>()
-
-        // background stars (navigational ones come from the almanac below)
-        for (s in catalog.stars) {
-            if (s.mag > maxMag || catalog.isNavStar(s)) continue
-            val (alt, az) = conv.altAz(s.raDeg, s.decDeg)
-            val p = project(alt, az, headingDeg) ?: continue
-            objects += SkyObject(SkyObjectKind.STAR, null, null, alt, az, s.mag, p.first, p.second, null)
-        }
-
-        // almanac bodies
-        val labels = mutableListOf<SkyLabel>()
-        var sunAlt = -90.0
-        for (b in SkyBody.all) {
-            val e = Almanac.entry(b, ms)
-            val h = SightReduction.hcZn(pos, e.gha, e.dec)
-            if (b == SkyBody.Sun) sunAlt = h.hcDeg
-            val p = project(h.hcDeg, h.znDeg, headingDeg) ?: continue
-            val kind = when (b) {
-                SkyBody.Sun -> SkyObjectKind.SUN
-                SkyBody.Moon -> SkyObjectKind.MOON
-                is SkyBody.Planet -> SkyObjectKind.PLANET
-                is SkyBody.Star -> SkyObjectKind.NAV_STAR
-            }
-            val num = (b as? SkyBody.Star)?.star?.number
-            objects += SkyObject(kind, b.name, num, h.hcDeg, h.znDeg, e.mag, p.first, p.second, b)
-            if (kind == SkyObjectKind.NAV_STAR) labels += SkyLabel(SkyLabelKind.NAV_STAR, b.name, p.first, p.second)
-            if (kind == SkyObjectKind.PLANET) labels += SkyLabel(SkyLabelKind.PLANET, b.name, p.first, p.second)
-        }
-
-        // constellation figures: keep segments with both ends above (or just below) the horizon
-        val segments = mutableListOf<SkySegment>()
-        for (line in catalog.lines) {
-            var prev: Pair<Double, Double>? = null
-            for ((ra, dec) in line.points) {
-                val (alt, az) = conv.altAz(ra, dec)
-                val p = if (alt > -2.0) projectAny(alt, az, headingDeg) else null
-                if (p != null && prev != null) segments += SkySegment(line.abbr, prev.first, prev.second, p.first, p.second)
-                prev = p
-            }
-        }
-        for (n in catalog.names) {
-            if (!allConstellationNames && n.abbr !in catalog.navConstellations) continue
-            val (alt, az) = conv.altAz(n.raDeg, n.decDeg)
-            val p = project(alt, az, headingDeg) ?: continue
-            labels += SkyLabel(SkyLabelKind.CONSTELLATION, n.name, p.first, p.second)
-        }
-        for ((name, az) in listOf("N" to 0.0, "E" to 90.0, "S" to 180.0, "W" to 270.0)) {
-            projectAny(0.0, az, headingDeg).let { labels += SkyLabel(SkyLabelKind.CARDINAL, name, it.first * 1.06, it.second * 1.06) }
-        }
-        return SkyView(ms, pos, headingDeg, objects.sortedByDescending { it.mag }, segments, labels, sunAlt)
-    }
 
     /**
      * The sky for the 3D star finder: every object and constellation figure as altitude / azimuth (true), at one
@@ -219,40 +126,6 @@ object StarFinder {
         return Sky3D(ms, pos, objects.sortedByDescending { it.mag }, segments, names, sunAlt, sunAz)
     }
 
-    /** Disc position for an altitude/azimuth, or null below the horizon. */
-    fun project(altDeg: Double, azDeg: Double, headingDeg: Double): Pair<Double, Double>? =
-        if (altDeg < 0.0) null else projectAny(altDeg, azDeg, headingDeg)
-
-    /** Flat-disc position of an altitude / azimuth, facing headingDeg at the top (horizon at radius 1); also below the horizon. */
-    private fun projectAny(altDeg: Double, azDeg: Double, headingDeg: Double): Pair<Double, Double> {
-        val r = (90.0 - altDeg) / 90.0
-        val a = (azDeg - headingDeg) * DEG
-        return Pair(r * sin(a), -r * cos(a))
-    }
-
-    /** Altitude and azimuth for a disc position (inverse of [project]); for "what did I tap?". */
-    fun unproject(x: Double, y: Double, headingDeg: Double): Pair<Double, Double> {
-        val r = kotlin.math.sqrt(x * x + y * y)
-        return Pair(90.0 - r * 90.0, norm360(atan2(x, -y) * RAD + headingDeg))
-    }
-
-    /**
-     * "What am I looking at?": navigational stars and planets near a measured altitude (from the sextant) and
-     * bearing (from a hand-bearing compass), closest first. Tolerances are generous for a compass bearing.
-     */
-    fun identify(pos: LatLon, ms: Long, altDeg: Double, azDeg: Double, tolDeg: Double = 6.0): List<Pair<SkyBody, Double>> =
-        (SkyBody.stars + SkyBody.planets).mapNotNull { b ->
-            val h = SightReduction.altAz(b, pos, ms)
-            val sep = angularSeparation(altDeg, azDeg, h.hcDeg, h.znDeg)
-            if (sep <= tolDeg) b to sep else null
-        }.sortedBy { it.second }
-
-    /** Angle between two directions given as altitude/azimuth (degrees). */
-    fun angularSeparation(alt1: Double, az1: Double, alt2: Double, az2: Double): Double {
-        val c = sin(alt1 * DEG) * sin(alt2 * DEG) + cos(alt1 * DEG) * cos(alt2 * DEG) * cos((az1 - az2) * DEG)
-        return acos(c.coerceIn(-1.0, 1.0)) * RAD
-    }
-
     /** J2000 RA/Dec -> altitude/azimuth for one place and time (precession + nutation, no aberration). */
     private class Converter(val pos: LatLon, ms: Long) {
         private val t = Almanac.time(ms)
@@ -270,5 +143,4 @@ object StarFinder {
             return Pair(h.hcDeg, h.znDeg)
         }
     }
-
 }

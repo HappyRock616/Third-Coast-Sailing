@@ -178,9 +178,10 @@ object Coach {
 
     /**
      * Guidance for a level, position and day.
-     * @param heightOfEyeFt height of eye for the preset altitudes (dip)
+     * @param heightOfEyeFt height of eye, used only for the sea-horizon distance tip (the preset altitudes are the
+     *                      calculated altitude Hc, not corrected for dip or refraction: close enough to find the body)
      */
-    fun guidance(level: SkillLevel, pos: LatLon, dayStartMs: Long, heightOfEyeFt: Double = 8.0): Guidance {
+    fun guidance(level: SkillLevel, pos: LatLon, dayStartMs: Long, heightOfEyeFt: Double = DEFAULT_HEIGHT_OF_EYE_FT): Guidance {
         if (level == SkillLevel.ADVANCED) return Guidance(level, null, emptyList(), emptyList())
         val plan = SightPlanner.plan(pos, dayStartMs, heightOfEyeFt)
         val beginner = level == SkillLevel.BEGINNER

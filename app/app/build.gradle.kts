@@ -13,8 +13,8 @@ android {
         applicationId = "com.thirdcoastsailing.app"
         minSdk = 29                       // Android 10 and newer
         targetSdk = 37
-        versionCode = 18
-        versionName = "0.9.0"
+        versionCode = 19
+        versionName = "0.10.0"                // 0.10: US coastal zones
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -25,6 +25,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Test builds install next to the signed app (own id, name "TCS Debug"), so testing never replaces
+            // the signed copy or its data on the phone. Name: src/debug/res/values/strings.xml.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             optimization {
                 // R8 (code and resource optimization) for the whole app, full mode. It shrinks, optimizes and renames
@@ -44,6 +50,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true                // BuildConfig.VERSION_NAME: the one place the app version is set
+    }
+    // F-Droid: leave out the "dependency metadata" block (a list of libraries encrypted with Google's key, readable
+    // only by Google Play). F-Droid's scanner rejects it; Play does not need it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 }
 

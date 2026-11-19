@@ -179,7 +179,9 @@ fun StarFinderScreen(
         glView?.requestRender()
     }
 
-    DisposableEffect(rotSensor, declination) {
+    // the sensor listens only while the app is in front: registered on resume, unregistered on pause and on close
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(rotSensor, declination, lifecycle) {
         if (rotSensor == null) return@DisposableEffect onDispose { }
         var q: DoubleArray? = null
         val listener = object : SensorEventListener {
@@ -200,13 +202,22 @@ fun StarFinderScreen(
                 compassPoor = accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE || accuracy == SensorManager.SENSOR_STATUS_ACCURACY_LOW
             }
         }
-        sm.registerListener(listener, rotSensor, SensorManager.SENSOR_DELAY_GAME)
-        onDispose { sm.unregisterListener(listener) }
+        var registered = false
+        fun listen(on: Boolean) {
+            if (on && !registered) sm.registerListener(listener, rotSensor, SensorManager.SENSOR_DELAY_GAME)
+            if (!on && registered) sm.unregisterListener(listener)
+            registered = on
+        }
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) listen(true)
+            if (e == Lifecycle.Event.ON_PAUSE) listen(false)
+        }
+        lifecycle.addObserver(obs)                  // also delivers ON_RESUME at once if the app is already in front
+        onDispose { lifecycle.removeObserver(obs); listen(false) }
     }
     LaunchedEffect(boatHeadingDeg) { push() }
 
     // ---- GLSurfaceView follows the screen's lifecycle
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, glView) {
         val gv = glView ?: return@DisposableEffect onDispose { }
         val obs = LifecycleEventObserver { _, e ->
@@ -226,7 +237,7 @@ fun StarFinderScreen(
         arrowBody?.let { b -> runCatching { SightReduction.altAz(b, openPos, System.currentTimeMillis()) }.getOrNull() }
     }
     val currentSky by rememberUpdatedState(sky)
-    val measurer = rememberTextMeasurer()
+    val measurer = rememberTextMeasurer(cacheSize = 256)               // 100+ labels redrawn on every sensor event
 
     Box(Modifier.fillMaxSize().background(Color(0xFF0A1B2E))) {
         AndroidView(

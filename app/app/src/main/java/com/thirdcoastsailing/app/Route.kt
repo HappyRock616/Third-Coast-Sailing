@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +45,7 @@ import org.maplibre.android.maps.MapLibreMap
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.ceil
 import kotlin.math.asin
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -54,6 +56,11 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** A point on the water. */
+/** Wind barbs at the route pins (arrival wind): orange, unlike the forecast barbs. */
+private val RouteBarb = Color(0xFFE8730C)
+/** Course of the next leg beside a pin. */
+private val RouteCourse = Color(0xFFC0392B)
+
 data class GeoPt(val lat: Double, val lon: Double)
 
 /** One point of a calculated route, with the time the boat gets there. */
@@ -94,16 +101,104 @@ fun bearingDeg(a: GeoPt, b: GeoPt): Double {
     return (Math.toDegrees(atan2(y, x)) + 360) % 360
 }
 
+/** A course as three digits, 000-359 (359.6 shows as 000, never 360). */
+fun deg3(d: Double): String = "%03d".format(((d.roundToInt() % 360) + 360) % 360)
+
 /** True bearing to magnetic, using the phone's built-in world magnetic model (no network needed). */
 fun toMagnetic(trueDeg: Double, at: GeoPt): Double {
-    val decl = GeomagneticField(at.lat.toFloat(), at.lon.toFloat(), 0f, System.currentTimeMillis()).declination
+    val decl = Declination.at(at.lat, at.lon)
     return ((trueDeg - decl) % 360 + 360) % 360
+}
+
+/** Magnetic variation by 0.1 deg cell and day, kept so labels redrawn on every camera move don't rebuild the model. */
+private object Declination {
+    private val cache = object : LinkedHashMap<Long, Float>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Float>?) = size > 256
+    }
+
+    @Synchronized
+    fun at(lat: Double, lon: Double): Float {
+        val now = System.currentTimeMillis()
+        val key = ((Math.round(lat * 10) + 900) * 4000L + (Math.round(lon * 10) + 1800)) * 100_000L + now / 86_400_000L
+        return cache.getOrPut(key) { GeomagneticField(lat.toFloat(), lon.toFloat(), 0f, now).declination }
+    }
 }
 
 /** "3 h 28" / "45 min". */
 fun hoursText(h: Double): String {
     val mins = (h * 60).roundToInt()
     return if (mins < 60) "$mins min" else "${mins / 60} h %02d".format(mins % 60)
+}
+
+/** "1h 17m" / "45m": time to a route pin, short enough to sit beside it. */
+fun etaText(ms: Long): String {
+    val mins = (ms / 60_000.0).roundToInt()
+    return if (mins < 60) "${mins}m" else "${mins / 60}h %02dm".format(mins % 60)
+}
+
+/** Arrival at one route pin: time after departure (ms) and the forecast wind there and then (kn, from deg true). */
+class PinEta(val afterMs: Long?, val windKn: Double?, val windFromDeg: Double?)
+
+/**
+ * Times along a planned route for manual weather routing: each leg is sailed straight at the polar speed (cruise
+ * factor applied) for the forecast wind met along the way, in 0.5 nm steps. Upwind or dead downwind the best
+ * speed made good along the leg is used (tacking or gybing, no extra penalty). Wind is blended between forecast
+ * hours (direction the short way round). Without a polar or forecast, the fallback speed (the boat's average
+ * speed) is used; without either, no times.
+ */
+object RouteTiming {
+    fun compute(points: List<GeoPt>, departMs: Long, polar: Polar?, wind: WindLookup, cruise: Double,
+                fallbackKn: Double?): List<PinEta> {
+        if (points.isEmpty()) return emptyList()
+        val out = ArrayList<PinEta>()
+        var t = departMs
+        var ok = true
+        fun windAt(tMs: Long, p: GeoPt): Pair<Double, Double>? {
+            val h0 = Math.floorDiv(tMs, 3_600_000L) * 3_600_000L
+            val f = (tMs - h0) / 3_600_000.0
+            val a = wind.at(h0, p.lat, p.lon); val b = wind.at(h0 + 3_600_000L, p.lat, p.lon)
+            if (a == null || b == null) return a ?: b
+            fun vec(w: Pair<Double, Double>) = Pair(w.first * sin(Math.toRadians(w.second)), w.first * cos(Math.toRadians(w.second)))
+            val (ax, ay) = vec(a); val (bx, by) = vec(b)
+            val x = ax + (bx - ax) * f; val y = ay + (by - ay) * f
+            val kn = a.first + (b.first - a.first) * f                    // speed blended directly (vectors shrink when turning)
+            return kn to (Math.toDegrees(atan2(x, y)) + 360) % 360
+        }
+        out += windAt(t, points[0]).let { PinEta(0L, it?.first, it?.second) }
+        for (i in 1 until points.size) {
+            val a = points[i - 1]; val b = points[i]
+            val d = distNm(a, b); val brg = bearingDeg(a, b)
+            val n = ceil(d / 0.5).toInt().coerceIn(1, 400)
+            val step = d / n
+            if (ok) for (k in 0 until n) {
+                val mid = destination(a, brg, step * (k + 0.5))
+                val w = windAt(t, mid)
+                val kn = if (polar != null && w != null) madeGood(polar, w.first, abs(signedDeg(w.second - brg))) * cruise
+                         else fallbackKn
+                if (kn == null || kn < 0.3) { ok = false; break }
+                t += (step / kn * 3_600_000).toLong()
+            }
+            val w = if (ok) windAt(t, b) else null
+            out += PinEta(if (ok) t - departMs else null, w?.first, w?.second)
+        }
+        return out
+    }
+
+    /** Best speed made good along a course `twa` degrees off the wind (0 = dead upwind): sail any angle, take the best. */
+    private fun madeGood(polar: Polar, tws: Double, twa: Double): Double {
+        val lightest = polar.tws.first()
+        var best = 0.0
+        var alpha = 0.0
+        while (alpha <= 180.0) {
+            val s = polar.boatSpeed(maxOf(tws, lightest), alpha) * (if (tws < lightest) tws / lightest else 1.0)
+            val off = abs(alpha - twa)
+            if (off < 90) best = maxOf(best, s * cos(Math.toRadians(off)))
+            alpha += 2.0
+        }
+        return best
+    }
+
+    private fun signedDeg(a: Double): Double { var x = (a % 360 + 360) % 360; if (x > 180) x -= 360; return x }
 }
 
 /** Local clock time as "HH:mm". */
@@ -134,7 +229,7 @@ class RouteStore(private val prefs: SharedPreferences) {
  */
 @Composable
 fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteResult?, night: Boolean,
-                 modifier: Modifier = Modifier) {
+                 etas: List<PinEta> = emptyList(), modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
     Canvas(modifier.fillMaxSize()) {
         tick                                                         // read so camera moves redraw
@@ -148,9 +243,9 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteR
         if (legs.size > 1) {
             val path = Path()
             legs.forEachIndexed { i, p -> val o = xy(p); if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
-            drawPath(path, Navy.copy(alpha = faded), style = Stroke(5.dp.toPx(), join = StrokeJoin.Round))
-            drawPath(path, SignalOrange.copy(alpha = faded), style = Stroke(2.6.dp.toPx(), join = StrokeJoin.Round,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 6.dp.toPx()))))
+            val dash = PathEffect.dashPathEffect(floatArrayOf(18.dp.toPx(), 8.dp.toPx()))
+            drawPath(path, Navy.copy(alpha = faded * 0.75f), style = Stroke(3.4.dp.toPx(), join = StrokeJoin.Round, pathEffect = dash))
+            drawPath(path, SignalOrange.copy(alpha = faded), style = Stroke(1.7.dp.toPx(), join = StrokeJoin.Round, pathEffect = dash))
         }
 
         // calculated line
@@ -169,7 +264,9 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteR
             val a = labelLegs[i]; val b = labelLegs[i + 1]
             val pa = xy(a); val pb = xy(b)
             val len = hypot(pb.x - pa.x, pb.y - pa.y)
-            val label = "%.1f nm  %03.0f°M".format(distNm(a, b), toMagnetic(bearingDeg(a, b), a))
+            // the plan's legs: distance only (course and time sit at the pins); a calculated route keeps its courses
+            val label = if (turns == null) "%.1f nm".format(distNm(a, b))
+                        else "%.1f nm  %s°M".format(distNm(a, b), deg3(toMagnetic(bearingDeg(a, b), a)))
             val layout = measurer.measure(label, TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
             if (len < layout.size.width + 24.dp.toPx()) continue    // leg too short on screen for its label
             var ang = Math.toDegrees(atan2((pb.y - pa.y).toDouble(), (pb.x - pa.x).toDouble())).toFloat()
@@ -190,6 +287,30 @@ fun RouteOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, calc: RouteR
             drawCircle(Navy, 6.dp.toPx(), o)
             drawCircle(Color.White, 4.5.dp.toPx(), o)
             drawCircle(RouteTeal, 2.5.dp.toPx(), o)
+        }
+
+        // at each pin (planned route): the forecast wind on arrival as an orange barb, the time to get there and the
+        // course of the next leg; for manual weather routing
+        if (calc == null) points.forEachIndexed { i, p ->
+            val e = etas.getOrNull(i) ?: return@forEachIndexed
+            val o = xy(p)
+            if (e.windKn != null && e.windFromDeg != null) {
+                val north = m.projection.toScreenLocation(LatLng(p.lat + 0.01, p.lon))
+                val screenNorth = Math.toDegrees(atan2((north.x - o.x).toDouble(), -(north.y - o.y).toDouble()))
+                // full size with a white edge so it stands out from the forecast barbs; the pin is drawn over its foot
+                drawBarb(o, (e.windFromDeg + screenNorth).toFloat(), e.windKn, ink = RouteBarb, edgeColor = Color.White, k = 1.0f)
+            }
+            val lines = buildList {
+                if (i > 0) add((e.afterMs?.let { etaText(it) } ?: "—") to (if (night) Foam else Navy))
+                if (i < points.lastIndex) add("${deg3(toMagnetic(bearingDeg(p, points[i + 1]), p))}°M" to RouteCourse)
+            }
+            var y = o.y + 6.dp.toPx()
+            for ((text, color) in lines) {
+                val lay = measurer.measure(text, TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color,
+                    background = (if (night) Navy else Color.White).copy(alpha = 0.7f)))
+                drawText(lay, topLeft = Offset(o.x + 10.dp.toPx(), y))
+                y += lay.size.height
+            }
         }
 
         // pins: start green, waypoints black and numbered, the last one a checkered finish flag
@@ -298,33 +419,37 @@ enum class CalcState { IDLE, WORKING, DONE }
 @Composable
 fun RouteBox(stats: RouteStats, calc: CalcState, boatLinked: Boolean, nextNm: Double?, steerDegM: Double?,
              onCalc: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
     val active = calc == CalcState.DONE
+    val tight = { size: androidx.compose.ui.unit.TextUnit -> TextStyle(lineHeight = size * 1.05f) }
     Column(
         modifier.widthIn(max = 420.dp).clip(shape).background(Navy.copy(alpha = 0.94f), shape)
-            .border(if (active) 3.5.dp else 1.dp, if (active) SignalOrange else NavyLight, shape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .border(if (active) 3.dp else 1.dp, if (active) SignalOrange else NavyLight, shape)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             @Composable
             fun Stat(label: String, value: String, unit: String) {
-                Column(Modifier.width(56.dp)) {
-                    Text(label, color = if (active) SignalOrange else Mist, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text(value, color = Foam, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(unit, color = Mist, fontSize = 9.5.sp, maxLines = 1)
+                Column(Modifier.widthIn(min = 44.dp)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(label, color = if (active) SignalOrange else Mist, fontSize = 9.sp, fontWeight = FontWeight.Bold, style = tight(9.sp))
+                        if (unit.isNotEmpty()) Text(" $unit", color = Mist, fontSize = 9.sp, maxLines = 1, style = tight(9.sp))
+                    }
+                    Text(value, color = Foam, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, style = tight(17.sp))
                 }
             }
             Stat("DIST", stats.distNm?.let { "%.1f".format(it) } ?: "—", if (active) "nm sailed" else "nm")
             if (boatLinked) {
-                Stat("VMG", stats.vmgKn?.let { "%.1f".format(it) } ?: "—", "kn")
+                Stat("VMG", stats.vmgKn?.let { "%.1f".format(if (kotlin.math.abs(it) < 0.05) 0.0 else it) } ?: "—", "kn")
                 Stat("TIME", stats.hours?.let { hoursText(it) } ?: "—", stats.etaMs?.let { "ETA ${clockText(it)}" } ?: "")
-            } else if (stats.hours != null) Stat("TIME", hoursText(stats.hours), "elapsed")
-            val btnShape = RoundedCornerShape(10.dp)
+            } else if (stats.hours != null) Stat("TIME", hoursText(stats.hours), if (active) "elapsed" else "planned")
+            Spacer(Modifier.weight(1f))
+            val btnShape = RoundedCornerShape(8.dp)
             Column(
                 Modifier.clip(btnShape)
-                    .then(if (active) Modifier.background(SignalOrange, btnShape) else Modifier.border(2.dp, SignalOrange, btnShape))
-                    .clickable(onClick = onCalc).padding(horizontal = 10.dp, vertical = 6.dp),
+                    .then(if (active) Modifier.background(SignalOrange, btnShape) else Modifier.border(1.5.dp, SignalOrange, btnShape))
+                    .clickable(onClick = onCalc).padding(horizontal = 8.dp, vertical = 3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val (top, sub) = when (calc) {
@@ -332,18 +457,18 @@ fun RouteBox(stats: RouteStats, calc: CalcState, boatLinked: Boolean, nextNm: Do
                     CalcState.WORKING -> "CALC…" to "tap to stop"
                     CalcState.DONE -> "ROUTED" to "tap to clear"
                 }
-                Text(top, color = if (active) Navy else SignalOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text(sub, color = if (active) Navy else Mist, fontSize = 10.sp)
+                Text(top, color = if (active) Navy else SignalOrange, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, style = tight(10.5.sp))
+                Text(sub, color = if (active) Navy else Mist, fontSize = 8.5.sp, style = tight(8.5.sp))
             }
         }
         // sailing the route: the leg being sailed, distance to its end and the magnetic course to steer
-        if (boatLinked) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (nextNm == null) Text("ARRIVED", color = SignalOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        if (boatLinked) Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (nextNm == null) Text("ARRIVED", color = SignalOrange, fontSize = 17.sp, fontWeight = FontWeight.Bold, style = tight(17.sp))
             else {
-                Text("STEER", color = Mist, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text(steerDegM?.let { "%03.0f°M".format(it) } ?: "—", color = Foam, fontSize = 24.sp, fontWeight = FontWeight.Black)
-                Text("NEXT", color = Mist, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("%.1f nm".format(nextNm), color = Foam, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text("STEER", color = Mist, fontSize = 9.sp, fontWeight = FontWeight.Bold, style = tight(9.sp), modifier = Modifier.padding(bottom = 3.dp))
+                Text(steerDegM?.let { "${deg3(it)}°M" } ?: "—", color = Foam, fontSize = 20.sp, fontWeight = FontWeight.Black, style = tight(20.sp))
+                Text("NEXT", color = Mist, fontSize = 9.sp, fontWeight = FontWeight.Bold, style = tight(9.sp), modifier = Modifier.padding(start = 6.dp, bottom = 3.dp))
+                Text("%.1f nm".format(nextNm), color = Foam, fontSize = 20.sp, fontWeight = FontWeight.Black, style = tight(20.sp))
             }
         }
     }

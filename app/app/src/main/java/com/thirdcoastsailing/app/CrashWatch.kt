@@ -52,10 +52,15 @@ object CrashWatch {
     var ahead by mutableStateOf<GeoPt?>(null)
     var onRoute by mutableStateOf<GeoPt?>(null)
 
-    /** True when the charted shallow end at the point is shallower than the limit (as shaded red on the chart). */
+    /**
+     * True when the point is not safe water: the charted shallow end is shallower than the limit (as shaded red on
+     * the chart), or it is charted land, a pier or breakwater, or a hazard area (so a course straight at a steep
+     * shore or a harbor wall is marked too). Off the charts: not flagged.
+     */
     private fun shallow(depth: DepthLookup, p: LatLon, limitFt: Double): Boolean {
-        val d = depth.depthFt(p.lat, p.lon) ?: return false             // off the charts: not flagged
-        return d * 0.3048 < limitFt * 0.3048 - LIMIT_MARGIN_M
+        val d = depth.depthFt(p.lat, p.lon)
+        if (d != null && d / FT_PER_M < limitFt / FT_PER_M - LIMIT_MARGIN_M) return true
+        return depth.blocked(p.lat, p.lon)
     }
 
     /**
@@ -68,7 +73,7 @@ object CrashWatch {
         if (sog < MIN_SOG_KN) return null
         val rangeNm = (sog * LOOK_MIN / 60.0).coerceIn(MIN_NM, MAX_NM)
         val start = LatLon(boat.lat, boat.lon)
-        val stepNm = STEP_M / 1852.0
+        val stepNm = STEP_M / M_PER_NM
         // cone in front of the boat: the course, course ±2.5° and ±5°, all from the boat
         val lines = listOf(start to cog, start to cog - WEDGE_DEG / 2, start to cog + WEDGE_DEG / 2,
             start to cog - WEDGE_DEG, start to cog + WEDGE_DEG)
@@ -90,7 +95,7 @@ object CrashWatch {
     fun scanRoute(depth: DepthLookup, start: GeoPt?, points: List<GeoPt>, limitFt: Double): GeoPt? {
         val legs = listOfNotNull(start) + points
         if (legs.size < 2) return null
-        val stepNm = STEP_M / 1852.0
+        val stepNm = STEP_M / M_PER_NM
         for (i in 1 until legs.size) {
             val a = LatLon(legs[i - 1].lat, legs[i - 1].lon); val b = LatLon(legs[i].lat, legs[i].lon)
             val len = distanceNm(a, b)

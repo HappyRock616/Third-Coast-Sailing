@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.10.0 (2026-11-19)
+
+Needs the new chart packages: the five lake packages now carry the currents grid, and all 23 regions were re-tiled. Publish them (catalog re-signed) together with this version, or the Currents switch reports "update your lake charts".
+
+### Added
+- **US coast:** charts for 18 coastal regions, Maine to Texas, the West Coast and Hawaii, alongside the five Great Lakes. Coastal NWS wind and gust forecasts, NOAA GFS-Wave wave forecasts on open coast, and coastal marinas and anchorages from OpenStreetMap. Coastal depths are charted below MLLW; the tide is not added.
+- **Built-in outline map** of North America (land in the chart colour, state, province and country lines and names), so the chart never shows an empty screen. Hold the center button to see all installed charts; Charts → Show jumps to one.
+- **Great Lakes surface currents** from NOAA GLERL (GLCFS): small animated arrows that follow the flow, coloured on a 0–1+ kt scale. Menu switch; refreshed every 4 hours or on demand. The model grid ships inside the lake packages.
+- **Heading line** with dots at 15 min, 30 min and 1 h, and with Currents on a **current-predictor line** showing where the boat goes with the current added along the way.
+- **Route times:** each pin shows the time to reach it (from the boat's polar and the forecast wind), the next leg's course, and an orange barb with the forecast wind on arrival. The route box shows the planned time when the boat isn't moving.
+- **Forecast slider with play:** starts at the last update; its box shows the forecast time on screen and follows the clock until you drag it or press play.
+- **Legends in the menu:** each weather switch that is on shows a one-line legend under it (wind/gust scale, barb key, wave crests and model run, currents scale with update time).
+- Water shallower than the boat's minimum depth is **hatched red**, drawn above the wind colour.
+- After a reboot or app update with the anchor watch on, a loud "Anchor watch STOPPED" notification (it can't restart by itself).
+
+### Changed
+- Anchor watch keeps running when the app is swiped away (stop it in the app or with the notification's ⚓ Stop Anchor Watch button); it needs precise location and a fresh fix, and resumes after Android restarts it. The "watch stopped" warning uses the alarm sound, so it is heard in silent mode.
+- MOB needs a fresh fix (or places the pin on the first fresh one, "Waiting for GPS fix…"), and hides the route and weather layers instead of deleting them.
+- The trip track survives restarts, and background fixes are saved as they arrive.
+- Weather marks (barbs, crests, current arrows) are kept off land using a snapshot of the map.
+- Location is asked for after the first-run disclaimer; once denied for good, the Allow buttons open the app's settings page.
+- Route box and menu are more compact; the COG/SOG box and the "Weather updated" message are gone (the gauge and the forecast strip show them).
+- Lights with no charted period flash with a typical period and say "period not charted".
+- Back closes the menu; the menu reopens where it was scrolled.
+
+### Fixed
+- An app freeze (ANR) from checking land for every weather mark with full map queries.
+- Re-dropping the anchor while the alarm rang could leave the bell ringing with no way to silence it.
+- Route calculation blamed the wind when a pin was on land; it now says the pin is on land or too shallow.
+- Courses could show as 360°M; VMG could show -0.0.
+- A damaged boats.json no longer crashes the Boat screen; a damaged barograph line no longer shows a false storm warning.
+- Lake wave downloads are checked to be forecast files before replacing the old one.
+- Celestial: a shot uses the GPS position at MARK TIME, not when Enter is pressed.
+- Chart import shows the real error, waits for a download of the same region, and says when a package has no routing data.
+- Gusts and wind legends, "Landmark" in the chart key, and other small layout fixes.
+
 ## 0.9.0 (2026-11-04)
 
 Includes 0.8.2 and 0.8.3, which were not released on their own. Needs the signed chart list: upload the new `catalog.json` and `catalog.json.sig` to the charts release before publishing (see 0.8.2).

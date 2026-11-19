@@ -23,7 +23,7 @@ object ChartStyle {
     private val DAY = Palette(
         background = "#D9DCDF", land = "#E9DDBF", coast = "#6E6048",   // light grey where there is no chart
         water = listOf("#E3F0FA", "#CCE2F4", "#B4D3EC", "#98C1E3", "#7DAFD9"),
-        tooShallow = "#F2C4C0",
+        tooShallow = "#F29A92",
         contour = "#5B8DB8", structure = "#4A4A4A",
         hazard = "#D62828", harbor = "#F28C28", buoy = "#707070",
     )
@@ -46,8 +46,9 @@ object ChartStyle {
      * @param lakes          imported lakes with their .pmtiles files
      * @param night          dark palette when true
      * @param depthLimitFt   water shallower than this is shaded red (default 24 ft)
+     * @param basemap        the rough North America basemap file (Basemap.file), drawn under the charts; null = none
      */
-    fun build(lakes: List<Lake>, night: Boolean, depthLimitFt: Double = 24.0): String {
+    fun build(lakes: List<Lake>, night: Boolean, depthLimitFt: Double = 24.0, basemap: java.io.File? = null): String {
         val p = if (night) NIGHT else DAY
         val limitM = depthLimitFt * 0.3048
         val sources = JSONObject()
@@ -55,6 +56,10 @@ object ChartStyle {
 
         layers.put(JSONObject().put("id", "background").put("type", "background")
             .put("paint", JSONObject().put("background-color", p.background)))
+        if (basemap != null) {
+            sources.put(BASEMAP, JSONObject().put("type", "vector").put("url", "pmtiles://file://${basemap.absolutePath}"))
+            addBasemap(layers, night)
+        }
 
         for (lake in lakes) {
             val src = "lake_${lake.id}"
@@ -65,9 +70,13 @@ object ChartStyle {
         // Water for every lake first, then land and everything on top, so overlays slotted under the
         // land layers (weather color field) show on water only, whichever lakes are loaded
         for (lake in lakes) addWaterLayers(layers, "lake_${lake.id}", p, limitM)
+        // Land outside every chart area, right above the water: the weather colour is slotted in under it (see
+        // landAnchor), so wind never tints land beyond a coastal chart's 5-mile strip
+        if (basemap != null) addBasemapInland(layers, night)
         for (lake in lakes) addLakeLayers(layers, "lake_${lake.id}", p, limitM)
         // Navigation aids and names last, over every lake's land and water (labels never hide under a neighbor lake)
         for (lake in lakes) NavStyle.addLayers(layers, "lake_${lake.id}", night)
+        if (basemap != null) addBasemapLabels(layers, night)
 
         return JSONObject()
             .put("version", 8)
@@ -76,6 +85,75 @@ object ChartStyle {
             .put("sources", sources)
             .put("layers", layers)
             .toString()
+    }
+
+    /** Source id of the built-in basemap. */
+    private const val BASEMAP = "basemap"
+
+    /** Basemap colors: pale land a step off the grey "no chart" background, faint lines, quiet labels. */
+    private class BasemapColors(val land: String, val faded: String, val state: String, val country: String,
+                                val label: String, val countryLabel: String, val halo: String)
+    // All land is the chart's land colour (DAY.land / NIGHT.land), charted or not (Darren, 2026-11-18: a pale outline
+    // with beige only along charted shores was hard to read). faded = land: no fade, so chart edges don't show.
+    private val BASEMAP_DAY = BasemapColors("#E9DDBF", "#E9DDBF", "#C9B892", "#B0A07C", "#8C7E62", "#7A6D52", "#E9DDBF")
+    private val BASEMAP_NIGHT = BasemapColors("#2A2D31", "#2A2D31", "#43474D", "#50555B", "#80858C", "#8C9198", "#2A2D31")
+
+    /** The rough land fades toward the grey background once zoomed in past what its coarse outline can show. */
+    private val BASEMAP_FADE = JSONArray("[\"interpolate\", [\"linear\"], [\"zoom\"], 7, 1, 11, 0.45]")
+
+    /** Land colour by zoom: full at 7, faded at 11 (a colour, not transparency, so it still hides what is under it). */
+    private fun landColor(c: BasemapColors) =
+        JSONArray("[\"interpolate\", [\"linear\"], [\"zoom\"], 7, \"${c.land}\", 11, \"${c.faded}\"]")
+
+    /** Id of the basemap's inland layer: weather overlays go under it (land outside the charts stays clear). */
+    const val INLAND_LAYER = "basemap_inland"
+
+    /**
+     * Rough land under every chart (1_Chart_Build/make_basemap.py, Natural Earth).
+     * Charted water and land draw over it, so where a chart is installed only the real shoreline shows.
+     */
+    private fun addBasemap(layers: JSONArray, night: Boolean) {
+        val c = if (night) BASEMAP_NIGHT else BASEMAP_DAY
+        layers.put(base("basemap_land", "fill", BASEMAP, "land", null).put("paint", JSONObject()
+            .put("fill-color", landColor(c))))
+    }
+
+    /** The same land, but only outside every chart area, drawn above the charts' water and the weather colour; then the borders. */
+    private fun addBasemapInland(layers: JSONArray, night: Boolean) {
+        val c = if (night) BASEMAP_NIGHT else BASEMAP_DAY
+        layers.put(base(INLAND_LAYER, "fill", BASEMAP, "inland", null).put("paint", JSONObject()
+            .put("fill-color", landColor(c))))
+        // state/province and country lines last, over the inland fill (a chart's own land still covers them)
+        layers.put(base("basemap_state", "line", BASEMAP, "state", 3.0).put("paint", JSONObject()
+            .put("line-color", c.state).put("line-opacity", BASEMAP_FADE)
+            .put("line-width", JSONArray("[\"interpolate\", [\"linear\"], [\"zoom\"], 3, 0.4, 8, 1.0]"))))
+        layers.put(base("basemap_country", "line", BASEMAP, "country", null).put("paint", JSONObject()
+            .put("line-color", c.country).put("line-opacity", BASEMAP_FADE)
+            .put("line-width", JSONArray("[\"interpolate\", [\"linear\"], [\"zoom\"], 2, 0.6, 8, 1.4]"))))
+    }
+
+    /** Country names (far out) and state/province names (abbreviations until zoom 5), gone before chart detail. */
+    private fun addBasemapLabels(layers: JSONArray, night: Boolean) {
+        val c = if (night) BASEMAP_NIGHT else BASEMAP_DAY
+        layers.put(base("basemap_state_label", "symbol", BASEMAP, "label", 3.5).put("maxzoom", 8.5)
+            .put("filter", JSONArray("[\"==\", [\"get\", \"kind\"], \"state\"]"))
+            .put("layout", JSONObject()
+                .put("text-field", JSONArray("[\"step\", [\"zoom\"], [\"get\", \"abbr\"], 5, [\"get\", \"name\"]]"))
+                .put("text-font", JSONArray().put("roboto-regular"))
+                .put("text-size", JSONArray("[\"interpolate\", [\"linear\"], [\"zoom\"], 3.5, 9, 7, 12]"))
+                .put("text-transform", "uppercase").put("text-letter-spacing", 0.12).put("text-max-width", 7)
+                .put("text-padding", 4).put("symbol-sort-key", JSONArray("[\"get\", \"rank\"]")))
+            .put("paint", JSONObject().put("text-color", c.label).put("text-halo-color", c.halo).put("text-halo-width", 1.0)))
+        layers.put(base("basemap_country_label", "symbol", BASEMAP, "label", null).put("maxzoom", 6.0)
+            .put("filter", JSONArray("[\"all\", [\"==\", [\"get\", \"kind\"], \"country\"], " +
+                "[\"<=\", [\"get\", \"rank\"], [\"+\", [\"zoom\"], 1.5]]]"))
+            .put("layout", JSONObject()
+                .put("text-field", JSONArray("[\"get\", \"name\"]"))
+                .put("text-font", JSONArray().put("roboto-medium"))
+                .put("text-size", JSONArray("[\"interpolate\", [\"linear\"], [\"zoom\"], 2, 10, 5, 13]"))
+                .put("text-transform", "uppercase").put("text-letter-spacing", 0.25).put("text-max-width", 7)
+                .put("text-padding", 4).put("symbol-sort-key", JSONArray("[\"get\", \"rank\"]")))
+            .put("paint", JSONObject().put("text-color", c.countryLabel).put("text-halo-color", c.halo).put("text-halo-width", 1.0)))
     }
 
     /** Depth-shaded water: the approximate-depth grid underneath, charted depth areas on top, shallower than the boat's limit in red. */
@@ -92,6 +170,11 @@ object ChartStyle {
 
     /** Land, coastline, depth contours (with the boat's limit contour in red), structures and hazards for one lake. */
     private fun addLakeLayers(layers: JSONArray, src: String, p: Palette, limitM: Double) {
+        // Water shallower than the boat's minimum depth: red hatching over the weather colour (which sits under the
+        // land layers and would otherwise wash the red fill out to a beige-looking peach)
+        layers.put(base("${src}_shallow_hatch", "fill", src, "depth_area", null)
+            .put("filter", JSONArray("[\"<\", [\"coalesce\", [\"get\", \"drval1\"], 0], ${limitM - LIMIT_MARGIN_M}]"))
+            .put("paint", JSONObject().put("fill-pattern", SHALLOW_HATCH).put("fill-antialias", false)))
         layers.put(fill("${src}_land", src, "land", p.land))
         layers.put(line("${src}_coast", src, "coastline", p.coast, width = 0.8))
         layers.put(line("${src}_contour", src, "depth_contour", p.contour, width = 0.5, minzoom = 8.0))
@@ -158,6 +241,23 @@ object ChartStyle {
 
     /** Style image name of the marina symbol (added with the style, see marinaBitmap). */
     const val MARINA_ICON = "marina"
+    /** Fill pattern for water shallower than the minimum depth: thin red diagonals. */
+    const val SHALLOW_HATCH = "shallow_hatch"
+
+    /** The hatching tile: one red diagonal across a transparent square (repeats into continuous lines). */
+    fun hatchBitmap(density: Float): android.graphics.Bitmap {
+        val s = (9 * density).toInt().coerceAtLeast(12)
+        val b = android.graphics.Bitmap.createBitmap(s, s, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xCCD62828.toInt(); strokeWidth = 1.3f * density; style = android.graphics.Paint.Style.STROKE
+        }
+        // the corner pieces join the neighbouring tiles' lines
+        c.drawLine(0f, s.toFloat(), s.toFloat(), 0f, p)
+        c.drawLine(-s / 2f, s / 2f, s / 2f, -s / 2f, p)
+        c.drawLine(s / 2f, s * 1.5f, s * 1.5f, s / 2f, p)
+        return b
+    }
 
     /**
      * Marina symbol on the chart: an orange rounded tile with a navy anchor and a dark edge, so marinas never look

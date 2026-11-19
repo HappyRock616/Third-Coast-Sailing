@@ -40,14 +40,18 @@ object Gpkg {
     private class BoxIndex(val fid: LongArray, val value: Array<Double?>,
                            val minx: DoubleArray, val maxx: DoubleArray, val miny: DoubleArray, val maxy: DoubleArray)
 
-    private val indexes = HashMap<String, BoxIndex>()
+    // a few tables per lake; the oldest are dropped so replaced files don't pile up
+    private val indexes = object : LinkedHashMap<String, BoxIndex>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BoxIndex>?) = size > 48
+    }
+    private val EMPTY = BoxIndex(LongArray(0), arrayOfNulls(0), DoubleArray(0), DoubleArray(0), DoubleArray(0), DoubleArray(0))
 
     /** Bounding boxes of one table's features, read once and cached until the file changes (key = path, size and time). */
     @Synchronized
     private fun index(db: SQLiteDatabase, table: String, valueCol: String?, orderBy: String?): BoxIndex? {
         val f = File(db.path)
         val key = "${db.path}|${f.length()}|${f.lastModified()}|$table|$valueCol|$orderBy"
-        indexes[key]?.let { return it }
+        indexes[key]?.let { return it.takeIf { ix -> ix !== EMPTY } }
         val v = if (valueCol != null) "\"$valueCol\"" else "NULL"
         // the first 40 bytes of a geometry: 8-byte header, then the envelope (min x, max x, min y, max y)
         val sql = "SELECT fid, $v, substr(geom, 1, 40) FROM \"$table\"" + (if (orderBy != null) " ORDER BY \"$orderBy\"" else "")
@@ -72,9 +76,9 @@ object Gpkg {
                 }
                 BoxIndex(fid, value, minx, maxx, miny, maxy)
             }
-        }.getOrNull() ?: return null
+        }.getOrNull() ?: EMPTY                // e.g. no bathy_band table in coastal packages: remember, don't retry every second
         indexes[key] = ix
-        return ix
+        return ix.takeIf { it !== EMPTY }
     }
 
     /**
@@ -115,11 +119,21 @@ object Gpkg {
         readPolygons(ByteBuffer.wrap(blob, 8 + envBytes, blob.size - 8 - envBytes))
     }.getOrDefault(emptyList())
 
-    /** Read one WKB Polygon (type 3) or MultiPolygon (type 6) from the buffer; other types give nothing. */
+    /**
+     * Read one WKB Polygon (type 3) or MultiPolygon (type 6) from the buffer; other types give nothing. 3D and measured
+     * types (1003 / 2003 / 3003 and the 1006 ... forms) have 3 or 4 numbers per point: only x and y are kept.
+     */
     private fun readPolygons(b: ByteBuffer): List<List<DoubleArray>> {
         b.order(if (b.get() == 1.toByte()) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN)
-        return when (b.int % 1000) {
-            3 -> listOf((0 until b.int).map { val n = b.int; DoubleArray(n * 2) { b.double } })
+        val type = b.int
+        val dims = when (type / 1000) { 1, 2 -> 3; 3 -> 4; else -> 2 }    // Z or M: 3 numbers, ZM: 4
+        return when (type % 1000) {
+            3 -> listOf((0 until b.int).map {
+                val n = b.int
+                DoubleArray(n * 2).also { xy ->
+                    for (i in 0 until n) { xy[2 * i] = b.double; xy[2 * i + 1] = b.double; repeat(dims - 2) { b.double } }
+                }
+            })
             6 -> (0 until b.int).flatMap { readPolygons(b) }
             else -> emptyList()
         }

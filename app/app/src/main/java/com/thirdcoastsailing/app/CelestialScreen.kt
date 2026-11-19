@@ -38,6 +38,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -59,6 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.thirdcoastsailing.app.celestial.AlmanacTables
 import com.thirdcoastsailing.app.celestial.Check
 import com.thirdcoastsailing.app.celestial.Coach
@@ -95,6 +99,7 @@ import com.thirdcoastsailing.app.ui.theme.SignalOrange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import kotlin.math.abs
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -115,10 +120,14 @@ import java.util.TimeZone
  * The star finder opens from "Sky" (top bar), from a sight card, or from a suggestion; ✕ or Back returns here.
  */
 
-private const val DEFAULT_LAT = 44.0          // middle of Lake Michigan, when there's no GPS and no DR typed in
-/** Longitude used with DEFAULT_LAT when there is no GPS fix and no position typed in. */
-private const val DEFAULT_LON = -87.0
+/**
+ * Stand-in position (middle of Lake Michigan) used only so the screens can draw something when there is no GPS and
+ * no DR typed in. Always shown with a notice that a DR is needed; never used silently.
+ */
+private val FALLBACK_POSITION = LatLon(44.0, -87.0)
 private const val MB_PER_INHG = 33.8639        // millibars per inch of mercury
+/** Largest index error accepted (arc-minutes); a sextant reading further off than this needs adjusting, not correcting. */
+private const val MAX_INDEX_ERROR_MIN = 60.0
 
 /** Star finder request: which body to point at (BEGINNER arrow) and what a pick does. */
 private data class FinderRequest(val target: SkyBody?, val forSightId: Long?, val pickToAdd: Boolean)
@@ -131,13 +140,23 @@ private data class FinderRequest(val target: SkyBody?, val forSightId: Long?, va
 fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
     val st = store.state
     val set = st.settings
-    val plot = remember(st) { celestialPlot(st) }
+    val plot = rememberCelestialPlot(st)                                       // worked out off the main thread
     var tab by remember { mutableStateOf(1) }
     var finder by remember { mutableStateOf<FinderRequest?>(null) }
     var guide by remember { mutableStateOf<Pair<SkyBody, String?>?>(null) }      // body, preset / bearing note
     var bookTarget by remember { mutableStateOf<AlmanacTarget?>(null) }
     val gpsPos = gps?.let { LatLon(it.lat, it.lon) }
-    val position = gpsPos ?: st.manualDr ?: LatLon(DEFAULT_LAT, DEFAULT_LON)
+    // no GPS and no DR: the stand-in position, with a notice everywhere it is used
+    val positionKnown = gpsPos != null || st.manualDr != null
+    val position = gpsPos ?: st.manualDr ?: FALLBACK_POSITION
+
+    // ---- save any change not yet written when the screen closes or the app goes to the background
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) store.flush() }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs); store.flush() }
+    }
 
     Dialog(onDismissRequest = { if (finder != null) finder = null else if (guide != null) guide = null else onClose() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -168,11 +187,11 @@ fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when (tab) {
-                        0 -> PlanTab(set.level, position, gpsPos != null, set.heightOfEyeFt,
+                        0 -> PlanTab(set.level, position, gpsPos != null, positionKnown, set.heightOfEyeFt,
                             onFind = { b -> finder = FinderRequest(b, null, pickToAdd = false) },
                             onAdd = { b -> store.addSight(b); tab = 1 },
                             onGuide = { b, note -> guide = b to note })
-                        1 -> WorkbookTab(store, plot, gps, position, gpsPos != null,
+                        1 -> WorkbookTab(store, plot, gps, position, gpsPos != null, positionKnown,
                             onFind = { b, id -> finder = FinderRequest(b, id, pickToAdd = false) },
                             onPickNew = { finder = FinderRequest(null, null, pickToAdd = true) },
                             onGuide = { b -> guide = b to presetNote(b, position) },
@@ -190,8 +209,10 @@ fun CelestialScreen(store: CelestialStore, gps: BoatFix?, onClose: () -> Unit) {
             // ---- star finder over everything; ✕ / Back come back here
             finder?.let { req ->
                 // the arrow's body: the one the finder was opened for (any level); BEGINNER with none gets the next suggestion
-                val beginnerTarget = remember(req, set.level) {
-                    req.target ?: if (set.level == SkillLevel.BEGINNER) nextSuggested(set.level, position) else null
+                // (the planner takes a moment: worked out off the main thread, the arrow appears when it's ready)
+                val beginnerTarget by produceState<SkyBody?>(req.target, req, set.level) {
+                    value = req.target ?: if (set.level == SkillLevel.BEGINNER)
+                        withContext(Dispatchers.Default) { nextSuggested(set.level, position) } else null
                 }
                 StarFinderScreen(
                     position = position, positionIsGps = gpsPos != null,
@@ -221,7 +242,7 @@ private fun nextSuggested(level: SkillLevel, pos: LatLon): SkyBody? = runCatchin
 // ==================================================================== Plan
 
 @Composable
-private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, heightOfEyeFt: Double,
+private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, positionKnown: Boolean, heightOfEyeFt: Double,
                     onFind: (SkyBody) -> Unit, onAdd: (SkyBody) -> Unit, onGuide: (SkyBody, String?) -> Unit) {
     val day = localDayStart(System.currentTimeMillis())
     val key = "%.1f %.1f".format(pos.lat, pos.lon)
@@ -233,6 +254,7 @@ private fun PlanTab(level: SkillLevel, pos: LatLon, isGps: Boolean, heightOfEyeF
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Today at ${formatLat(pos.lat)} ${formatLon(pos.lon)}${if (isGps) " (GPS)" else ""}", color = Mist, fontSize = 13.sp)
+        if (!positionKnown) NoPositionNotice()
         Card {
             Text("Sun and twilight (local time)", color = Foam, fontWeight = FontWeight.Bold)
             val t = twilight
@@ -285,7 +307,7 @@ private fun presetNote(b: SkyBody, pos: LatLon): String? = runCatching {
 // ==================================================================== Workbook
 
 @Composable
-private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix?, position: LatLon, isGps: Boolean,
+private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot?, gps: BoatFix?, position: LatLon, isGps: Boolean, positionKnown: Boolean,
                         onFind: (SkyBody, Long) -> Unit, onPickNew: () -> Unit,
                         onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit) {
     val st = store.state
@@ -295,6 +317,10 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
     var viewing by remember { mutableStateOf<Int?>(null) }              // index of a saved fix's workbook; null = current
     var pickMenu by remember { mutableStateOf(false) }
     val typed = remember { mutableStateMapOf<String, String>() }        // what's in each text box (sight:field)
+    // DR typed in: kept here until both latitude and longitude read correctly, then saved together
+    var drLat by remember { mutableStateOf(st.manualDr?.lat) }
+    var drLon by remember { mutableStateOf(st.manualDr?.lon) }
+    fun saveDr() { val la = drLat; val lo = drLon; if (la != null && lo != null) store.update { it.copy(manualDr = LatLon(la, lo)) } }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // ---- which workbook: the current one, or a saved fix's (by fix time); ↺ clears everything
@@ -321,10 +347,13 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
         val v = viewing?.takeIf { it < st.saved.size }                    // gone if everything was cleared
         if (v != null) {
             val f = st.saved[v]
-            val sp = remember(f) { savedPlot(f) }
+            // worked again off the main thread
+            val sp by produceState<CelestialPlot?>(null, f) { value = withContext(Dispatchers.Default) { runCatching { savedPlot(f) }.getOrNull() } }
             Text("Saved ${fixLabel(f.timeMs)} · ${f.settings.level.title} · eye ${"%.0f".format(f.settings.heightOfEyeFt)} ft · read-only", color = Mist, fontSize = 12.sp)
-            for (w in sp.works) SightCard(w, f.settings.level, gps, position, store, typed, onFind, onGuide, onAlmanac, readOnly = true)
-            FixCard(sp, gps = null, onSave = null)
+            val spv = sp
+            if (spv == null) { Text("Working…", color = Mist); return@Column }
+            for (w in spv.works) SightCard(w, f.settings.level, gps, position, store, typed, onFind, onGuide, onAlmanac, readOnly = true)
+            FixCard(spv, gps = null, onSave = null)
             Spacer(Modifier.height(40.dp))
             return@Column
         }
@@ -340,7 +369,7 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
                 t.toDoubleOrNull()?.takeIf { it in 0.0..200.0 }?.let { h -> store.update { it.copy(settings = it.settings.copy(heightOfEyeFt = h)) } }
             }
             NumberBox("Index error (′, + on the arc, − off)", if (set.indexErrorMin == 0.0) "0" else "%+.1f".format(set.indexErrorMin), "ie") { t ->
-                t.replace("−", "-").toDoubleOrNull()?.let { v -> store.update { it.copy(settings = it.settings.copy(indexErrorMin = v)) } }
+                t.replace("−", "-").toDoubleOrNull()?.takeIf { it.isFinite() && abs(it) <= MAX_INDEX_ERROR_MIN }?.let { v -> store.update { it.copy(settings = it.settings.copy(indexErrorMin = v)) } }
             }
             // air temperature and pressure change refraction a little (mostly for low sights); not at Beginner level
             if (set.level != SkillLevel.BEGINNER) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -360,16 +389,17 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
                 }
             }
             if (!isGps) {
-                Text("No GPS: type your DR position", color = Mist, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                if (!positionKnown) NoPositionNotice()
+                else Text("No GPS: using your typed DR position", color = Mist, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
                         NumberBox("DR lat (43 04.0N)", st.manualDr?.let { Workbook.format(it.lat, FieldKind.LAT) } ?: "", "drlat", numeric = false) { t ->
-                            Workbook.parse(t, FieldKind.LAT)?.let { lat -> store.update { it.copy(manualDr = LatLon(lat, it.manualDr?.lon ?: DEFAULT_LON)) } }
+                            drLat = Workbook.parse(t, FieldKind.LAT); saveDr()
                         }
                     }
                     Box(Modifier.weight(1f)) {
                         NumberBox("DR lon (87 03.5W)", st.manualDr?.let { Workbook.format(it.lon, FieldKind.LON) } ?: "", "drlon", numeric = false) { t ->
-                            Workbook.parse(t, FieldKind.LON)?.let { lon -> store.update { it.copy(manualDr = LatLon(it.manualDr?.lat ?: DEFAULT_LAT, lon)) } }
+                            drLon = Workbook.parse(t, FieldKind.LON); saveDr()
                         }
                     }
                 }
@@ -382,7 +412,8 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
                 SkillLevel.BEGINNER -> "Add a sight to start: pick one from the Plan tab, tap ★ Sky and touch a star, or use + Add sight."
                 else -> "No sights yet. + Add sight, or ★ Sky to pick a body."
             }, color = Mist, fontSize = 13.sp)
-        for (w in plot.works) SightCard(w, set.level, gps, position, store, typed, onFind, onGuide, onAlmanac)
+        if (plot == null && st.sights.isNotEmpty()) Text("Working…", color = Mist)
+        for (w in plot?.works.orEmpty()) SightCard(w, set.level, gps, position, store, typed, onFind, onGuide, onAlmanac, positionKnown = positionKnown)
 
         // ---- add a sight
         Box {
@@ -397,7 +428,7 @@ private fun WorkbookTab(store: CelestialStore, plot: CelestialPlot, gps: BoatFix
         }
 
         // ---- result; Save fix keeps it in the log and starts a fresh workbook
-        FixCard(plot, gps, onSave = { store.saveFix(); typed.clear() })
+        if (plot != null) FixCard(plot, gps, onSave = { store.saveFix(); typed.clear() })
         Spacer(Modifier.height(40.dp))
     }
 
@@ -435,7 +466,8 @@ private fun EyeDropdown(current: Double, onPick: (Double) -> Unit) {
 @Composable
 private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: LatLon, store: CelestialStore,
                       typed: MutableMap<String, String>, onFind: (SkyBody, Long) -> Unit,
-                      onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit, readOnly: Boolean = false) {
+                      onGuide: (SkyBody) -> Unit, onAlmanac: (AlmanacTarget) -> Unit, readOnly: Boolean = false,
+                      positionKnown: Boolean = true) {
     val s = w.sight
     var showExtract by remember(s.id) { mutableStateOf(false) }
     Card {
@@ -459,9 +491,9 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
         }
 
         // ---- shots taken: time, sextant reading, kept (✓) or dropped (struck through, with why)
-        val valid = s.shots.filter { !it.hsDeg.isNaN() }
-        val kept = Workbook.keptShots(valid)
-        val res = Workbook.residuals(valid)
+        val valid = s.shots.filter { it.hsDeg.isFinite() }
+        val kept = w.kept                                           // checked against the body's own rate in Workbook.work
+        val res = w.residuals
         for ((i, sh) in s.shots.withIndex()) {
             val vi = valid.indexOf(sh)
             val used = vi >= 0 && sh in kept
@@ -482,7 +514,7 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
         }
 
         // ---- the next shot, always ready: MARK TIME writes the time into its box; either box can be typed
-        if (!readOnly) NextShot(s, typed, gps, position, store, beginner = level == SkillLevel.BEGINNER)
+        if (!readOnly) NextShot(s, typed, gps, position, store, beginner = level == SkillLevel.BEGINNER, positionKnown = positionKnown)
 
         val shot = w.shot ?: return@Card
         Text("Using ${w.shotsUsed} of ${valid.size} shots: ${hhmmss(shot.timeMs)} (UT ${utc(shot.timeMs)}), Hs ${Workbook.format(shot.hsDeg, FieldKind.ALTITUDE)}",
@@ -521,6 +553,8 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
             val course = plotCourse(s.shots.filter { !it.hsDeg.isNaN() }, if (readOnly) null else gps)
             var big by remember(s.id) { mutableStateOf(false) }
             LopInsetRow(lop, course, onEnlarge = { big = true })
+            if (lop.drMissNm > Workbook.WARN_MISS_NM) Text("This line passes %.0f nm from your %s position: check the time, the reading and the %s."
+                .format(lop.drMissNm, if (lop.drIsGps) "GPS" else "DR", if (lop.drIsGps) "body" else "DR"), color = Alarm, fontSize = 12.sp)
             if (big) LopPlotDialog(lop, course, onClose = { big = false })
         }
         else if (level == SkillLevel.ADVANCED) Text("Fill in every line to plot this sight.", color = Mist, fontSize = 12.sp)
@@ -534,7 +568,7 @@ private fun SightCard(w: SightWork, level: SkillLevel, gps: BoatFix?, position: 
  */
 @Composable
 private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: BoatFix?, position: LatLon,
-                     store: CelestialStore, beginner: Boolean) {
+                     store: CelestialStore, beginner: Boolean, positionKnown: Boolean = true) {
     val n = s.shots.size + 1
     val kTime = "${s.id}:next:time"; val kHs = "${s.id}:next:hs"; val kMs = "${s.id}:next:ms"
     val timeText = typed[kTime] ?: ""
@@ -550,6 +584,8 @@ private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: B
             Text("Shot $n", color = SignalOrange, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text("  MARK TIME fills the time; either box can be typed", color = Mist, fontSize = 12.sp)
         }
+        if (gps == null && !positionKnown) Text("No GPS and no DR: shots taken now are worked from a stand-in position (Lake Michigan). Type your DR position in Sight settings first.",
+            color = Alarm, fontSize = 12.sp)
         if (beginner && s.shots.isEmpty()) Text(
             "Tap MARK TIME the instant the ${if (s.body.kind == com.thirdcoastsailing.app.celestial.BodyKind.STAR) "star" else s.body.name} touches the horizon, then type the sextant reading (degrees and minutes, e.g. 38 25.8). Take 3 to 5.",
             color = Mist, fontSize = 12.sp)
@@ -557,6 +593,9 @@ private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: B
             onClick = {
                 val now = System.currentTimeMillis()
                 typed[kMs] = now.toString(); typed[kTime] = hhmmss(now); problem = ""
+                // the boat's position at the mark, not when Enter is pressed (a running fix advances shots by it)
+                if (gps != null) { typed["${s.id}:next:lat"] = gps.lat.toString(); typed["${s.id}:next:lon"] = gps.lon.toString() }
+                else { typed.remove("${s.id}:next:lat"); typed.remove("${s.id}:next:lon") }
             },
             colors = if (markedMs == null) ButtonDefaults.buttonColors(containerColor = SignalOrange, contentColor = Navy)
             else ButtonDefaults.outlinedButtonColors(contentColor = SignalOrange),
@@ -585,9 +624,13 @@ private fun NextShot(s: WorkbookSight, typed: MutableMap<String, String>, gps: B
                         t == null -> problem = "Type the time as 19:46:12, or tap MARK TIME."
                         hs == null || hs < 0.0 || hs > 90.0 -> problem = "Type the sextant reading as degrees and minutes, e.g. 48 34.4."
                         else -> {
-                            val dr = gps?.let { LatLon(it.lat, it.lon) } ?: position
-                            store.updateSight(s.id) { x -> x.copy(shots = (x.shots + Shot(t, hs, dr, gps != null)).sortedBy { it.timeMs }) }
-                            typed.remove(kTime); typed.remove(kHs); typed.remove(kMs); problem = ""
+                            val markLat = typed["${s.id}:next:lat"]?.toDoubleOrNull()
+                            val markLon = typed["${s.id}:next:lon"]?.toDoubleOrNull()
+                            val atMark = t == markedMs && markLat != null && markLon != null
+                            val dr = if (atMark) LatLon(markLat!!, markLon!!) else gps?.let { LatLon(it.lat, it.lon) } ?: position
+                            store.updateSight(s.id) { x -> x.copy(shots = (x.shots + Shot(t, hs, dr, atMark || gps != null)).sortedBy { it.timeMs }) }
+                            typed.remove(kTime); typed.remove(kHs); typed.remove(kMs)
+                            typed.remove("${s.id}:next:lat"); typed.remove("${s.id}:next:lon"); problem = ""
                         }
                     }
                 },
@@ -681,6 +724,7 @@ private fun FixCard(plot: CelestialPlot, gps: BoatFix?, onSave: (() -> Unit)?) {
         }
         Text("Fix  ${formatLat(f.position.lat)}  ${formatLon(f.position.lon)}", color = Foam, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Text("At ${hhmmss(f.timeMs)} from ${f.lops.size} lines · they cross within %.1f nm".format(f.residualNm), color = Mist, fontSize = 13.sp)
+        for (wn in plot.warnings) Text(wn, color = Alarm, fontSize = 12.sp)
 
         // ---- the fix plotted: lines, where you looked, the circle, GPS / DR and the boat
         FixPlot(f, plotCourse(plot.works.flatMap { w -> w.sight.shots.filter { !it.hsDeg.isNaN() } }, gps), Modifier.padding(top = 6.dp))
@@ -720,6 +764,16 @@ private fun FixCard(plot: CelestialPlot, gps: BoatFix?, onSave: (() -> Unit)?) {
 }
 
 // ==================================================================== small parts
+
+/** Notice shown wherever the stand-in position is in use: no GPS and no DR typed in. */
+@Composable
+private fun NoPositionNotice() {
+    Text("No GPS and no DR position. Type your DR (below, in the Workbook) so sights are worked from where you are. Until then the app uses a stand-in, %s %s (Lake Michigan), and lines and fixes will be wrong anywhere else."
+        .format(formatLat(FALLBACK_POSITION.lat), formatLon(FALLBACK_POSITION.lon)),
+        color = NavyDeep, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp).background(Caution, RoundedCornerShape(8.dp)).padding(8.dp))
+}
+
 
 @Composable
 private fun Card(content: @Composable () -> Unit) {

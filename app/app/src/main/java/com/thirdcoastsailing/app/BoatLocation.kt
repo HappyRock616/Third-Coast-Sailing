@@ -14,9 +14,30 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 
-/** Boat fix as the app uses it. */
-data class BoatFix(val lat: Double, val lon: Double, val cogDeg: Float?, val sogKn: Float?, val time: Long)
+/** A fix older than this is not used to mark MOB or drop the anchor (it may be from before the app was opened). */
+const val FRESH_FIX_MS = 15_000L
+
+/**
+ * Boat fix as the app uses it. `time` is the fix's GPS time (UTC ms); `elapsedMs` is when the phone got it on its
+ * monotonic clock (SystemClock.elapsedRealtime), 0 when unknown. The age comes from `elapsedMs` because the phone's
+ * wall clock and GPS time can differ.
+ */
+data class BoatFix(val lat: Double, val lon: Double, val cogDeg: Float?, val sogKn: Float?, val time: Long,
+                   val elapsedMs: Long = 0L) {
+    /** How old the fix is (ms). */
+    fun ageMs(): Long =
+        if (elapsedMs > 0L) SystemClock.elapsedRealtime() - elapsedMs else System.currentTimeMillis() - time
+
+    /** True when the fix is recent enough to mark a position with (MOB, anchor). */
+    val fresh: Boolean get() = ageMs() in 0..FRESH_FIX_MS
+}
+
+/** This Android location as a [BoatFix] (speed in knots; `cog` passed in because callers treat it differently). */
+fun Location.toBoatFix(cog: Float? = null): BoatFix =
+    BoatFix(latitude, longitude, cog, if (hasSpeed()) (speed * MS_TO_KN).toFloat() else null, time,
+        elapsedRealtimeNanos / 1_000_000L)
 
 /**
  * GPS through Android's own LocationManager (no Google Play Services fused location),
@@ -32,10 +53,10 @@ class BoatLocation(
     private var lastCog: Float? = null
 
     private val listener = LocationListener { loc: Location ->
-        val sogKn = if (loc.hasSpeed()) loc.speed * 1.943844f else null
+        val f = loc.toBoatFix()
         // Course over ground is only meaningful when moving; keep the last good one when nearly stopped
-        if (loc.hasBearing() && (sogKn ?: 0f) > 0.5f) lastCog = loc.bearing
-        onFix(BoatFix(loc.latitude, loc.longitude, lastCog, sogKn, loc.time))
+        if (loc.hasBearing() && (f.sogKn ?: 0f) > 0.5f) lastCog = loc.bearing
+        onFix(f.copy(cogDeg = lastCog))
     }
 
     // Satellite count, so a slow first fix (no Google assistance) is visibly progressing

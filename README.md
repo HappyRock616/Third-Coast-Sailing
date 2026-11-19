@@ -1,14 +1,14 @@
 # ⛵ Third Coast Sailing
 
-### An Android app for sailing the Great Lakes
+### An Android app for sailing the Great Lakes and the US coast
 
-Charts, weather, routing, safety tools and a celestial navigation trainer, built for sailors on Superior, Michigan, Huron, Erie and Ontario. Free, open source, and private by design.
+Charts, weather, routing, safety tools and a celestial navigation trainer, for sailors on the five Great Lakes and 18 US coastal regions from Maine to Texas, the West Coast and Hawaii. Free, open source, and private by design.
 
 > **Not for navigation.** Official NOAA charts and notices govern. Use at your own risk.
 
 ## 🌎 Why this exists
 
-Nearly everything a Great Lakes sailor needs to know is already measured, modeled and published by NOAA: the charts, the lake depths, the wind and wave forecasts, and the live buoy reports. That data is paid for by citizens, and it belongs to all of us.
+Nearly everything a sailor on US waters needs to know is already measured, modeled and published by NOAA: the charts, the lake depths, the wind and wave forecasts, and the live buoy reports. That data is paid for by citizens, and it belongs to all of us.
 
 Third Coast Sailing is a wrapper around that public data, made **for sailors, by a sailor**. It puts the data on a phone you already own, in a form you can use from the cockpit, without subscriptions, accounts or chart fees.
 
@@ -21,7 +21,9 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 ## 🗺️ Where it works
 
-- **Charts, weather, buoys and routing: the Great Lakes only**, plus the inland lakes connected to them. All of it comes from US NOAA sources for the Great Lakes, so other waters aren't covered and aren't planned.
+- **Charts, weather, buoys and routing: the Great Lakes and the US coast.** The five lakes (with the inland lakes connected to them) and 18 coastal regions: Maine to Texas, the West Coast and Hawaii. Download only the regions you sail. All of it comes from US NOAA sources, so other waters aren't covered.
+- **Surface currents: the Great Lakes** (NOAA's lake models). **Wave forecasts:** the lakes and open coast; enclosed waters such as Long Island Sound, Chesapeake Bay and Puget Sound have wind forecasts but mostly no wave forecast.
+- **Depths on the coast** are charted depths below mean lower low water (MLLW); the tide is not added.
 - **Celestial navigation: anywhere in the world.** The almanac, star finder and sight calculations work for any position and date, so you can practice at sea or in your backyard.
 
 ## ✨ Features
@@ -50,7 +52,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 <!-- screenshot -->
 
-- 🔴 One tap marks the spot with a red pin and clears the chart down to what matters.
+- 🔴 One tap marks the spot with a red pin and clears the chart down to what matters (your route and weather layers come back when MOB is reset). If the GPS has no fresh fix yet, the timer starts at once and the pin is placed on the first fresh fix.
 - 📍 A live line from the boat to the mark gives bearing and distance back.
 - ⏱️ A timer counts up how long the person has been in the water.
 - 🔺 An orange drift triangle grows downwind from the mark, showing where to search first. It uses US Coast Guard person-in-water leeway figures (see [How the MOB drift triangle is worked out](#how-the-mob-drift-triangle-is-worked-out)).
@@ -63,8 +65,9 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 - 📌 Drop the anchor where you stand, or point the phone at it to set it ahead of the boat.
 - ⭕ A bold red alarm circle (100 ft by default, adjustable) and a dashed swing trace on the chart.
 - 🔔 The Third Coast Ships Bell rings, with vibration, if you drag outside the circle or lose your GPS fix.
-- 🌙 Runs all night with the screen off. The volume buttons silence the alarm for 15 minutes.
-- 💾 The anchor position is saved, so it survives if the phone dies.
+- 🌙 Runs all night with the screen off, and keeps watching if the app is swiped away. Stop it in the app or from its notification. The volume buttons silence the alarm for 15 minutes.
+- 💾 The anchor position and the on/off state are saved. If the phone stops the watch, a notification says so, and it restarts when the app is opened.
+- 🎯 Needs precise location and a fresh GPS fix to drop the anchor, so it can't be set on an old position.
 
 ### 📉 Barograph
 
@@ -83,7 +86,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 - 📍 Drop pins anywhere: a green start, numbered waypoints and a 🏁 finish, with each leg's distance and magnetic bearing. Plan "what if" passages far from where you are, or snap the start onto the boat to get VMG and ETA as you sail.
 - 🧠 Calculate a weather-optimized route using isochrones, your boat's polar, a cruise factor, a tack penalty and your minimum depth, departing at the time on the forecast slider.
-- 💥 Crash warning: a little red broken-boat mark shows the first spot shallower than your depth limit, either on your current heading or along your plotted route.
+- 💥 Crash warning: a little red broken-boat mark shows the first spot shallower than your depth limit, or charted land, a breakwater or a hazard area, either on your current heading or along your plotted route.
 
 ### 🌊 Wave and wind forecast overlays
 
@@ -94,7 +97,8 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 - 💨 Wind speed and gusts as a color field over the water, plus wind barbs.
 - 🌊 Animated wave crests showing wave height and direction.
 - 🎚️ A 48-hour forecast slider to see what's coming.
-- 📡 Data comes straight from NOAA (NDFD wind and the GLWU wave model) to your phone, with no server in between.
+- 🌀 Great Lakes surface currents as small animated arrows that follow the flow, colored by speed.
+- 📡 Data comes straight from NOAA (NDFD wind, the GLWU and GFS-Wave wave models, GLERL lake currents) to your phone, with no server in between.
 
 ### 📟 Sailing instrument from GPS and the wind forecast
 
@@ -128,14 +132,15 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 
 ### 🗺️ Offline NOAA charts
 
-- 📥 NOAA electronic charts for all five lakes and connected inland lakes, stored on the phone.
+- 📥 NOAA electronic charts for the five Great Lakes (with connected inland lakes) and 18 US coastal regions, stored on the phone. Download only the regions you sail.
+- 🗺️ A built-in outline map of North America, so you can find your charts from anywhere: hold the center button to see them all.
 - 🟥 Depth shading and hazards, with water shallower than your boat's minimum depth shaded red.
 - 🚨 Lights, buoys, beacons, landmarks and place names, shown by importance as you zoom in. Tap any of them for its details.
 - ✨ After sunset, the lights flash on the chart in their real colors and patterns.
 
 ## 📲 Getting the app
 
-**[Download the latest version](../../releases/latest)** and open the `.apk` file on your phone (Android 10 or newer). On first launch, pick your lakes; the charts download inside the app from the [charts release](../../releases/tag/charts).
+**[Download the latest version](../../releases/latest)** and open the `.apk` file on your phone (Android 10 or newer). On first launch, pick your waters; the charts download inside the app from the [charts release](../../releases/tag/charts).
 
 To get updates automatically, add this repository to [Obtainium](https://github.com/ImranR98/Obtainium).
 
@@ -154,7 +159,9 @@ Requirements: Android 10 (API 29) or newer. The build fails on purpose if any Go
 | Charts (ENC) | NOAA Office of Coast Survey | US Government work, public domain |
 | Lake bathymetry | NOAA NCEI | Public domain |
 | Wind forecasts | NOAA National Weather Service (NDFD) | Public domain |
-| Wave forecasts | NOAA NCEP (GLWU) | Public domain |
+| Wave forecasts | NOAA NCEP (GLWU on the lakes, GFS-Wave on the coast) | Public domain |
+| Great Lakes surface currents | NOAA GLERL (Great Lakes Coastal Forecasting System) | Public domain |
+| Outline map (land, borders, names) | [Natural Earth](https://www.naturalearthdata.com) | Public domain |
 | Buoy observations | NOAA National Data Buoy Center | Public domain |
 | Marinas, clubs, docks, anchorages | © OpenStreetMap contributors | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/) |
 | Map engine | [MapLibre Native](https://maplibre.org) | BSD 2-Clause |
@@ -170,11 +177,11 @@ Harbor data derived from OpenStreetMap is available under the ODbL.
 
 A person in the water is pushed downwind by the wind ("leeway"). The US Coast Guard measured this in field trials and uses the results in search planning. The app uses the coefficients for **"Person-in-water (PIW), unknown state (mean values)"**: downwind leeway = **0.96 %** of the 10 m wind speed, crosswind leeway = **±0.54 %** of the wind speed (both with zero offset). The triangle's tip is at the MOB mark; it points downwind (the forecast wind at the mark, refreshed hourly); its length is 0.96 % × wind × time since the mark and its half-width at the far end is 0.54 % × wind × time. Example: 15 kn of wind, 12 minutes → about 175 ft long and ±98 ft wide.
 
-Limits: the studies show large scatter around these averages (standard deviation about 12 cm/s, roughly 0.2 kn, downwind), so the triangle is a best estimate of where to look first, not a boundary. Surface current is not included (the app has no current data), and the wind is a forecast, not a measurement. Use it to start a search, and call the Coast Guard (VHF 16) at once.
+Limits: the studies show large scatter around these averages (standard deviation about 12 cm/s, roughly 0.2 kn, downwind), so the triangle is a best estimate of where to look first, not a boundary. Surface current is not included, and the wind is a forecast, not a measurement. Use it to start a search, and call the Coast Guard (VHF 16) at once.
 
 ## ℹ️ About the name
 
-"Third Coast" is a common name for the Great Lakes and their shoreline. Third Coast Sailing is an independent, non-commercial project. It isn't affiliated with, endorsed by or connected to any business, club, school or other organization, including any that use "Third Coast" in their name.
+"Third Coast" is a common name for the Great Lakes and their shoreline, where the app began. Third Coast Sailing is an independent, non-commercial project. It isn't affiliated with, endorsed by or connected to any business, club, school or other organization, including any that use "Third Coast" in their name.
 
 ## 📜 License
 

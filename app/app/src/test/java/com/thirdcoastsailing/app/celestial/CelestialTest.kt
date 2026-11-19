@@ -40,21 +40,28 @@ class CelestialTest {
         assertEquals(90.0 - 43.0 - 9.5, h.hcDeg, 1e-6)
     }
 
-    @Test fun threeStarFixFindsTheTruePosition() {
+    @Test fun farDrIsReworkedFromTheFix() {
+        // DR 120 nm off and no GPS: the first pass is worked from the wrong place; solve() works the sights again
+        // from the first fix, so the answer still lands on the true position
         val truth = LatLon(43.0, -86.9)
-        // make perfect sights for the true position: Hs that corrects back to exactly Hc there
-        fun sight(name: String, t: Long): SightInput {
-            val body = SkyBody.byName(name)!!
-            val hc = SightReduction.altAz(body, truth, t).hcDeg
-            val probe = SightInput(body, t, hc, indexErrorMin = 2.0, heightOfEyeFt = 9.0)
+        val dr = travel(truth, 300.0, 120.0)
+        val set = WorkbookSettings(SkillLevel.BEGINNER, 9.0, 2.0)
+        fun sight(id: Long, name: String, t: Long): WorkbookSight {
+            val b = SkyBody.byName(name)!!
+            val hc = SightReduction.altAz(b, truth, t).hcDeg
+            val probe = SightInput(b, t, hc, defaultLimb(b), 2.0, 9.0)
             var hs = hc
-            repeat(10) { hs += hc - SightReduction.correct(probe.copy(hsDeg = hs), Almanac.entry(body, t)).hoDeg }
-            return probe.copy(hsDeg = hs)
+            repeat(10) { hs += hc - SightReduction.correct(probe.copy(hsDeg = hs), Almanac.entry(b, t)).hoDeg }
+            return WorkbookSight(id, b, defaultLimb(b), listOf(Shot(t, hs, dr, gps = false)))
         }
-        val sights = listOf(sight("Markab", ms - 240_000), sight("Polaris", ms - 120_000), sight("Rasalhague", ms))
-        val fix = SightReduction.fix(sights, travel(truth, 300.0, 8.0), ms, null, 0.0)
+        val sights = listOf(sight(1, "Markab", ms - 240_000), sight(2, "Polaris", ms - 120_000), sight(3, "Rasalhague", ms))
+        val (works, fix) = Workbook.solve(sights, set)
         assertNotNull(fix)
-        assertTrue("fix within 0.1 nm", distanceNm(fix!!.position, truth) < 0.1)
+        assertTrue("reworked from the fix", fix!!.iterations >= 2)
+        assertTrue("fix within 0.5 nm, was ${distanceNm(fix.position, truth)}", distanceNm(fix.position, truth) < 0.5)
+        assertTrue("assumed latitudes chosen near the fix", works.all { it.line(Field.AP_LAT)!!.formula.contains("first fix") })
+        assertTrue("warns that the DR is far from the lines", Workbook.warnings(works, fix).isNotEmpty())
+        assertTrue(fix.offsetNm > 100.0 && !fix.drIsGps)
     }
 
     @Test fun plannerPicksSpreadBodiesInTwilight() {
@@ -146,11 +153,11 @@ class CelestialTest {
         assertEquals(BoatMesh.decode(bytes).vertexCount, BoatMesh.decode(raw).vertexCount)
     }
 
-    @Test fun traditionalAssumedPositionGivesWholeLha() {
-        val ap = AlmanacTables.traditionalAssumedPosition(LatLon(43.37, -86.74), 123.456)
+    @Test fun assumedPositionGivesWholeLha() {
+        val ap = Workbook.assumedPosition(LatLon(43.37, -86.74), 123.456)
         assertEquals(43.0, ap.lat, 1e-9)
         val lha = norm360(123.456 + ap.lon)
-        assertEquals(Math.round(lha).toDouble(), lha, 1e-9)
+        assertEquals(Math.round(lha).toDouble(), lha, 1e-3)                  // longitude is rounded to 0.1′
         assertTrue(abs(ap.lon - -86.74) <= 0.5)
     }
 }

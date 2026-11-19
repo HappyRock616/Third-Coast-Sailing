@@ -23,7 +23,12 @@ class NavMask private constructor(
     private val nx: Int, private val ny: Int, private val cells: ByteArray,
     /** What went into the grid, per layer: "found/read" features (for error messages). */
     val note: String = "",
+    /** Route points with no open water within the kept-open disc around them (on land or in shallow water). */
+    private val stranded: List<GeoPt> = emptyList(),
 ) {
+    /** True for a route point that sits on land or in water too shallow, with no deep water near it. */
+    fun stranded(p: GeoPt): Boolean = stranded.any { it.lat == p.lat && it.lon == p.lon }
+
     /** True when the cell holding (lat, lon) is open water deep enough for the boat (false outside the grid). */
     fun free(lat: Double, lon: Double): Boolean {
         if (lat < lat0 || lon < lon0) return false
@@ -90,8 +95,13 @@ class NavMask private constructor(
             } finally {
                 dbs.forEach(SQLiteDatabase::close)
             }
+            // before the discs are opened: a point with no open water anywhere in its disc can't be reached
+            // (a neighbouring pin's disc overlapping this one can link it to water, e.g. a dock behind a marina mouth)
+            val stranded = keepOpen.filter { p ->
+                !g.anyOpen(p, KEEP_OPEN_NM) && keepOpen.none { q -> q !== p && distNm(p, q) <= 2 * KEEP_OPEN_NM }
+            }
             for (p in keepOpen) g.disc(p, KEEP_OPEN_NM)
-            return NavMask(box[1], box[0], dLat, dLon, nx, ny, cells, note.toString())
+            return NavMask(box[1], box[0], dLat, dLon, nx, ny, cells, note.toString(), stranded)
         }
     }
 
@@ -132,7 +142,16 @@ class NavMask private constructor(
             }
         }
 
-        fun disc(c: GeoPt, radiusNm: Double) {
+        /** True if any cell within radiusNm of c is open water. */
+        fun anyOpen(c: GeoPt, radiusNm: Double): Boolean {
+            var open = false
+            forDisc(c, radiusNm) { k -> if (cells[k] == OPEN) open = true }
+            return open
+        }
+
+        fun disc(c: GeoPt, radiusNm: Double) = forDisc(c, radiusNm) { k -> cells[k] = OPEN }
+
+        private inline fun forDisc(c: GeoPt, radiusNm: Double, f: (Int) -> Unit) {
             val rLat = radiusNm / 60.0
             val rLon = rLat / cos(Math.toRadians(c.lat))
             val j0 = max(0, ((c.lat - rLat - lat0) / dLat).toInt()); val j1 = min(ny - 1, ((c.lat + rLat - lat0) / dLat).toInt())
@@ -140,7 +159,7 @@ class NavMask private constructor(
             for (j in j0..j1) for (i in i0..i1) {
                 val dy = (lat0 + (j + 0.5) * dLat - c.lat) / rLat
                 val dx = (lon0 + (i + 0.5) * dLon - c.lon) / rLon
-                if (dx * dx + dy * dy <= 1.0) cells[j * nx + i] = OPEN
+                if (dx * dx + dy * dy <= 1.0) f(j * nx + i)
             }
         }
     }
@@ -159,7 +178,7 @@ class WindLookup(private val repo: WeatherRepo) {
         val s = sf?.at(lat, lon) ?: return null
         val d = df?.at(lat, lon) ?: return null
         if (s.isNaN() || d.isNaN()) return null
-        return s * WeatherRepo.MS_TO_KN to d.toDouble()
+        return s * MS_TO_KN to d.toDouble()
     }
 }
 
@@ -218,6 +237,9 @@ object Router {
         val dtMs = (dtH * 3_600_000).toLong()
         val maxSteps = (max(6.0, legNm).coerceAtMost(72.0) / dtH).toInt()   // gives up below ~1 kn made good
         var frontier = listOf(Node(a.lat, a.lon, t0, null, 0, 0.0))
+        // a pin on land or in water shallower than the limit can never be reached: say so up front
+        // (the search would otherwise run out of steps and blame the wind)
+        if (mask.stranded(b)) throw Failed("Point $number is on land or in water shallower than the depth limit: move it.")
 
         repeat(maxSteps) {
             if (cancel()) throw Failed("Stopped")
@@ -284,7 +306,8 @@ object Router {
                 })
             }
         }
-        throw Failed("Leg to point $number is too slow to finish with this forecast.")
+        throw Failed("No route found to point $number in time: the wind may be too light, or the way blocked by land " +
+            "or shallow water.")
     }
 
     /** Points from the leg start to this node. */

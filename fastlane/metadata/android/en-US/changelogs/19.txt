@@ -1,0 +1,7 @@
+• Charts for 18 US coastal regions: Maine to Texas, the West Coast and Hawaii
+• Coastal wind forecasts, and wave forecasts on open coast
+• Great Lakes surface currents as animated arrows
+• Route times and arrival wind at each waypoint
+• Heading line with time marks and a current predictor
+• Forecast slider with play; legends moved to the menu
+• Built-in outline map of North America

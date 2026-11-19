@@ -41,15 +41,19 @@ data class SunMoonDay(val sunriseMs: Long?, val sunsetMs: Long?, val moonLitFrac
 
 /** Sunrise, sunset and moon phase for the boat's position, cached per local day. */
 object SunMoon {
-    private var cacheDay = Long.MIN_VALUE
+    private var cacheKey = ""
     private var cache: SunMoonDay? = null
 
-    /** Today's values, worked out once per local calendar day (the first time they're asked for that day). */
+    /**
+     * Today's values, worked out once per local calendar day and place (to a quarter of a degree, about a minute of
+     * sunrise time), so a long passage, a new time zone or a first call with an old position doesn't keep stale times.
+     */
     @Synchronized
     fun today(lat: Double, lon: Double, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): SunMoonDay {
         val epochDay = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate().toEpochDay()
-        cache?.takeIf { epochDay == cacheDay }?.let { return it }
-        return day(lat, lon, nowMs, zone).also { cache = it; cacheDay = epochDay }
+        val key = "$epochDay|${Math.round(lat * 4)}|${Math.round(lon * 4)}|${zone.id}"
+        cache?.takeIf { key == cacheKey }?.let { return it }
+        return day(lat, lon, nowMs, zone).also { cache = it; cacheKey = key }
     }
 
     /** Sun times for the local calendar day containing `nowMs`, and the moon's phase at `nowMs`. */

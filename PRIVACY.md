@@ -1,8 +1,8 @@
 # Privacy Policy: Third Coast Sailing
 
-**Effective date:** October 27, 2026
+**Effective date:** November 19, 2026
 
-Third Coast Sailing is a free, open-source Android app for sailing the Great Lakes. This policy explains what the app does with your data. In short: **it collects nothing, sends nothing about you to the developer, and keeps your data on your phone.**
+Third Coast Sailing is a free, open-source Android app for sailing the Great Lakes and the US coast. This policy explains what the app does with your data. In short: **it collects nothing, sends nothing about you to the developer, and keeps your data on your phone.**
 
 ## What the developer collects
 
@@ -10,9 +10,9 @@ Nothing. The app has no accounts, no sign-in, no analytics, no advertising, no c
 
 ## Location
 
-The app uses your phone's GPS location to show your position on the chart, run the sailing gauge, record your track, watch your anchor and mark a man-overboard position. With your permission, it can keep using location while the screen is off, so the track and anchor alarm keep working; a notification shows whenever this is running.
+The app uses your phone's GPS location to show your position on the chart, run the sailing gauge, record your track, watch your anchor and mark a man-overboard position. With your permission, it can keep using location while the screen is off, so the track and anchor alarm keep working; a notification shows whenever this is running. The anchor alarm keeps running if the app is swiped away, until you switch it off in the app or from its notification.
 
-Your location is used only on your phone. It is never sent to the developer or to anyone else. Weather and wave forecasts are downloaded for whole lakes, not for your position.
+Your location is used only on your phone. It is never sent to the developer or to anyone else. Weather, wave and current forecasts are downloaded for the whole lakes and coastal regions you have installed, not for your position.
 
 ## Sensors
 
@@ -20,7 +20,7 @@ The app reads the phone's barometer for the barograph, and its motion sensors fo
 
 ## Data stored on your phone
 
-Your tracks, anchor position, barograph log, routes, celestial workbook, boat settings and downloaded charts and forecasts are stored in the app's private storage on your phone. They are not uploaded anywhere. Uninstalling the app deletes them.
+Your tracks, anchor position, man-overboard mark, barograph log, routes, celestial workbook, boat settings and downloaded charts and forecasts are stored in the app's private storage on your phone. They are not uploaded anywhere, and they are excluded from Android's cloud backup and phone-to-phone transfer. Uninstalling the app deletes them.
 
 ## Network connections
 
@@ -30,6 +30,7 @@ The app connects to these public services to download data. It sends them no per
 |---|---|
 | NOAA National Weather Service (tgftp.nws.noaa.gov) | Wind forecasts |
 | NOAA NCEP (nomads.ncep.noaa.gov) | Wave forecasts |
+| NOAA GLERL (apps.glerl.noaa.gov) | Great Lakes surface currents (only while Currents is switched on) |
 | NOAA National Data Buoy Center (ndbc.noaa.gov) | Live buoy reports |
 | GitHub (github.com) | Chart files |
 

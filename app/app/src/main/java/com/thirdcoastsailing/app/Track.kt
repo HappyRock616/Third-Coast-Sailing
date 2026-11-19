@@ -31,7 +31,7 @@ import org.maplibre.android.maps.MapLibreMap
 
 /*
  * Trip track: a thin dashed line of where the boat has been since the menu toggle was switched on,
- * labeled with distance and elapsed recording time. Kept in memory only. Switching it off stops recording and
+ * labeled with distance and elapsed recording time. Kept by TripTrack (saved on the phone). Switching it off stops recording and
  * the clock but keeps the line; the reset arrow in the menu clears it. The line is continuous: a gap (switched off,
  * phone asleep) is spanned by a straight line and its distance counts.
  * Points come from the 1-second GPS while the app is on screen, and from a fix every 5 minutes (TrackService) while
@@ -54,6 +54,8 @@ private const val JUMP_FLOOR_KN = 15.0
 private const val JUMP_NO_SOG_KN = 30.0
 /** Track points are the moving average of the last 3 fixes; a gap longer than this (ms) starts the average fresh. */
 const val TRACK_AVG_GAP_MS = 30_000L
+/** Most track points projected and drawn per frame. */
+private const val TRACK_DRAW_MAX = 2000
 /** After this many impossible jumps in a row the new position is believed (the GPS has really moved on, e.g. after a gap). */
 const val TRACK_JUMP_ACCEPT_AFTER = 3
 
@@ -76,7 +78,7 @@ sealed interface TrackDecision {
 fun trackStep(last: GeoPt?, lastMs: Long, fix: BoatFix, jumpsInRow: Int = 0): TrackDecision {
     if (last == null) return TrackDecision.Add(0.0)
     val d = distNm(last, GeoPt(fix.lat, fix.lon))
-    val m = d * 1852.0
+    val m = d * M_PER_NM
     val slow = fix.sogKn != null && fix.sogKn < TRACK_SLOW_KN
     if (m < (if (slow) TRACK_SLOW_STEP_M else TRACK_STEP_M)) return TrackDecision.TooClose
     val hours = (fix.time - lastMs) / 3_600_000.0
@@ -109,7 +111,13 @@ fun TrackOverlay(map: MapLibreMap?, tick: Int, points: List<GeoPt>, boat: BoatFi
 
         val ink = if (night) Foam else Navy                          // dark on the day chart, light at night
         val path = Path()
-        points.forEachIndexed { i, p -> val o = xy(p.lat, p.lon); if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
+        // a long trip has many thousands of points: every nth is drawn (and always the newest), which looks the same
+        val stride = (points.size / TRACK_DRAW_MAX) + 1
+        for (i in points.indices) {
+            if (i % stride != 0 && i != points.lastIndex) continue
+            val o = xy(points[i].lat, points[i].lon)
+            if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y)
+        }
         val end = boat?.let { xy(it.lat, it.lon) } ?: xy(points.last().lat, points.last().lon)
         if (boat != null) path.lineTo(end.x, end.y)                  // live segment to the boat
         drawPath(path, ink, style = Stroke(1.6.dp.toPx(), join = StrokeJoin.Round, cap = StrokeCap.Round,

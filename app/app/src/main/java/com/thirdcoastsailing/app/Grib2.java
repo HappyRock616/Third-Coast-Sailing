@@ -7,8 +7,8 @@ import java.util.TimeZone;
 
 /**
  * Minimal GRIB2 reader for the NOAA weather files Third Coast Sailing uses (no Google services, no native code).
- * Supports exactly what NDFD sector files and the GLWU wave model use:
- *   grid template 3.30 (Lambert conformal), product templates 4.0 / 4.8,
+ * Supports exactly what NDFD sector files and the GLWU and GFS-Wave models use:
+ *   grid templates 3.30 (Lambert conformal), 3.0 (lat/lon) and 3.10 (Mercator), product templates 4.0 / 4.8,
  *   data templates 5.0 (simple packing), 5.2 (complex packing) and 5.3 (complex + spatial differencing),
  *   with or without a bitmap. Missing points come back as NaN.
  * index() is cheap (headers only); decode() unpacks one message on demand.
@@ -19,43 +19,23 @@ public final class Grib2 {
     public static final class Message {
         public int discipline, category, number;    // parameter (e.g. 0/2/1 wind speed)
         public long refTimeMs, validTimeMs;
-        public Lambert grid;
+        public Grid grid;
         int sec5, sec6, sec7, sec7len;               // byte offsets into the file
         int bitmapOffset = -1;                       // start of bitmap bits, -1 when every point has data
+        int bitmapLen;                               // bitmap length in bytes
         int numPacked;                               // data points actually packed (= bitmap ones)
     }
 
-    /** Lambert conformal conic grid (spherical earth), point (i, j) with i east and j north from the first point. */
-    public static final class Lambert {
+    /**
+     * A grid: maps a lat/lon to a fractional position (i east, j north) counted from the grid's south-west point,
+     * and a whole position to an index in the decoded array (file order).
+     */
+    public abstract static class Grid {
         public int nx, ny;
-        double la1, lo1, lov, latin1, latin2, dx, dy, radius;
         boolean jNorth = true, iEast = true, alternateRows = false;   // scanning mode bits 0x80, 0x40, 0x10
-        private double n, f, x1, y1;
 
-        void init() {
-            double p1 = Math.toRadians(latin1), p2 = Math.toRadians(latin2);
-            n = Math.abs(latin1 - latin2) < 1e-9 ? Math.sin(p1)
-                    : Math.log(Math.cos(p1) / Math.cos(p2)) /
-                      Math.log(Math.tan(Math.PI / 4 + p2 / 2) / Math.tan(Math.PI / 4 + p1 / 2));
-            f = Math.cos(p1) * Math.pow(Math.tan(Math.PI / 4 + p1 / 2), n) / n;
-            double[] xy = xy(la1, lo1);
-            x1 = xy[0]; y1 = xy[1];
-        }
-
-        private double[] xy(double lat, double lon) {
-            double rho = radius * f / Math.pow(Math.tan(Math.PI / 4 + Math.toRadians(lat) / 2), n);
-            double dl = lon - lov;
-            while (dl > 180) dl -= 360;
-            while (dl < -180) dl += 360;
-            double t = n * Math.toRadians(dl);
-            return new double[]{rho * Math.sin(t), -rho * Math.cos(t)};
-        }
-
-        /** Fractional grid position {i, j} of a lat/lon (i east, j north from the first grid point). */
-        public double[] toGrid(double lat, double lon) {
-            double[] p = xy(lat, lon);
-            return new double[]{(p[0] - x1) / dx, (p[1] - y1) / dy};
-        }
+        /** Fractional grid position {i, j} of a lat/lon (i east, j north from the south-west grid point). */
+        public abstract double[] toGrid(double lat, double lon);
 
         /** Index into the decoded array for whole grid position (i east, j north), or -1 outside. */
         public int index(int i, int j) {
@@ -84,6 +64,72 @@ public final class Grib2 {
         }
     }
 
+    /** Plain latitude/longitude grid (template 3.0; GFS-Wave). */
+    public static final class LatLon extends Grid {
+        double south, west, di, dj;
+
+        @Override public double[] toGrid(double lat, double lon) {
+            double l = lon;
+            while (l < west) l += 360;                    // the grid may run 0..360 or -180..180
+            while (l >= west + 360) l -= 360;
+            return new double[]{(l - west) / di, (lat - south) / dj};
+        }
+    }
+
+    /** Mercator grid (template 3.10; the NDFD Hawaii sector). */
+    public static final class Mercator extends Grid {
+        double lad, west, dx, dy, radius;
+        private double x0, y0;
+
+        private double x(double lon) {
+            double dl = lon - west;
+            while (dl < -180) dl += 360;
+            while (dl >= 180) dl -= 360;
+            return radius * Math.cos(Math.toRadians(lad)) * Math.toRadians(dl);
+        }
+
+        private double y(double lat) {
+            return radius * Math.cos(Math.toRadians(lad)) * Math.log(Math.tan(Math.PI / 4 + Math.toRadians(lat) / 2));
+        }
+
+        void init(double south) { x0 = 0; y0 = y(south); }
+
+        @Override public double[] toGrid(double lat, double lon) {
+            return new double[]{(x(lon) - x0) / dx, (y(lat) - y0) / dy};
+        }
+    }
+
+    /** Lambert conformal conic grid (spherical earth), point (i, j) with i east and j north from the first point. */
+    public static final class Lambert extends Grid {
+        double la1, lo1, lov, latin1, latin2, dx, dy, radius;
+        private double n, f, x1, y1;
+
+        void init() {
+            double p1 = Math.toRadians(latin1), p2 = Math.toRadians(latin2);
+            n = Math.abs(latin1 - latin2) < 1e-9 ? Math.sin(p1)
+                    : Math.log(Math.cos(p1) / Math.cos(p2)) /
+                      Math.log(Math.tan(Math.PI / 4 + p2 / 2) / Math.tan(Math.PI / 4 + p1 / 2));
+            f = Math.cos(p1) * Math.pow(Math.tan(Math.PI / 4 + p1 / 2), n) / n;
+            double[] xy = xy(la1, lo1);
+            x1 = xy[0]; y1 = xy[1];
+        }
+
+        private double[] xy(double lat, double lon) {
+            double rho = radius * f / Math.pow(Math.tan(Math.PI / 4 + Math.toRadians(lat) / 2), n);
+            double dl = lon - lov;
+            while (dl > 180) dl -= 360;
+            while (dl < -180) dl += 360;
+            double t = n * Math.toRadians(dl);
+            return new double[]{rho * Math.sin(t), -rho * Math.cos(t)};
+        }
+
+        /** Fractional grid position {i, j} of a lat/lon (i east, j north from the first grid point; NDFD and GLWU scan south to north, so that is the south-west point). */
+        @Override public double[] toGrid(double lat, double lon) {
+            double[] p = xy(lat, lon);
+            return new double[]{(p[0] - x1) / dx, (p[1] - y1) / dy};
+        }
+    }
+
     // ------------------------------------------------------------------ indexing
 
     public static List<Message> index(byte[] b) {
@@ -94,24 +140,29 @@ public final class Grib2 {
             if (start < 0 || start + 16 > b.length) break;
             int discipline = b[start + 6] & 0xFF;
             long total = u64(b, start + 8);
-            int end = (int) Math.min(b.length, start + total);
+            // not GRIB edition 2 (e.g. GRIB1), or a length too short to hold a message: skip past this "GRIB" so the
+            // search moves on (a zero length would otherwise find the same place forever)
+            if ((b[start + 7] & 0xFF) != 2 || total < 16) { pos = start + 4; continue; }
+            int end = total > b.length - start ? b.length : (int) (start + total);    // (no overflow for a huge length)
             int p = start + 16;
             long ref = 0;
-            Lambert grid = null;
+            Grid grid = null;
             Message pending = null;
-            int bitmapPrev = -1;
+            int bitmapPrev = -1, bitmapPrevLen = 0;
+            try {
             while (p + 5 <= end) {
                 if (b[p] == '7' && b[p + 1] == '7' && b[p + 2] == '7' && b[p + 3] == '7') break;
-                int len = (int) u32(b, p);
+                long len64 = u32(b, p);
                 int sec = b[p + 4] & 0xFF;
-                if (len <= 0) break;
+                if (len64 < 5 || p + len64 > end) break;                 // damaged or cut-off section: stop here
+                int len = (int) len64;
                 switch (sec) {
                     case 1:
                         ref = utc(u16(b, p + 12), b[p + 14] & 0xFF, b[p + 15] & 0xFF, b[p + 16] & 0xFF,
                                 b[p + 17] & 0xFF, b[p + 18] & 0xFF);
                         break;
                     case 3:
-                        grid = lambert(b, p);
+                        grid = grid(b, p);
                         break;
                     case 4:
                         pending = new Message();
@@ -124,18 +175,23 @@ public final class Grib2 {
                         if (pending != null) { pending.sec5 = p; pending.numPacked = (int) u32(b, p + 5); }
                         break;
                     case 6:
-                        if (pending != null) {
+                        if (pending != null && len >= 6) {
                             int ind = b[p + 5] & 0xFF;
-                            if (ind == 0) { pending.bitmapOffset = p + 6; bitmapPrev = p + 6; }
-                            else if (ind == 254) pending.bitmapOffset = bitmapPrev;
-                            else pending.bitmapOffset = -1;
+                            if (ind == 0) { pending.bitmapOffset = p + 6; pending.bitmapLen = len - 6; bitmapPrev = p + 6; bitmapPrevLen = len - 6; }
+                            else if (ind == 254) {
+                                // "same bitmap as before": without an earlier one the values can't be placed
+                                if (bitmapPrev < 0) { pending = null; break; }
+                                pending.bitmapOffset = bitmapPrev; pending.bitmapLen = bitmapPrevLen;
+                            }
+                            else if (ind == 255) pending.bitmapOffset = -1;     // no bitmap: every point has a value
+                            else { pending = null; break; }                       // predefined bitmaps: not supported
                             pending.sec6 = p;
                         }
                         break;
                     case 7:
-                        if (pending != null && pending.grid != null && sizesOk(b, pending)) {
+                        if (pending != null && pending.grid != null) {
                             pending.sec7 = p; pending.sec7len = len;
-                            out.add(pending);
+                            if (sizesOk(b, pending)) out.add(pending);
                         }
                         pending = null;
                         break;
@@ -143,6 +199,10 @@ public final class Grib2 {
                         break;
                 }
                 p += len;
+            }
+            } catch (IndexOutOfBoundsException e) {
+                // a section shorter than its template (damaged file): the rest of this message is skipped, the
+                // messages already read and those after it are still used
             }
             pos = end;
         }
@@ -155,22 +215,87 @@ public final class Grib2 {
      */
     private static final long MAX_POINTS = 20_000_000L;
 
-    /** True when a message's packed-value count (and, for complex packing, group count) fits its grid. */
+    /**
+     * True when a message can be decoded: a supported packing (5.0 simple, 5.2 / 5.3 complex; JPEG2000 and PNG are
+     * left out at indexing so they never fail later), a packed-value count (and group count) that fits the grid, and
+     * a data section and bitmap that fit in the file. A damaged message is skipped; the others are still used.
+     */
     private static boolean sizesOk(byte[] b, Message m) {
         long npts = (long) m.grid.nx * m.grid.ny;
         if (m.sec5 <= 0 || m.numPacked < 0 || m.numPacked > npts) return false;
         int tmpl = u16(b, m.sec5 + 9);
+        if (tmpl != 0 && tmpl != 2 && tmpl != 3) return false;
+        int nbits = b[m.sec5 + 19] & 0xFF;
+        if (nbits > 32) return false;
         if (tmpl == 2 || tmpl == 3) {
             long ng = u32(b, m.sec5 + 31);
             if (ng > m.numPacked) return false;
-        }
+        } else if ((long) m.numPacked * nbits > (long) (m.sec7len - 5) * 8) return false;   // simple packing: data fits
+        if ((long) m.sec7 + m.sec7len > b.length) return false;
+        if (m.bitmapOffset >= 0 && ((long) m.bitmapLen * 8 < npts || (long) m.bitmapOffset + m.bitmapLen > b.length)) return false;
         return true;
     }
 
-    /** Read a grid definition section; only template 3.30 (Lambert conformal, the NDFD and GLWU grids) is supported, otherwise null. */
-    private static Lambert lambert(byte[] b, int p) {
+    /** Read a grid definition section: templates 3.30 (Lambert: NDFD CONUS sectors, GLWU), 3.0 (lat/lon: GFS-Wave)
+     *  and 3.10 (Mercator: NDFD Hawaii); null for anything else. */
+    private static Grid grid(byte[] b, int p) {
         int tmpl = u16(b, p + 12);
-        if (tmpl != 30) return null;                       // only Lambert conformal is needed
+        if (tmpl == 30) return lambert(b, p);
+        if (tmpl == 0) return latLon(b, p);
+        if (tmpl == 10) return mercator(b, p);
+        return null;
+    }
+
+    private static double earthRadius(byte[] b, int p) {
+        int shape = b[p + 14] & 0xFF;
+        if (shape == 1) return u32(b, p + 16) / Math.pow(10, b[p + 15] & 0xFF);
+        if (shape == 6) return 6371229.0;
+        return 6367470.0;
+    }
+
+    private static void scanning(Grid g, int scan) {
+        g.iEast = (scan & 0x80) == 0;
+        g.jNorth = (scan & 0x40) != 0;
+        g.alternateRows = (scan & 0x10) != 0;
+    }
+
+    /** Template 3.0: first/last points at octets 47/51 and 56/60, increments at 64/68, scanning mode at 72. */
+    private static LatLon latLon(byte[] b, int p) {
+        LatLon g = new LatLon();
+        g.nx = (int) u32(b, p + 30);
+        g.ny = (int) u32(b, p + 34);
+        if (g.nx <= 0 || g.ny <= 0 || (long) g.nx * g.ny > MAX_POINTS) return null;
+        double la1 = s32(b, p + 46) * 1e-6, lo1 = u32(b, p + 50) * 1e-6;
+        double la2 = s32(b, p + 55) * 1e-6, lo2 = u32(b, p + 59) * 1e-6;
+        g.di = u32(b, p + 63) * 1e-6;
+        g.dj = u32(b, p + 67) * 1e-6;
+        if (!(g.di > 0) || !(g.dj > 0)) return null;
+        scanning(g, b[p + 71] & 0xFF);
+        g.south = Math.min(la1, la2);
+        g.west = g.iEast ? lo1 : lo2;
+        return g;
+    }
+
+    /** Template 3.10: La1/Lo1 at 39/43, LaD at 48, La2/Lo2 at 52/56, scanning mode at 60, Di/Dj (mm) at 65/69. */
+    private static Mercator mercator(byte[] b, int p) {
+        Mercator g = new Mercator();
+        g.radius = earthRadius(b, p);
+        g.nx = (int) u32(b, p + 30);
+        g.ny = (int) u32(b, p + 34);
+        if (g.nx <= 0 || g.ny <= 0 || (long) g.nx * g.ny > MAX_POINTS) return null;
+        double la1 = s32(b, p + 38) * 1e-6, lo1 = u32(b, p + 42) * 1e-6;
+        g.lad = s32(b, p + 47) * 1e-6;
+        double la2 = s32(b, p + 51) * 1e-6, lo2 = u32(b, p + 55) * 1e-6;
+        scanning(g, b[p + 59] & 0xFF);
+        g.dx = u32(b, p + 64) * 1e-3;
+        g.dy = u32(b, p + 68) * 1e-3;
+        if (!(g.dx > 0) || !(g.dy > 0)) return null;
+        g.west = lon180(g.iEast ? lo1 : lo2);
+        g.init(Math.min(la1, la2));
+        return g;
+    }
+
+    private static Lambert lambert(byte[] b, int p) {
         Lambert g = new Lambert();
         int shape = b[p + 14] & 0xFF;
         if (shape == 1) g.radius = u32(b, p + 16) / Math.pow(10, b[p + 15] & 0xFF);
@@ -246,8 +371,9 @@ public final class Grib2 {
 
         float[] out = new float[npts];
         if (m.bitmapOffset < 0) {
-            for (int i = 0; i < npts && i < n; i++)
-                out[i] = Double.isNaN(packed[i]) ? Float.NaN : (float) ((r + packed[i] * bscale) * dscale);
+            // no bitmap: one value per point; points beyond the packed values (a short message) are missing, not 0
+            for (int i = 0; i < npts; i++)
+                out[i] = i >= n || Double.isNaN(packed[i]) ? Float.NaN : (float) ((r + packed[i] * bscale) * dscale);
         } else {
             BitReader bm = new BitReader(b, m.bitmapOffset);
             int k = 0;
@@ -309,6 +435,9 @@ public final class Grib2 {
                 }
             }
         }
+
+        // groups ran out before all the values were read (damaged message): the rest are missing, not zero
+        if (k < n) java.util.Arrays.fill(out, k, n, Double.NaN);
 
         // Undo spatial differencing over the non-missing values, in order
         if (tmpl == 3 && order > 0) {

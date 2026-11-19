@@ -22,6 +22,9 @@ import java.security.spec.X509EncodedKeySpec
  *  - Downloads are read with a size limit, so a misbehaving server can't fill the phone's memory or storage.
  */
 object CatalogTrust {
+    /** A chart list that failed its signature or format checks (refused, as opposed to "no connection"). */
+    class Refused(message: String) : IOException(message)
+
 
     /** ECDSA P-256 public key (X.509 / SubjectPublicKeyInfo, base64) that the chart catalog must be signed with. */
     private const val CATALOG_PUBLIC_KEY =

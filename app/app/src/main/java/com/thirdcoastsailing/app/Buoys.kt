@@ -183,12 +183,12 @@ class BuoyRepo(context: Context) {
                 cal.clear()
                 cal.set(year, (num("MM")?.toInt() ?: continue) - 1, num("DD")?.toInt() ?: continue,
                     num("hh")?.toInt() ?: continue, num("mm")?.toInt() ?: 0, 0)
-                val kn = 1.943844
+                val kn = MS_TO_KN
                 fun f(c: Double?) = c?.let { it * 9 / 5 + 32 }
                 out += raw("STN") to BuoyObs(
                     timeMs = cal.timeInMillis,
                     wdir = num("WDIR"), wspdKn = num("WSPD")?.times(kn), gustKn = num("GST")?.times(kn),
-                    wvhtFt = num("WVHT")?.times(3.28084), dpdS = num("DPD"), mwd = num("MWD"),
+                    wvhtFt = num("WVHT")?.times(FT_PER_M), dpdS = num("DPD"), mwd = num("MWD"),
                     presHpa = num("PRES"), ptdyHpa = num("PTDY"), airF = f(num("ATMP")), waterF = f(num("WTMP")),
                 )
             }

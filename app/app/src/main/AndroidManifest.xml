@@ -5,7 +5,7 @@
     <!-- GPS position of the boat (Android's own location service; no Google Play Services) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- Weather and buoy downloads (later versions); charts work fully offline -->
+    <!-- Chart, weather, wave, current and buoy downloads; charts work fully offline once downloaded -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Trip track: slow GPS sampling (every 5 min) while the app is in the background, shown as a notification -->
@@ -17,6 +17,11 @@
     <!-- Anchor watch: vibrate with the bell, keep the phone awake while the bell sounds -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Anchor watch: after a reboot, warn if the watch was switched on (it can't restart by itself) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Anchor watch: on-time "GPS fix lost" checks in deep sleep (the user allows it in Settings, "Alarms & reminders";
+         without it the check may run up to about 10 minutes late) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.barometer" android:required="false" />
@@ -34,7 +39,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density|fontScale"
             android:theme="@style/Theme.ThirdCoastSailing"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -50,12 +55,23 @@
             android:foregroundServiceType="location"
             android:stopWithTask="true" />
 
-        <!-- Anchor watch: GPS every 2 minutes and the alarm, with the screen off; stops when the app is closed -->
+        <!-- Anchor watch: GPS every 2 minutes and the alarm, with the screen off. Keeps running when the app is swiped
+             away (switched off in the app or from its notification), so the watch can't stop without the user knowing -->
         <service
             android:name=".AnchorService"
             android:exported="false"
             android:foregroundServiceType="location"
-            android:stopWithTask="true" />
+            android:stopWithTask="false" />
+        <!-- Reboot or app update with the anchor watch on: a loud "watch stopped" notification (both broadcasts are
+             sent only by the system) -->
+        <receiver
+            android:name=".AnchorBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Barograph logging: pressure every 5 minutes (every minute when the weather turns); stops when the app is closed -->
         <service
             android:name=".BaroService"

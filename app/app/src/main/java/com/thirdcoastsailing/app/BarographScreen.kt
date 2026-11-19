@@ -213,8 +213,11 @@ fun BarographScreen(buoy: Pair<String, String>?, loadBuoy: suspend () -> List<Bu
     var endMs by remember { mutableLongStateOf(0L) }                      // 0 = now (follows new readings)
     val version = Baro.version
     val pts = remember(version) { BaroMath.clean(Baro.log(context)) }
-    val now = System.currentTimeMillis()
-    val t = remember(version) { BaroMath.trend(pts, now) }
+    // "now" for the graph's right edge: moves with each new reading and every half minute, not on every redraw
+    // (a new value on every redraw made the graph work everything out again, also on each drag event)
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(version) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(30_000) } }
+    val t = remember(version) { BaroMath.trend(pts, System.currentTimeMillis()) }
     val elev = Baro.elevationM(context)
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {

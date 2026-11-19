@@ -15,6 +15,24 @@ data class Lake(
     val pmtiles: File,
 )
 
+/** Region order for lists: the lakes west to east, then the coastal zones (same order as WeatherRepo.LAKE_BOX). */
+val REGION_ORDER: List<String> = WeatherRepo.LAKE_BOX.keys.toList()
+
+/** Short names for the coastal zones (the lakes keep their one-word names, e.g. "Michigan"). */
+private val ZONE_NAMES = mapOf(
+    "maine" to "Gulf of Maine", "mass_ri" to "Massachusetts & Rhode Island", "long_island" to "Long Island Sound & NY Harbor",
+    "new_jersey" to "New Jersey & Delaware Bay", "chesapeake" to "Chesapeake Bay & Delmarva",
+    "north_carolina" to "Virginia Beach to Cape Fear", "carolina_georgia" to "Cape Fear to St. Marys",
+    "florida_east" to "Florida East Coast", "florida_keys" to "Biscayne Bay & Keys", "florida_west" to "Florida Gulf Coast",
+    "northern_gulf" to "Panhandle to Pontchartrain", "louisiana" to "Louisiana", "texas" to "Texas",
+    "southern_california" to "Southern California", "central_california" to "Central California",
+    "norcal_oregon" to "N. California & Oregon", "washington" to "Washington & Puget Sound", "hawaii" to "Hawaii",
+)
+
+/** Display name of a region id: "Michigan", "Massachusetts & Rhode Island"; unknown ids are title-cased. */
+fun regionName(id: String): String =
+    ZONE_NAMES[id] ?: id.split('_').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
+
 /**
  * Lake packages live in the app's private storage: files/packages/<lake>/.
  * Import copies them from a folder the user picks in Android's system file picker,
@@ -24,26 +42,42 @@ class LakeStore(private val context: Context) {
 
     private val root = File(context.filesDir, "packages").apply { mkdirs() }
 
-    // Display order west to east
-    private val order = listOf("superior", "michigan", "huron", "erie", "ontario")
+    // Display order: the lakes west to east, then the coastal zones (Atlantic north to south, Gulf, Pacific, Hawaii)
+    private val order = REGION_ORDER
 
     /** All lakes that have a chart file. */
-    fun list(): List<Lake> =
-        (root.listFiles() ?: emptyArray())
-            .filter { it.isDirectory }
+    fun list(): List<Lake> {
+        recoverSwaps()
+        return (root.listFiles() ?: emptyArray())
+            .filter { it.isDirectory && !it.name.startsWith(".") }
             .mapNotNull { read(it) }
             .sortedBy { order.indexOf(it.id).let { i -> if (i < 0) 99 else i } }
+    }
+
+    /**
+     * A chart swap (update or import) moves the old folder aside as ".<id>.old" first. If the app was stopped in the
+     * middle, put the old charts back when the new ones never arrived; otherwise drop the leftover.
+     */
+    private fun recoverSwaps() {
+        for (old in root.listFiles().orEmpty()) {
+            if (!old.isDirectory || !old.name.startsWith(".") || !old.name.endsWith(".old")) continue
+            val dest = File(root, old.name.removePrefix(".").removeSuffix(".old"))
+            if (dest.exists()) old.deleteRecursively() else old.renameTo(dest)
+        }
+    }
 
     /** One installed lake from its folder: needs a chart file; dates come from manifest.json when it is there. */
     private fun read(dir: File): Lake? {
         val pm = dir.listFiles()?.firstOrNull { it.name.endsWith("_chart.pmtiles") } ?: return null
         var built = ""
         var asOf = ""
+        var name = ""
         val man = File(dir, "manifest.json")
         if (man.exists()) {
             runCatching {
                 val m = JSONObject(man.readText())
                 built = m.optString("built_utc").take(10)
+                if (m.optString("kind") == "coast") name = m.optString("name").take(60)   // coastal zones: "Massachusetts & Rhode Island"
                 val cells = m.optJSONObject("sources")?.optJSONObject("enc")?.optJSONArray("cells")
                 if (cells != null) {
                     var newest = ""
@@ -55,7 +89,9 @@ class LakeStore(private val context: Context) {
                 }
             }
         }
-        return Lake(dir.name, dir.name.replaceFirstChar { it.uppercase() }, asOf, built, pm)
+        // known zones use the short name (fits the lists); a zone this version doesn't know uses its manifest name
+        val display = if (dir.name in ZONE_NAMES) regionName(dir.name) else name.ifBlank { regionName(dir.name) }
+        return Lake(dir.name, display, asOf, built, pm)
     }
 
     /** Delete a lake package from the phone (frees its storage). */
@@ -127,13 +163,23 @@ class LakeStore(private val context: Context) {
     /** Import step 2: move the staged lakes into place (replacing older copies of the same files). Returns their ids. */
     fun commitImport(s: StagedImport, progress: (String) -> Unit): List<String> {
         val done = mutableListOf<String>()
+        val chartOnly = mutableListOf<String>()        // imported without the routing/depth file: say so
         for ((id, dir) in s.lakes) {
-            val dest = File(root, id).apply { mkdirs() }
-            for (f in dir.listFiles().orEmpty()) f.renameTo(File(dest, f.name))
+            // the whole folder is replaced (not merged), so an old routing file can't stay next to a newer chart
+            val dest = File(root, id)
+            val old = File(root, ".$id.old").apply { deleteRecursively() }
+            if (dest.exists() && !dest.renameTo(old)) { progress("Could not replace the old $id charts"); continue }
+            if (!dir.renameTo(dest)) {
+                old.renameTo(dest)                                      // put the old charts back
+                progress("Could not import $id"); continue
+            }
+            old.deleteRecursively()
             done += id
+            if (!File(dest, "${id}_hazards.gpkg").exists()) chartOnly += id
         }
         importStage.deleteRecursively()
-        progress(if (done.isEmpty()) "No lake package found in that folder" else "Imported: ${done.joinToString()}")
+        progress(if (done.isEmpty()) "No chart package found in that folder" else "Imported: ${done.joinToString()}" +
+            (if (chartOnly.isEmpty()) "" else " (${chartOnly.joinToString()}: chart only, no routing or depth data)"))
         return done
     }
 

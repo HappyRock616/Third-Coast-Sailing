@@ -151,11 +151,12 @@ fun NavCardBody(nav: NavInfo) {
     var nowMs by remember { mutableLongStateOf(0L) }
     val pattern = nav.pattern
     LaunchedEffect(pattern) { if (pattern != null) while (true) { withFrameMillis { nowMs = it }; delay(50) } }
-    val t = nowMs / 1000.0
+    // (the clock is read only inside the two drawings below, so each tick redraws them without rebuilding the card)
     Text(nav.kindLine, color = Mist, fontSize = 14.sp)
     nav.abbrev?.let { ab ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
             if (pattern != null) Canvas(Modifier.size(18.dp)) {
+                val t = nowMs / 1000.0
                 val lit = pattern.colourAt(t)
                 val c = glowColour(lit ?: nav.lampColours.firstOrNull() ?: "1")
                 val level = if (lit != null) pattern.levelAt(t) else 0f
@@ -177,7 +178,7 @@ fun NavCardBody(nav: NavInfo) {
                 drawRect(glowColour(o.colour), Offset(((rep * pattern.periodS + o.from) * sc).toFloat(), 0f),
                     Size(((o.to - o.from) * sc).toFloat(), size.height))
             }
-            val x = ((t % span) * sc).toFloat()
+            val x = (((nowMs / 1000.0) % span) * sc).toFloat()
             drawLine(Color.White, Offset(x, -2f), Offset(x, size.height + 2f), 2.dp.toPx())
         }
     }

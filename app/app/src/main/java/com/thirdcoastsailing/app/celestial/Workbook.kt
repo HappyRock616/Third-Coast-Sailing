@@ -1,8 +1,6 @@
 package com.thirdcoastsailing.app.celestial
 
 import kotlin.math.abs
-import kotlin.math.asin
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.roundToLong
@@ -138,7 +136,11 @@ data class WorkLine(
 /** A text line of the printed-almanac extract a value came from; highlighted lines hold the numbers used. */
 data class ExtractLine(val text: String, val highlight: Boolean = false)
 
-/** A sight worked through. lop is null until there's a shot (or, ADVANCED, until the working is complete). */
+/**
+ * A sight worked through. lop is null until there's a shot (or, ADVANCED, until the working is complete).
+ * `kept` and `residuals` describe the shots with an altitude typed in (in the sight's order): which were used, and
+ * how far each is off the line through the kept ones (arc-minutes, null with fewer than 3 shots).
+ */
 data class SightWork(
     val sight: WorkbookSight,
     val shot: Shot?,                       // the averaged shot (time, Hs, DR)
@@ -146,6 +148,8 @@ data class SightWork(
     val lines: List<WorkLine>,
     val extract: List<ExtractLine>,
     val lop: WorkLop?,
+    val kept: List<Shot> = emptyList(),
+    val residuals: List<Double?> = emptyList(),
 ) {
     /** The line for one field, or null if this sight has none. */
     fun line(f: Field) = lines.firstOrNull { it.field == f }
@@ -166,6 +170,11 @@ data class WorkLop(
     val shotsUsed: Int = 1,
 ) {
     val footPoint: LatLon get() = travel(assumed, znDeg, interceptNm)
+    /** How far the boat's GPS / DR position at the sight is from this line (nm): large means the DR, time or reading is off. */
+    val drMissNm: Double get() {
+        val d = distanceNm(assumed, dr)
+        return abs(interceptNm - d * cos((bearing(assumed, dr) - znDeg) * DEG))
+    }
     /** The line of position as a segment through its foot point, at right angles to Zn (10 nm each way by default). */
     fun segment(halfLengthNm: Double = 10.0): Pair<LatLon, LatLon> =
         Pair(travel(footPoint, znDeg - 90.0, halfLengthNm), travel(footPoint, znDeg + 90.0, halfLengthNm))
@@ -180,6 +189,7 @@ data class WorkFix(
     val drAtFix: LatLon,                   // boat position (GPS or DR) at the fix time
     val drIsGps: Boolean = true,
     val uncertainty: FixUncertainty? = null,
+    val iterations: Int = 1,               // > 1 when the sights were worked again from the first fix (DR far off)
 ) {
     /** How far the fix is from where the boat really was (GPS), or from the DR. */
     val offsetNm: Double get() = distanceNm(position, drAtFix)
@@ -203,8 +213,15 @@ data class FixUncertainty(
 object Workbook {
 
     private const val HOUR = 3_600_000L
-    private const val MOON_INCREMENT_DEG_PER_H = 14.0 + 19.0 / 60.0   // the Moon's column in the increments table
-    private const val ARIES_DEG_PER_H = 15.0410686
+
+    /** The sky turns 15′ a minute, so no altitude changes faster than this (arc-minutes per minute of time). */
+    private const val MAX_ALT_RATE_MIN_PER_MIN = 15.05
+    /** Re-work the sights from the first fix when it lands farther than this from where they were worked (nm). */
+    const val REWORK_NM = 5.0
+    /** At most this many passes (the first, then re-working from the fix). */
+    const val MAX_PASSES = 3
+    /** Warn when a line passes farther than this from the GPS / DR position (nm). */
+    const val WARN_MISS_NM = 30.0
 
     // Tolerances for ADVANCED checks
     private const val TOL_MIN = 0.15        // table look-ups and sums (arc-minutes): allows the last-digit rounding
@@ -220,12 +237,19 @@ object Workbook {
 
     // ---------------------------------------------------------------- working one sight
 
-    /** Work a sight through. `average` folds several shots into one (trend fit, outliers dropped). */
-    fun work(s: WorkbookSight, set: WorkbookSettings): SightWork {
-        val valid = s.shots.filter { !it.hsDeg.isNaN() }                 // shots with an altitude typed in
-        val shot = averageShots(valid)
-        if (shot == null) return SightWork(s, null, 0, emptyList(), emptyList(), null)
-        val used = usedShots(valid)
+    /**
+     * Work a sight through. Several shots are folded into one (trend fit at the body's own rate, outliers dropped).
+     * @param shift added to each shot's GPS / DR position (degrees of lat, lon) to choose the assumed position;
+     *              set by [solve] when the sights are worked again from the first fix. The line keeps the real DR.
+     */
+    fun work(s: WorkbookSight, set: WorkbookSettings, shift: LatLon? = null): SightWork {
+        val valid = s.shots.filter { it.hsDeg.isFinite() }                // shots with an altitude typed in
+        if (valid.isEmpty()) return SightWork(s, null, 0, emptyList(), emptyList(), null)
+        val rate = hsRate(s.body, valid)
+        val kept = keptShots(valid, rateMinPerMin = rate)
+        val shot = averageOf(kept)
+        val used = kept.size
+        val res = residuals(valid, rateMinPerMin = rate)
         val adv = set.level == SkillLevel.ADVANCED
         val lines = mutableListOf<WorkLine>()
         // u(f): the value later lines use. ADVANCED: what was typed (if typed), else the right value.
@@ -249,18 +273,24 @@ object Workbook {
         val dtH = (t - hourMs) / HOUR.toDouble()
         val mmss = mmss(t - hourMs)
         val body = s.body
-        val now = Almanac.entry(body, t)
+        // only GHA, Dec, HP and SD are needed here: skip the magnitudes
+        fun entry(ms: Long) = Almanac.entry(body, ms, withMagnitude = false)
+        val now = entry(t)
+        val atHour = if (body is SkyBody.Star) null else entry(hourMs)
+        val atNextHour = if (body is SkyBody.Star) null else entry(hourMs + HOUR)
+        val starNoon = if (body is SkyBody.Star) entry(floor(t.toDouble() / (24 * HOUR)).toLong() * 24 * HOUR + 12 * HOUR) else null   // the star list is for noon
         val extract = mutableListOf<ExtractLine>()
+        val step = when (body) { SkyBody.Moon -> MOON_GHA_DEG_PER_H; else -> SUN_GHA_DEG_PER_H }   // increments column
 
         // ---- GHA and declination by the printed-almanac method
         val isStar = body is SkyBody.Star
         val ghaH: Double; val ghaH1: Double; val incr: Double
         if (isStar) {
             ghaH = r1(Almanac.ghaAries(hourMs)); ghaH1 = r1(Almanac.ghaAries(hourMs + HOUR))
-            incr = r1(ARIES_DEG_PER_H * dtH)
+            incr = r1(ARIES_GHA_DEG_PER_H * dtH)
         } else {
-            ghaH = r1(Almanac.entry(body, hourMs).gha); ghaH1 = r1(Almanac.entry(body, hourMs + HOUR).gha)
-            incr = r1((if (body == SkyBody.Moon) MOON_INCREMENT_DEG_PER_H else 15.0) * dtH)
+            ghaH = r1(atHour!!.gha); ghaH1 = r1(atNextHour!!.gha)
+            incr = r1(step * dtH)
         }
         val ghaName = if (isStar) "GHA ♈" else "GHA"
         val uGhaH = add(Field.GHA_HOUR, "$ghaName at ${hh(hourMs)}h", ghaH, TOL_MIN,
@@ -271,7 +301,6 @@ object Workbook {
         var uVc = 0.0
         val hasV = body == SkyBody.Moon || body is SkyBody.Planet
         if (hasV) {
-            val step = if (body == SkyBody.Moon) MOON_INCREMENT_DEG_PER_H else 15.0
             val v = m1((norm360(ghaH1 - ghaH) - step) * 60.0)
             val uV = add(Field.V, "v", v, TOL_MIN, "v: extra GHA per hour, from the daily page", "= ${mins(v)}")
             uVc = add(Field.V_CORR, "v correction", m1(uV * dtH), TOL_MIN, "v corr = v × minutes past the hour ÷ 60",
@@ -279,8 +308,7 @@ object Workbook {
         }
         var uSha = 0.0
         if (isStar) {
-            val noon = floor(t.toDouble() / (24 * HOUR)).toLong() * 24 * HOUR + 12 * HOUR
-            val sha = r1(Almanac.entry(body, noon).sha ?: 0.0)
+            val sha = r1(starNoon!!.sha ?: 0.0)
             uSha = add(Field.SHA, "SHA ${body.name}", sha, TOL_MIN, "SHA from the star list", "= ${ang(sha)}")
         }
         val ghaExp = r1(norm360(uGhaH + uIncr + uVc / 60.0 + uSha))
@@ -299,11 +327,10 @@ object Workbook {
 
         val uDec: Double
         if (isStar) {
-            val noon = floor(t.toDouble() / (24 * HOUR)).toLong() * 24 * HOUR + 12 * HOUR
-            val dec = r1(Almanac.entry(body, noon).dec)
+            val dec = r1(starNoon!!.dec)
             uDec = add(Field.DEC, "Dec ${body.name}", dec, TOL_MIN, "Dec from the star list", "= ${decText(dec)}")
         } else {
-            val decH = r1(Almanac.entry(body, hourMs).dec); val decH1 = r1(Almanac.entry(body, hourMs + HOUR).dec)
+            val decH = r1(atHour!!.dec); val decH1 = r1(atNextHour!!.dec)
             val uDecH = add(Field.DEC_HOUR, "Dec at ${hh(hourMs)}h", decH, TOL_MIN, "Dec (${hh(hourMs)}h) from the daily page", "= ${decText(decH)}")
             val d = m1((decH1 - decH) * 60.0)
             val uD = add(Field.D, "d", d, TOL_MIN, "d: change in Dec per hour (+ if moving north, − if south)", "= ${mins(d)}")
@@ -321,15 +348,15 @@ object Workbook {
             extract += ExtractLine("%2dh   %s".format(hhInt(hourMs), ang(ghaH)), true)
             extract += ExtractLine("%2dh   %s".format(hhInt(hourMs + HOUR), ang(ghaH1)))
             extract += ExtractLine("Increments $mmss, Aries column: ${ang(incr)}", true)
-            extract += ExtractLine("Star list: ${body.name}  SHA ${ang(uShaOr(isStar, body, t))}  Dec ${decText(uDec)}", true)
+            extract += ExtractLine("Star list: ${body.name}  SHA ${ang(r1(starNoon!!.sha ?: 0.0))}  Dec ${decText(uDec)}", true)
         } else {
-            val decH = r1(Almanac.entry(body, hourMs).dec); val decH1 = r1(Almanac.entry(body, hourMs + HOUR).dec)
+            val decH = r1(atHour!!.dec); val decH1 = r1(atNextHour!!.dec)
             extract += ExtractLine("hour   GHA           Dec")
             extract += ExtractLine("%2dh   %-12s  %s".format(hhInt(hourMs), ang(ghaH), decText(decH)), true)
             extract += ExtractLine("%2dh   %-12s  %s".format(hhInt(hourMs + HOUR), ang(ghaH1), decText(decH1)))
             val col = if (body == SkyBody.Moon) "Moon" else "Sun/planets"
             extract += ExtractLine("Increments $mmss, $col column: ${ang(incr)}", true)
-            if (hasV) extract += ExtractLine("v ${mins(m1((norm360(ghaH1 - ghaH) - (if (body == SkyBody.Moon) MOON_INCREMENT_DEG_PER_H else 15.0)) * 60.0))}   d ${mins(m1((decH1 - decH) * 60.0))}", true)
+            if (hasV) extract += ExtractLine("v ${mins(m1((norm360(ghaH1 - ghaH) - step) * 60.0))}   d ${mins(m1((decH1 - decH) * 60.0))}", true)
             else extract += ExtractLine("d ${mins(m1((decH1 - decH) * 60.0))}", true)
             if (body == SkyBody.Moon) extract += ExtractLine("HP ${"%.1f".format(now.hp)}'   SD ${"%.1f".format(now.sd)}'", true)
             if (body == SkyBody.Sun) extract += ExtractLine("SD ${"%.1f".format(now.sd)}'", true)
@@ -351,13 +378,12 @@ object Workbook {
             "= ${mins(r)}")
         var uPa = 0.0
         if (body !is SkyBody.Star) {
-            val pa = m1(now.hp * cos(uHa * DEG))
+            val pa = m1(SightReduction.parallaxMin(now.hp, uHa))
             uPa = add(Field.PARALLAX, "Parallax", pa, TOL_CORR, "PA = HP × cos Ha", "= ${"%.1f".format(now.hp)}′ × cos ${alt(uHa)} = ${mins(pa)}")
         }
         var uSd = 0.0
         if (body == SkyBody.Sun || body == SkyBody.Moon) {
-            val base = if (body == SkyBody.Moon) now.sd * (1.0 + sin(uHa * DEG) * sin(now.hp / 60.0 * DEG)) else now.sd
-            val sd = m1(when (s.limb) { Limb.LOWER -> base; Limb.UPPER -> -base; Limb.CENTER -> 0.0 })
+            val sd = m1(SightReduction.semiDiameterMin(body, s.limb, now.sd, now.hp, uHa))
             val which = when (s.limb) { Limb.LOWER -> "lower limb: +SD"; Limb.UPPER -> "upper limb: −SD"; Limb.CENTER -> "center: 0" }
             uSd = add(Field.SEMI_DIAMETER, "Semi-diameter", sd, TOL_CORR, "SD ($which)", "= ${mins(sd)}")
         }
@@ -377,22 +403,23 @@ object Workbook {
 
         // ---- assumed position, LHA, Hc, Zn, intercept
         val dr = shot.dr
-        val apLat = Math.round(dr.lat).toDouble()
-        val uApLat = add(Field.AP_LAT, "Assumed latitude", apLat, 0.001, "aLat = DR latitude to the nearest whole degree",
-            "DR ${formatLat(dr.lat)} → ${latText(apLat)}")
-        val f = norm360(uGha) - floor(norm360(uGha))                                    // GHA's fraction of a degree
-        val apLon = r1(norm180(Math.round(dr.lon + f) - f))
-        val uApLon = add(Field.AP_LON, "Assumed longitude", apLon, TOL_MIN,
-            "aLon within 30′ of the DR (${formatLon(dr.lon)}) so that LHA comes out whole", "→ ${lonText(apLon)}")
+        // worked from the DR, or (second pass) from the DR moved to the first fix
+        val from = if (shift == null) dr else LatLon((dr.lat + shift.lat).coerceIn(-89.9, 89.9), norm180(dr.lon + shift.lon))
+        val fromName = if (shift == null) "DR" else "first fix"
+        val ap = assumedPosition(from, uGha)
+        val uApLat = add(Field.AP_LAT, "Assumed latitude", ap.lat, 0.001, "aLat = $fromName latitude to the nearest whole degree",
+            "$fromName ${formatLat(from.lat)} → ${latText(ap.lat)}")
+        val uApLon = add(Field.AP_LON, "Assumed longitude", ap.lon, TOL_MIN,
+            "aLon within 30′ of the $fromName (${formatLon(from.lon)}) so that LHA comes out whole", "→ ${lonText(ap.lon)}")
         val lhaExp = r1(norm360(uGha + uApLon))
         val uLha = add(Field.LHA, "LHA", lhaExp, TOL_MIN, "LHA = GHA + aLon (east +, west −)",
             "= ${ang(uGha)} ${if (uApLon < 0) "−" else "+"} ${ang(abs(uApLon))} = ${ang(lhaExp)}")
-        val (hcRaw, znRaw) = hcZn(uApLat, uDec, uLha)
-        val hcExp = r1(hcRaw)
+        val h = SightReduction.hcZnFromLha(uApLat, uDec, uLha)
+        val hcExp = r1(h.hcDeg)
         val uHc = add(Field.HC, "Hc (calculated altitude)", hcExp, TOL_HC,
             "sin Hc = sin aLat sin Dec + cos aLat cos Dec cos LHA",
             "= sin ${latShort(uApLat)} sin ${decShort(uDec)} + cos ${latShort(uApLat)} cos ${decShort(uDec)} cos ${"%.0f".format(uLha)}° → ${alt(hcExp)}")
-        val znExp = Math.round(znRaw * 10.0) / 10.0
+        val znExp = Math.round(h.znDeg * 10.0) / 10.0
         val uZn = add(Field.ZN, "Zn (true azimuth)", znExp, TOL_ZN,
             "tan Z = −sin LHA / (cos aLat tan Dec − sin aLat cos LHA); Zn = Z made 0–360°",
             "→ Zn = ${"%05.1f".format(znExp)}°")
@@ -406,14 +433,17 @@ object Workbook {
         val cond = if (set.level == SkillLevel.BEGINNER) SightCondition.MODERATE else s.condition
         val lop = if (complete) WorkLop(body.name, t, LatLon(uApLat, uApLon), uZn, uA, dr, shot.gps,
             cond.sightErrorMin(used), cond, used) else null
-        return SightWork(s, shot, used, lines, extract, lop)
+        return SightWork(s, shot, used, lines, extract, lop, kept, res)
     }
 
-    /** A star's SHA for the day (from the noon page, as the book prints it), or 0 for the Sun, Moon and planets. */
-    private fun uShaOr(isStar: Boolean, body: SkyBody, t: Long): Double {
-        if (!isStar) return 0.0
-        val noon = floor(t.toDouble() / (24 * HOUR)).toLong() * 24 * HOUR + 12 * HOUR
-        return r1(Almanac.entry(body, noon).sha ?: 0.0)
+    /**
+     * The traditional assumed position for a sight (as used with sight reduction tables such as Pub. 229):
+     * latitude rounded to the nearest whole degree, longitude chosen within 30′ of `near` so that the local hour
+     * angle (GHA + longitude east) comes out a whole degree. Longitude rounded to 0.1′ like the rest of the workbook.
+     */
+    fun assumedPosition(near: LatLon, ghaDeg: Double): LatLon {
+        val f = norm360(ghaDeg) - floor(norm360(ghaDeg))                               // GHA's fraction of a degree
+        return LatLon(Math.round(near.lat).toDouble(), r1(norm180(Math.round(near.lon + f) - f)))
     }
 
     /** Whether a typed value matches (angles compared around the circle, in arc-minutes). */
@@ -424,54 +454,104 @@ object Workbook {
         FieldKind.MINUTES, FieldKind.NM -> abs(typed - expected) <= tol + 1e-9
     }
 
-    /** Hc and Zn by the spherical formulas (degrees). */
-    fun hcZn(lat: Double, dec: Double, lha: Double): Pair<Double, Double> {
-        val l = lat * DEG; val d = dec * DEG; val t = lha * DEG
-        val hc = asin((sin(l) * sin(d) + cos(l) * cos(d) * cos(t)).coerceIn(-1.0, 1.0)) * RAD
-        val zn = norm360(atan2(-cos(d) * sin(t), sin(d) * cos(l) - cos(d) * sin(l) * cos(t)) * RAD)
-        return Pair(hc, zn)
-    }
-
     // ---------------------------------------------------------------- shots
 
-    /** One averaged shot: mean time, mean Hs (shots off the trend dropped), DR of the shot nearest the mean time. */
-    fun averageShots(shots: List<Shot>): Shot? {
-        if (shots.isEmpty()) return null
-        val kept = keptShots(shots)
+    /** One averaged shot from the kept shots: mean time, mean Hs, DR of the shot nearest the mean time. */
+    private fun averageOf(kept: List<Shot>): Shot {
         val t = kept.map { it.timeMs }.average().toLong()
         val hs = kept.map { it.hsDeg }.average()
         val near = kept.minBy { abs(it.timeMs - t) }
         return Shot(t, hs, near.dr, near.gps)
     }
 
-    /** Number of shots kept for the sight. */
-    private fun usedShots(shots: List<Shot>) = keptShots(shots).size
+    /**
+     * How fast the body's altitude changes over the shots (arc-minutes per minute of time), worked out from the
+     * almanac at the middle shot's time and position. Hs changes at the same rate as Hc to well within a tenth of a
+     * minute over a few minutes, so the shots can be checked against it. Null with fewer than 3 shots.
+     */
+    fun hsRate(body: SkyBody, shots: List<Shot>): Double? {
+        if (shots.size < 3) return null
+        val mid = shots.sortedBy { it.timeMs }[shots.size / 2]
+        return runCatching {
+            val a = SightReduction.altAz(body, mid.dr, mid.timeMs - 60_000L).hcDeg
+            val b = SightReduction.altAz(body, mid.dr, mid.timeMs + 60_000L).hcDeg
+            (b - a) * 60.0 / 2.0
+        }.getOrNull()?.takeIf { it.isFinite() }
+    }
 
-    /** Shots kept after a straight-line fit of Hs against time drops any more than 3' off the line (3 or more shots). */
-    fun keptShots(shots: List<Shot>, rejectMin: Double = 3.0): List<Shot> {
-        if (shots.size < 3) return shots
-        val t0 = shots.first().timeMs
-        val tx = shots.map { (it.timeMs - t0) / 60_000.0 }; val hy = shots.map { it.hsDeg }
-        val mt = tx.average(); val mh = hy.average()
-        val sxx = tx.sumOf { (it - mt) * (it - mt) }
-        val slope = if (sxx > 1e-9) tx.indices.sumOf { (tx[it] - mt) * (hy[it] - mh) } / sxx else 0.0
-        val kept = shots.filterIndexed { i, s -> abs((s.hsDeg - (mh + slope * (tx[i] - mt))) * 60.0) <= rejectMin }
-        return kept.ifEmpty { shots }
+    /**
+     * A straight line Hs = offset + slope × t through some shots (t minutes, Hs arc-minutes). With a known rate the
+     * slope is fixed at it and only the offset is fitted; otherwise least squares, but never steeper than the sky
+     * turns (15′ a minute), so a pair of shots with one bad one can't make an impossible line.
+     */
+    private class ShotLine(pts: List<Pair<Double, Double>>, rate: Double?) {
+        val slope: Double
+        val offset: Double
+        private val n = pts.size
+        private val mt = pts.sumOf { it.first } / n
+        private val sxx = pts.sumOf { (it.first - mt) * (it.first - mt) }
+        private val slopeFitted: Boolean               // true when the slope came from these shots (not fixed or capped)
+        init {
+            val mh = pts.sumOf { it.second } / n
+            val ls = if (sxx > 1e-9) pts.sumOf { (it.first - mt) * (it.second - mh) } / sxx else 0.0
+            slope = rate ?: ls.coerceIn(-MAX_ALT_RATE_MIN_PER_MIN, MAX_ALT_RATE_MIN_PER_MIN)
+            slopeFitted = rate == null && slope == ls && sxx > 1e-9
+            offset = mh - slope * mt
+        }
+        /** Hs on the line at time t. */
+        fun at(t: Double) = offset + slope * t
+
+        /**
+         * How much a shot at time t may differ from the line by chance, relative to the scatter of one shot: a line
+         * fitted to few shots is less sure far from their middle (prediction interval). 1 with only two shots, where
+         * there is nothing to scale by.
+         */
+        fun spread(t: Double): Double = when {
+            n < 3 -> 1.0
+            slopeFitted -> sqrt(1.0 + 1.0 / n + (t - mt) * (t - mt) / sxx)
+            else -> sqrt(1.0 + 1.0 / n)
+        }
+    }
+
+    /** Shots as (minutes from the first shot, Hs in arc-minutes above the first shot's Hs). */
+    private fun points(shots: List<Shot>): List<Pair<Double, Double>> {
+        val t0 = shots.minOf { it.timeMs }; val h0 = shots.first().hsDeg
+        return shots.map { (it.timeMs - t0) / 60_000.0 to (it.hsDeg - h0) * 60.0 }
+    }
+
+    /**
+     * Shots kept for the sight (3 or more shots). Leave-one-out: each shot is checked against the line through the
+     * OTHER shots, so a bad first or last shot can't drag the line and push out a good one. The shot furthest off
+     * (allowing for the line being less sure at the ends) is dropped if it is more than `rejectMin` arc-minutes off;
+     * only one at a time, and the rest are checked again while 3 or more remain.
+     * @param rateMinPerMin the body's rate of change of altitude ([hsRate]); null = fit the slope from the shots
+     */
+    fun keptShots(shots: List<Shot>, rejectMin: Double = 3.0, rateMinPerMin: Double? = null): List<Shot> {
+        var kept = shots
+        while (kept.size >= 3) {
+            val pts = points(kept)
+            val off = pts.indices.map { i ->
+                val line = ShotLine(pts.filterIndexed { j, _ -> j != i }, rateMinPerMin)
+                val miss = abs(pts[i].second - line.at(pts[i].first))
+                miss to miss / line.spread(pts[i].first)
+            }
+            val worst = off.indices.maxBy { off[it].second }
+            if (off[worst].first <= rejectMin) break
+            kept = kept.filterIndexed { i, _ -> i != worst }
+        }
+        return kept
     }
 
     /**
      * For each shot, how far (arc-minutes, + above) it is from the straight line through the shots that are kept;
      * null with fewer than 3 shots. Used to explain a dropped shot.
      */
-    fun residuals(shots: List<Shot>): List<Double?> {
-        val kept = keptShots(shots)
-        if (shots.size < 3 || kept.size < 2) return shots.map { null }
-        val t0 = kept.first().timeMs
-        val tx = kept.map { (it.timeMs - t0) / 60_000.0 }; val hy = kept.map { it.hsDeg }
-        val mt = tx.average(); val mh = hy.average()
-        val sxx = tx.sumOf { (it - mt) * (it - mt) }
-        val slope = if (sxx > 1e-9) tx.indices.sumOf { (tx[it] - mt) * (hy[it] - mh) } / sxx else 0.0
-        return shots.map { s -> (s.hsDeg - (mh + slope * ((s.timeMs - t0) / 60_000.0 - mt))) * 60.0 }
+    fun residuals(shots: List<Shot>, rejectMin: Double = 3.0, rateMinPerMin: Double? = null): List<Double?> {
+        if (shots.size < 3) return shots.map { null }
+        val kept = keptShots(shots, rejectMin, rateMinPerMin)
+        val pts = points(shots)
+        val line = ShotLine(kept.map { k -> pts[shots.indexOf(k)] }, rateMinPerMin)
+        return pts.map { (t, h) -> h - line.at(t) }
     }
 
     /** One sentence saying why a shot was dropped, from its distance off the trend (arc-minutes, + above). */
@@ -494,7 +574,7 @@ object Workbook {
         val h = parts[0].toIntOrNull() ?: return null
         val m = parts[1].toIntOrNull() ?: return null
         val sec = if (parts.size == 3) parts[2].toDoubleOrNull() ?: return null else 0.0
-        if (h !in 0..23 || m !in 0..59 || sec < 0 || sec >= 60) return null
+        if (h !in 0..23 || m !in 0..59 || !sec.isFinite() || sec < 0 || sec >= 60) return null
         val day = 86_400_000L
         val localNear = nearMs + utcOffsetMs
         val midnight = localNear - Math.floorMod(localNear, day)
@@ -507,7 +587,8 @@ object Workbook {
 
     /**
      * Fix from two or more lines of position. Earlier lines are advanced to the time of the last sight by the boat's
-     * run between them (the change in its GPS / DR position), then crossed by least squares.
+     * run between them (the change in its GPS / DR position), then crossed by least squares in a flat frame; the
+     * frame is then centered on the answer and solved again, so a DR far from the fix doesn't bend the result.
      * Returns null with fewer than two lines or when they're too close to parallel.
      */
     fun fix(lops: List<WorkLop>): WorkFix? {
@@ -517,12 +598,23 @@ object Workbook {
             val run = distanceNm(l.dr, last.dr)
             if (run < 0.01) l else l.copy(assumed = travel(l.assumed, bearing(l.dr, last.dr), run))
         }
-        val ref = last.dr
         // nearly parallel lines can't make a fix (checked on the bare geometry)
         var g11 = 0.0; var g12 = 0.0; var g22 = 0.0
         for (l in adv) { val nx = sin(l.znDeg * DEG); val ny = cos(l.znDeg * DEG); g11 += nx * nx; g12 += nx * ny; g22 += ny * ny }
         if (g11 * g22 - g12 * g12 < 0.03 * adv.size * adv.size) return null
-        // weighted least squares: each line counts by 1 / σ² (its sight's condition and shots)
+        var ref = last.dr
+        var cross = crossAt(adv, ref)
+        repeat(3) {
+            if (distanceNm(ref, cross.first) < 0.05) return@repeat
+            ref = cross.first; cross = crossAt(adv, ref)
+        }
+        val (pos, rms, unc) = cross
+        return WorkFix(pos, last.timeMs, adv, rms, last.dr, last.drIsGps, unc)
+    }
+
+    /** Weighted least-squares crossing of lines in a flat frame (nm east / north of `ref`): position, RMS miss, uncertainty. */
+    private fun crossAt(adv: List<WorkLop>, ref: LatLon): Triple<LatLon, Double, FixUncertainty> {
+        // each line counts by 1 / σ² (its sight's condition and shots)
         var a11 = 0.0; var a12 = 0.0; var a22 = 0.0; var b1 = 0.0; var b2 = 0.0
         val rows = adv.map { l ->
             val nx = sin(l.znDeg * DEG); val ny = cos(l.znDeg * DEG)
@@ -540,9 +632,50 @@ object Workbook {
         val chi = if (n >= 3) sqrt(rows.indices.sumOf { rows[it][3] * miss[it] * miss[it] } / (n - 2)) else null
         val scale = chi?.takeIf { it > 1.0 }
         val drms = sqrt((a11 + a22) / det) * (scale ?: 1.0)
-        val unc = FixUncertainty(2.0 * drms, scale, adv)
         val pos = LatLon(ref.lat + y / 60.0, norm180(ref.lon + x / 60.0 / cos(ref.lat * DEG)))
-        return WorkFix(pos, last.timeMs, adv, rms, last.dr, last.drIsGps, unc)
+        return Triple(pos, rms, FixUncertainty(2.0 * drms, scale, adv))
+    }
+
+    /**
+     * Work every sight and cross the lines. If the fix lands more than [REWORK_NM] from where the sights were worked
+     * (a poor DR), the sights are worked again from the fix (assumed positions chosen near it) and crossed again, up
+     * to [MAX_PASSES] passes: a straight line of position is only a good stand-in for its circle near the assumed
+     * position. Not at ADVANCED, where the navigator chooses the assumed positions. A sight that can't be worked
+     * (bad data) gives an empty SightWork rather than stopping the others.
+     */
+    fun solve(sights: List<WorkbookSight>, set: WorkbookSettings): Pair<List<SightWork>, WorkFix?> {
+        fun workAll(shift: LatLon?) = sights.map { s ->
+            runCatching { work(s, set, shift) }.getOrNull() ?: SightWork(s, null, 0, emptyList(), emptyList(), null)
+        }
+        var moved: LatLon? = null                 // the shift used for the current pass
+        var works = workAll(null)
+        var best = runCatching { fix(works.mapNotNull { it.lop }) }.getOrNull()
+        var passes = 1
+        while (set.level != SkillLevel.ADVANCED && best != null && passes < MAX_PASSES) {
+            val d = best.drAtFix
+            val from = moved?.let { LatLon(d.lat + it.lat, d.lon + it.lon) } ?: d
+            if (distanceNm(from, best.position) <= REWORK_NM) break
+            val next = LatLon(best.position.lat - d.lat, norm180(best.position.lon - d.lon))
+            val w2 = workAll(next)
+            val f2 = runCatching { fix(w2.mapNotNull { it.lop }) }.getOrNull() ?: break
+            moved = next; works = w2; best = f2; passes++
+        }
+        return works to best?.copy(iterations = passes)
+    }
+
+    /**
+     * Plain-language warnings about the lines and the fix: a line far from the GPS / DR position (more than
+     * [WARN_MISS_NM]), or the sights re-worked because the DR was far off.
+     */
+    fun warnings(works: List<SightWork>, fix: WorkFix?): List<String> = buildList {
+        for (w in works) {
+            val l = w.lop ?: continue
+            val miss = l.drMissNm
+            if (miss > WARN_MISS_NM) add("${l.bodyName}: the line passes %.0f nm from your %s position. Check the time, the sextant reading and the %s."
+                .format(miss, if (l.drIsGps) "GPS" else "DR", if (l.drIsGps) "body" else "DR"))
+        }
+        if (fix != null && fix.iterations > 1)
+            add("The first fix was more than %.0f nm from the %s, so the sights were worked again from the fix.".format(REWORK_NM, if (fix.drIsGps) "GPS position" else "DR"))
     }
 
     // ---------------------------------------------------------------- typing values (ADVANCED)
@@ -551,9 +684,22 @@ object Workbook {
      * Read a typed value for a line. Accepts degrees and minutes ("223 14.2", "223°14.2'"), decimal degrees
      * ("223.237"), hemisphere letters for Dec / latitude / longitude ("S 9 32.4", "86 12.0W", "-9 32.4"),
      * and plain signed numbers for corrections ("-3.1"), bearings ("78.4") and intercepts ("+4.2", "4.2A").
-     * Returns degrees for angles, arc-minutes for corrections, nm for the intercept; null if it can't be read.
+     * Returns degrees for angles, arc-minutes for corrections, nm for the intercept; null if it can't be read, if it
+     * isn't a finite number ("NaN", "1e999") or if it is out of range for its kind ([inRange]).
      */
-    fun parse(text: String, kind: FieldKind): Double? {
+    fun parse(text: String, kind: FieldKind): Double? = parseRaw(text, kind)?.takeIf { it.isFinite() && inRange(it, kind) }
+
+    /** Whether a value can be right for its kind: latitude and Dec within ±90°, longitude ±180°, angles 0–360°, ... */
+    fun inRange(v: Double, kind: FieldKind): Boolean = when (kind) {
+        FieldKind.LAT, FieldKind.DEC, FieldKind.ALTITUDE -> abs(v) <= 90.0
+        FieldKind.LON -> abs(v) <= 180.0
+        FieldKind.ANGLE, FieldKind.BEARING -> v >= 0.0 && v <= 360.0
+        FieldKind.MINUTES -> abs(v) <= 600.0          // no correction is anywhere near 10°
+        FieldKind.NM -> abs(v) <= 10_800.0            // half way round the world
+    }
+
+    /** [parse] without the finite / range checks. */
+    private fun parseRaw(text: String, kind: FieldKind): Double? {
         var s = text.trim().uppercase().replace("°", " ").replace("'", " ").replace("′", " ").replace(",", ".")
             .replace("−", "-")
         if (s.isEmpty()) return null

@@ -94,7 +94,7 @@ object SightPlanner {
      * Plan for the day containing `dayStartMs` (start of the local day, UTC ms) at `pos`.
      * @param heightOfEyeFt used for the horizon distance note
      */
-    fun plan(pos: LatLon, dayStartMs: Long, heightOfEyeFt: Double = 8.0): SightPlan {
+    fun plan(pos: LatLon, dayStartMs: Long, heightOfEyeFt: Double = DEFAULT_HEIGHT_OF_EYE_FT): SightPlan {
         val tw = twilight(pos, dayStartMs)
         val notes = mutableListOf<String>()
         val morning = tw.nauticalDawn?.let { nd -> tw.civilDawn?.let { cd -> starSession(pos, nd, cd, false, tw) } }
@@ -102,7 +102,7 @@ object SightPlanner {
         val sun = sunPlan(pos, tw)
         val moon = moonPlan(pos, tw)
         val horizon = SightReduction.horizonDistanceNm(heightOfEyeFt)
-        notes += "Your sea horizon is about %.1f nm away. If the far shore is closer than that in the direction you're shooting, use the dip-short correction or choose another body."
+        notes += "Your sea horizon is about %.1f nm away. The app's dip correction assumes that sea horizon, so if the far shore is closer than that in the direction you're shooting, choose a body over open water instead."
             .format(horizon)
         if (sun.azimuthChangeDeg != null && sun.azimuthChangeDeg < 30.0)
             notes += "The Sun's bearing changes less than 30° between the morning and afternoon sights today, so a Sun-only running fix will be weak. Add a Moon or Venus sight if you can."

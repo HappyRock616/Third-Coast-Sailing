@@ -41,6 +41,9 @@ sealed class SkyBody(val name: String, val kind: BodyKind) {
 
     override fun toString() = name
 
+    /** A stable id for saving: "sun", "moon", "venus", ... or "hr<number>" for a star (its Bright Star Catalogue number). */
+    val id: String get() = if (this is Star) "hr${star.hr}" else name.lowercase()
+
     companion object {
         val Venus = Planet("Venus", Body.Venus)
         val Mars = Planet("Mars", Body.Mars)
@@ -58,6 +61,9 @@ sealed class SkyBody(val name: String, val kind: BodyKind) {
         val all: List<SkyBody> by lazy { listOf(Sun, Moon) + planets + stars }
 
         fun byName(name: String): SkyBody? = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
+
+        /** The body with a saved [id], or null. */
+        fun byId(id: String): SkyBody? = all.firstOrNull { it.id == id }
     }
 }
 
@@ -74,6 +80,13 @@ data class AlmanacEntry(
     val mag: Double,
 )
 
+/** Sun and planets: the GHA increment per hour in the printed increments table (degrees). */
+const val SUN_GHA_DEG_PER_H = 15.0
+/** Aries: the GHA increment per hour in the printed increments table, 15°02.46′ (degrees). */
+const val ARIES_GHA_DEG_PER_H = 15.0410686
+/** Moon: the GHA increment per hour in the printed increments table, 14°19.0′ (degrees); v is the excess over it. */
+const val MOON_GHA_DEG_PER_H = 14.0 + 19.0 / 60.0
+
 /** Almanac values (GHA, declination, SHA, semi-diameter, HP, ...) worked out for any instant from Astronomy Engine. */
 object Almanac {
 
@@ -89,8 +102,12 @@ object Almanac {
     /** Greenwich Hour Angle of Aries (the first point of Aries): apparent sidereal time in degrees. */
     fun ghaAries(ms: Long): Double = norm360(siderealTime(time(ms)) * 15.0)
 
-    /** Almanac values for a body at an instant (UTC ms). */
-    fun entry(body: SkyBody, ms: Long): AlmanacEntry {
+    /**
+     * Almanac values for a body at an instant (UTC ms).
+     * @param withMagnitude false skips the Sun / Moon / planet magnitude (a separate, slower calculation) when only
+     *                      GHA, Dec, HP and SD are needed; mag is then NaN for them (stars keep their catalog value)
+     */
+    fun entry(body: SkyBody, ms: Long, withMagnitude: Boolean = true): AlmanacEntry {
         val t = time(ms)
         val gast = siderealTime(t) * 15.0
         val (raDeg, dec, distAu) = apparentRaDec(body, t)
@@ -110,11 +127,12 @@ object Almanac {
             is SkyBody.Planet -> { hp = SOLAR_PARALLAX_1AU_ARCSEC / distAu / 60.0; sd = 0.0 }
             is SkyBody.Star -> { hp = 0.0; sd = 0.0 }
         }
-        val mag = when (body) {
-            is SkyBody.Star -> body.star.mag
-            SkyBody.Sun -> illumination(Body.Sun, t).mag
-            SkyBody.Moon -> illumination(Body.Moon, t).mag
-            is SkyBody.Planet -> illumination(body.body, t).mag
+        val mag = when {
+            body is SkyBody.Star -> body.star.mag
+            !withMagnitude -> Double.NaN
+            body is SkyBody.Planet -> illumination(body.body, t).mag
+            body == SkyBody.Moon -> illumination(Body.Moon, t).mag
+            else -> illumination(Body.Sun, t).mag
         }
         val sha = if (body is SkyBody.Star) norm360(360.0 - raDeg) else null
         return AlmanacEntry(body, ms, gha, dec, sha, distAu, hp, sd, mag)

@@ -36,6 +36,7 @@ object Baro {
     private const val PREFS = "tcs_baro"
     private const val KEEP_MS = 14 * 24 * BaroMath.HOUR
     private const val BURST_MS = 2_000L
+    private const val TRIM_MARGIN_MS = 24 * BaroMath.HOUR
 
     /** Changes whenever the log does (Compose reads it to redraw). */
     var version by mutableIntStateOf(0)
@@ -59,8 +60,11 @@ object Baro {
         cache?.let { return it.toList() }
         val cutoff = System.currentTimeMillis() - KEEP_MS
         val pts = runCatching {
+            // a damaged line is skipped (one bad line must not empty the whole log)
             file(c).readLines().mapNotNull { l ->
-                val p = l.split(','); if (p.size < 2) null else BaroPoint(p[0].toLong(), p[1].toDouble())
+                val p = l.split(',')
+                val t = p.getOrNull(0)?.toLongOrNull(); val v = p.getOrNull(1)?.toDoubleOrNull()
+                if (t == null || v == null || !v.isFinite() || v !in 300.0..1100.0) null else BaroPoint(t, v)   // e.g. a cut-off last line
             }
         }.getOrDefault(emptyList()).filter { it.t >= cutoff }.sortedBy { it.t }.toMutableList()
         cache = pts
@@ -73,9 +77,16 @@ object Baro {
         val pts = cache ?: log(c).toMutableList().also { cache = it }
         pts += p
         val cutoff = System.currentTimeMillis() - KEEP_MS
-        if (pts.first().t < cutoff) {                               // drop old readings, rewrite the file now and then
+        // drop old readings and rewrite the file about once a day (when the oldest is a day past the limit), not on
+        // every reading once the log is full
+        if (pts.first().t < cutoff - TRIM_MARGIN_MS) {
             pts.removeAll { it.t < cutoff }
-            runCatching { file(c).writeText(pts.joinToString("") { "${it.t},${"%.2f".format(java.util.Locale.US, it.hPa)}\n" }) }
+            // written to a temp file and renamed, so a kill mid-write can't lose the log
+            runCatching {
+                val tmp = java.io.File(file(c).path + ".tmp")
+                tmp.writeText(pts.joinToString("") { "${it.t},${"%.2f".format(java.util.Locale.US, it.hPa)}\n" })
+                if (!tmp.renameTo(file(c))) tmp.delete()
+            }
         } else runCatching { file(c).appendText("${p.t},${"%.2f".format(java.util.Locale.US, p.hPa)}\n") }
         version++
     }
@@ -121,15 +132,16 @@ object Baro {
         val sensor = sm.getDefaultSensor(Sensor.TYPE_PRESSURE) ?: run { done(null); return }
         val wake = (c.getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ThirdCoast:baro").apply { acquire(BURST_MS + 3_000L) }
-        val values = ArrayList<Float>()
+        val readings = ArrayList<Float>()
+        val lock = Any()
         val listener = object : SensorEventListener {
-            override fun onSensorChanged(e: SensorEvent) { synchronized(values) { values += e.values[0] } }
+            override fun onSensorChanged(e: SensorEvent) { synchronized(lock) { readings += e.values[0] } }
             override fun onAccuracyChanged(s: Sensor?, a: Int) {}
         }
         sm.registerListener(listener, sensor, 200_000)                  // about 5 per second
         Handler(Looper.getMainLooper()).postDelayed({
             sm.unregisterListener(listener)
-            val v = synchronized(values) { values.filter { it in 300f..1100f }.sorted() }
+            val v = synchronized(lock) { readings.filter { it in 300f..1100f }.sorted() }
             if (wake.isHeld) wake.release()
             done(if (v.isEmpty()) null else v[v.size / 2].toDouble())
         }, BURST_MS)
@@ -174,9 +186,12 @@ class BaroService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // "special use" type exists from Android 14; older versions take the plain foreground service
-        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTE_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        else startForeground(NOTE_ID, notification())
-        if (!Baro.isOn(this) || !Baro.hasSensor(this)) { stopSelf(); return START_NOT_STICKY }
+        // (Android can refuse a foreground start from the background; then logging waits until the app is opened)
+        val started = runCatching {
+            if (Build.VERSION.SDK_INT >= 34) startForeground(NOTE_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            else startForeground(NOTE_ID, notification())
+        }.isSuccess
+        if (!started || !Baro.isOn(this) || !Baro.hasSensor(this)) { stopSelf(); return START_NOT_STICKY }
         Baro.burst(this) { v ->
             if (v != null) Baro.add(this, BaroPoint(System.currentTimeMillis(), v))
             schedule(Baro.nextIntervalMs(this))
@@ -205,16 +220,12 @@ class BaroService : Service() {
 
     /** The low-priority ongoing "Barograph logging" notification (creates its channel the first time); tapping it opens the app. */
     private fun notification(): Notification {
-        val nm = getSystemService(NotificationManager::class.java)
-        if (nm.getNotificationChannel(CHANNEL) == null)
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Barograph", NotificationManager.IMPORTANCE_LOW))
-        val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE)
+        ensureChannel(this, CHANNEL, "Barograph", NotificationManager.IMPORTANCE_LOW)
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
             .setContentTitle("Barograph logging")
             .setContentText("Pressure every 5 minutes (every minute when the weather turns)")
-            .setContentIntent(open)
+            .setContentIntent(openAppIntent(this))
             .setOngoing(true)
             .build()
     }
