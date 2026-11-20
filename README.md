@@ -1,10 +1,14 @@
 # ⛵ Third Coast Sailing
 
+![Third Coast Sailing: sailing charts for the Great Lakes and the US coast. Free. No ads. No tracking. No accounts.](docs/images/hero.png)
+
 ### An Android app for sailing the Great Lakes and the US coast
 
 Charts, weather, routing, safety tools and a celestial navigation trainer, for sailors on the five Great Lakes and 18 US coastal regions from Maine to Texas, the West Coast and Hawaii. Free, open source, and private by design.
 
 > **Not for navigation.** Official NOAA charts and notices govern. Use at your own risk.
+
+![US coast charts, weather routing, wind and waves, live buoys and the celestial trainer](docs/images/gallery.png)
 
 ## 🌎 Why this exists
 
@@ -40,7 +44,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### ⭐ Interactive star finder with instructions
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_star_finder.png" width="220" alt="3D star finder with the boat and named stars">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7_star_finder.png" width="220" alt="3D star finder with the boat and named stars">
 </p>
 
 - 📱 A 3D sky that turns with your phone. Hold it up and the stars on screen line up with the stars overhead.
@@ -81,7 +85,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 🛤️ Weather routing
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_weather_routing.png" width="220" alt="Weather-optimized route over the wave forecast">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_weather_routing.png" width="220" alt="Weather-optimized route over the wave forecast">
 </p>
 
 - 📍 Drop pins anywhere: a green start, numbered waypoints and a 🏁 finish, with each leg's distance and magnetic bearing. Plan "what if" passages far from where you are, or snap the start onto the boat to get VMG and ETA as you sail.
@@ -91,7 +95,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 🌊 Wave and wind forecast overlays
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_wind_waves.png" width="220" alt="Wind barbs and animated wave crests with forecast slider">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_wind_waves.png" width="220" alt="Wind barbs and animated wave crests with forecast slider">
 </p>
 
 - 💨 Wind speed and gusts as a color field over the water, plus wind barbs.
@@ -103,7 +107,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 📟 Sailing instrument from GPS and the wind forecast
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_sailing_gauge.png" width="220" alt="Heading-up wind gauge with polar">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5_sailing_gauge.png" width="220" alt="Heading-up wind gauge with polar">
 </p>
 
 - 🧭 A heading-up wind gauge built from your GPS course and speed and the forecast wind at your position.
@@ -114,7 +118,7 @@ The goal is to make sailing affordable at any scale, whether you're on a dinghy,
 ### 🛟 Live buoy data on the chart with history graphs
 
 <p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_live_buoy.png" width="220" alt="Live NOAA buoy report with 24-hour graph">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6_live_buoy.png" width="220" alt="Live NOAA buoy report with 24-hour graph">
 </p>
 
 - 🎨 NOAA NDBC stations colored by wind speed and ringed for waves over 3 ft or 5 ft.
