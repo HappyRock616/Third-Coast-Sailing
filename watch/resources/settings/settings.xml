@@ -1,0 +1,14 @@
+<settings>
+    <setting propertyKey="@Properties.celestial" title="@Strings.CelestialTitle">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.CelestialOff</listEntry>
+            <listEntry value="1">@Strings.CelestialTraining</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.holdMs" title="@Strings.HoldTitle">
+        <settingConfig type="numeric" min="500" max="750" />
+    </setting>
+    <setting propertyKey="@Properties.sightDelay" title="@Strings.DelayTitle">
+        <settingConfig type="numeric" min="0" max="5" />
+    </setting>
+</settings>

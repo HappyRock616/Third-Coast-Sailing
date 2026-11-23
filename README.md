@@ -10,6 +10,12 @@ Charts, weather, routing, safety tools and a celestial navigation trainer, for s
 
 ![US coast charts, weather routing, wind and waves, live buoys and the celestial trainer](docs/images/gallery.png)
 
+## ⌚ Watch companion for Garmin (coming soon)
+
+![Third Coast Sailing Watch Companion: a Garmin companion to the Android app](docs/images/watch-companion.png)
+
+A **companion app** for Garmin watches is in testing. It works together with this Android app (it needs Third Coast Sailing running on your phone) and puts the sailing gauge, the next mark, the anchor watch (set and lift the anchor from your wrist) and a one-tap MOB on your wrist. It works with Gadgetbridge today, and Garmin Connect support is being tested. It lives in [`watch/`](watch/), a separate project from the Android app, and will be published on the Garmin Connect IQ Store when it's ready.
+
 ## 🌎 Why this exists
 
 Nearly everything a sailor on US waters needs to know is already measured, modeled and published by NOAA: the charts, the lake depths, the wind and wave forecasts, and the live buoy reports. That data is paid for by citizens, and it belongs to all of us.

@@ -1,0 +1,5 @@
+<properties>
+    <property id="celestial" type="number">0</property>
+    <property id="holdMs" type="number">600</property>
+    <property id="sightDelay" type="number">0</property>
+</properties>

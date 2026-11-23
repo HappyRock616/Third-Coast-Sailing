@@ -35,3 +35,11 @@ Thumbs.db
 _moved_aside/
 app/release/
 app/app/release/
+
+# ---- Garmin watch companion (watch/): builds, simulator output and keys never committed
+watch/bin/
+watch/store/
+watch/docs/sim/
+*.prg
+*.iq
+*.der

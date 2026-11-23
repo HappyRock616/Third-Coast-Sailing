@@ -1,0 +1,10 @@
+<strings>
+    <string id="AppName">Third Coast Sailing</string>
+
+    <string id="CelestialTitle">Celestial (sight page)</string>
+    <string id="CelestialOff">Off</string>
+    <string id="CelestialTraining">Training</string>
+
+    <string id="HoldTitle">Hold time to open Set anchor (ms)</string>
+    <string id="DelayTitle">Sight mark delay (seconds counted back)</string>
+</strings>
