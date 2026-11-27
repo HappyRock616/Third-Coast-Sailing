@@ -8,13 +8,16 @@ them. It needs checking.
 
 ## 1. Summary
 
+**Now 107 devices** (2026-11-24: rectangular watches, bike/handheld units and the monochrome Instinct / Descent G1 dropped after the simulator review, see the rows below; HappyRock's rule: a model that looks cluttered or doesn't work is not built). Instinct dropped: its sub-screen window cuts the Next mark box and the phone icon, and the release build peaks at 88 of 94 KB.
+
+
 | Tier | Devices | What they get |
 |---|---|---|
 | **F – Full** | **101** | Everything as designed. Round colour watches, CIQ 3.2+ and 768 KB+ for apps. Most current models: fēnix 5 Plus → 9, epix, Enduro 3/4, Forerunner 165–970 (incl. 245 Music, 255, 265, 570, 955, 965), Venu 1–4, vívoactive 3 Music/4/5/6, MARQ, Descent Mk2/Mk3/G2, D2, Approach S50/S70/S72, Instinct 3 AMOLED and Crossover AMOLED |
-| **R – Rectangular watch** | 4 | Everything, with the rectangular layout (section 3.3). Venu Sq Music, Venu Sq 2 / 2 Music, Venu X1 |
+| ~~**R – Rectangular watch**~~ | 0 (was 4) | **Dropped 2026-11-24** (simulator review: text overflows boxes and panels on Venu Sq 2). Venu Sq Music, Venu Sq 2 / 2 Music, Venu X1 |
 | **L – Lite** (128 KB) | 6 | Everything except the Sight page, with smaller buffers (section 3.4). fēnix 6, 6S, Enduro (1st), Forerunner 245, 55, Venu Sq |
-| **M – Monochrome** | 8 | Mono theme and Lite limits; MOB time shown in the round sub-screen. Instinct 2 / 2S / 2X / Crossover, Instinct 3 Solar, Instinct E 40/45, Descent G1 |
-| **N – Bike and handheld** | 20 | Everything, rectangular layout, **tones instead of vibration**. Edge 530–1060, Edge Explore 2/3, Edge MTB, GPSMAP 67 / H1, Montana 7xx, eTrex Touch |
+| ~~**M – Monochrome**~~ | 0 (was 8) | **Dropped 2026-11-24** (sub-screen window cuts the Next mark box and phone icon; 88 of 94 KB). Mono theme and Lite limits; MOB time shown in the round sub-screen. Instinct 2 / 2S / 2X / Crossover, Instinct 3 Solar, Instinct E 40/45, Descent G1 |
+| ~~**N – Bike and handheld**~~ | 0 (was 20) | **Dropped 2026-11-24** (simulator review: the round layout fills a third of the screen and the text is too small). Edge, GPSMAP, Montana, eTrex. Could return with their own layout |
 | **X – Not supported** | 41 | See section 2 |
 
 **139 of 180 devices (77%)** are supported at launch with `minApiLevel 3.2.0`, the same as Just Go 5K. That covers

@@ -15,6 +15,9 @@ class MarkPage extends Page {
     function id() as Number { return 1; }
     function gps() as Boolean { return true; }
     function tickMs() as Number { return 1000; }
+    // Redraw when the boat, link or ETA minute changed; every tick while the ring blinks (under 30 s to the mark)
+    var blinking as Boolean = false;
+    function sig() as String? { return blinking ? null : Model.sigBase() + "/" + (Model.now() / 60); }
     function holdAt(f as Draw.Frame, x as Number, y as Number) as Number { return hasRoute() ? 1500 : 0; }   // deliberate: skips a mark
     function holdMs() as Number { return hasRoute() ? 1 : 0; }
     function holdDone() as Void {
@@ -61,7 +64,9 @@ class MarkPage extends Page {
         var total = 0.0, lens = [];
         for (var i = 1; i <= cnt; i++) { var l = Nav.distNm(Model.pins[i - 1], Model.pins[i]); lens.add(l); total += l; }
         var gap = 2.5, k = total > 0 ? (360.0 - cnt * gap) / total : 0.0, a = gap / 2, boatA = 0.0;
-        var blink = togo < 3 * Nav.POINT_REACHED_NM && (System.getTimer() / 250) % 2 == 0;
+        var mins = Nav.minutesToGo(togo, v);
+        blinking = mins != null && (mins as Float) * 60 < 30;               // under 30 s to the mark: slow blink
+        var blink = blinking && (System.getTimer() / 1000) % 2 == 0;
         for (var i = 0; i < cnt; i++) {
             var a0 = a, a1 = a + (lens[i] as Float) * k, leg = i + 1;
             if (leg < n) { Draw.arc(dc, f, 180, a0, a1, 16, Theme.NAVY_L); }
@@ -88,21 +93,27 @@ class MarkPage extends Page {
         Draw.poly(dc, f, bug[0], bug[1], [[0, -9], [9, 6], [-9, 6]], rel, 1.0, Theme.ORANGE);
 
         Draw.sidePanels(dc, f, "VMC", v.format("%.1f"), "SOG", sog.format("%.1f"), "kt");
-        Draw.text(dc, f.cx, f.y(64), n == 0 ? "TO START" : "MARK " + n.format("%d") + " of " + cnt.format("%d"), f.d(17), Theme.MIST, 0);
-        Draw.box(dc, f.x(124), f.y(78), f.d(142), f.d(60), f.d(13), Theme.NAVY, Theme.ORANGE, f.d(3));
-        Draw.num(dc, f.x(189), f.y(108), Nav.deg3(Nav.toMagnetic(brgT, Model.magVar)), f.d(40), Theme.FOAM, true);
-        Draw.text(dc, f.x(250), f.y(116), "M", f.d(16), Theme.MIST, 0);
-        Draw.num(dc, f.cx, f.y(196), togo < 10 ? togo.format("%.2f") : togo.format("%.1f"), f.d(56), Theme.FOAM, false);
-        Draw.text(dc, f.cx, f.y(234), "nm", f.d(16), Theme.MIST, 0);
-        var mins = Nav.minutesToGo(togo, v);
+        // one tall orange box, four fields for the next mark: which mark, bearing, distance, time to go + ETA
+        Draw.box(dc, f.x(122), f.y(58), f.d(146), f.d(264), f.d(14), Theme.NAVY, Theme.ORANGE, f.d(3));
+        dc.setColor(Theme.FADE, Graphics.COLOR_TRANSPARENT);
+        Draw.setPen(dc, f.d(2));
+        var dv = [98, 160, 240];
+        for (var i = 0; i < dv.size(); i++) { dc.drawLine(f.x(132), f.y(dv[i]), f.x(258), f.y(dv[i])); }
+        Draw.text(dc, f.cx, f.y(78), n == 0 ? "START" : "MARK " + n.format("%d") + "/" + cnt.format("%d"), f.d(17), Theme.MIST, f.d(132));
+        Draw.num(dc, f.cx, f.y(129), Nav.deg3(Nav.toMagnetic(brgT, Model.magVar)), f.d(40), Theme.FOAM, true);
+        Draw.num(dc, f.cx, f.y(192), togo < 10 ? togo.format("%.2f") : togo.format("%.1f"), f.d(48), Theme.FOAM, false);
+        Draw.text(dc, f.cx, f.y(225), "nm", f.d(14), Theme.MIST, 0);
         var tg = "--:--";
-        if (mins != null) { var mm = Math.round(mins as Float).toNumber(); tg = (mm / 60).format("%d") + ":" + (mm % 60).format("%02d"); }
-        Draw.num(dc, f.x(170), f.y(278), tg, f.d(28), Theme.FOAM, false);
-        Draw.text(dc, f.x(250), f.y(280), "to go", f.d(18), Theme.MIST, 0);
-        if (mins != null && !f.small()) {
-            var eta = Gregorian.info(Time.now().add(new Time.Duration(((mins as Float) * 60).toNumber())), Time.FORMAT_SHORT);
-            Draw.text(dc, f.cx, f.y(312), "ETA " + eta.hour.format("%02d") + ":" + eta.min.format("%02d"), f.d(18), Theme.MIST, 0);
+        // time to go: m:ss under an hour, else h:mm:ss (number fonts have no letters)
+        if (mins != null) {
+            var sec = Math.round((mins as Float) * 60).toNumber();
+            tg = sec < 3600 ? (sec / 60).format("%d") + ":" + (sec % 60).format("%02d") : (sec / 3600).format("%d") + ":" + (sec % 3600 / 60).format("%02d") + ":" + (sec % 60).format("%02d");
         }
-        Draw.holdRing(dc, f, host == null ? 0.0 : (host as Host).holdFrac());
+        Draw.num(dc, f.cx, f.y(266), tg, f.d(28), Theme.FOAM, false);
+        if (mins != null) {
+            var eta = Gregorian.info(Time.now().add(new Time.Duration(((mins as Float) * 60).toNumber())), Time.FORMAT_SHORT);
+            Draw.text(dc, f.cx, f.y(298), "ETA " + eta.hour.format("%02d") + ":" + eta.min.format("%02d"), f.d(15), Theme.MIST, f.d(136));
+        }
+        Draw.holdRing(dc, f, hostOf() == null ? 0.0 : (hostOf() as Host).holdFrac());
     }
 }

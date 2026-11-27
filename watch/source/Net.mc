@@ -12,7 +12,11 @@ module Net {
     const PORTS = [52741, 52742];
     const WAIT_POLL_MS = 3000;          // while waiting for Allow on the phone
     const KEEPALIVE_MS = 120000;        // at least one request every 2 min while open (section 9.4)
-    const RETRY_MS = 10000;             // TCS not reachable: try again
+    // TCS not reachable: try again after 10 s, 30 s, 1 min, 2 min, then every 5 min; reset on success (BATTERY_REVIEW B2)
+    const RETRY_MS = [10000, 30000, 60000, 120000, 300000];
+    const PAIR_WAIT_MAX_MS = 180000;    // stop asking after 3 min with no Allow (the phone's pairing window) (B3)
+    var waitSince as Number = 0;        // ms, when the current wait for Allow began (0 = not waiting)
+    var gaveUp as Boolean = false;      // waited 3 min for Allow: no more polls until the user retries
 
     var supported as Boolean = false;
     var port as Number = 0;             // index into PORTS
@@ -25,7 +29,16 @@ module Net {
     var lastCode as Number = 0;
     var latency as Number = 0;          // ms, last successful round trip
     var canPush as Boolean = true;      // reply "p": false = TCS can't push to this watch, so poll (section 9.6)
-    const NOPUSH_POLL_MS = 5000;
+    // No pushes (Garmin Connect): poll every 15 s, backing off to 30 s after 4 empty replies in a row and 60 s after 8;
+    // any reply with news, any key or touch (Net.activity) snaps it back to 15 s. Every 5 s while a MOB is active, the
+    // anchor alarm sounds or the fix is lost. Only while the app is open: nothing runs in the background.
+    const NOPUSH_URGENT_MS = 5000;
+    var emptyN as Number = 0;           // empty poll replies in a row
+    function noPushPoll() as Number {
+        if (Model.mobOn || Model.alarm == 1 || Model.fixState == 2) { return NOPUSH_URGENT_MS; }
+        return emptyN < 4 ? 15000 : (emptyN < 8 ? 30000 : 60000);
+    }
+    function activity() as Void { emptyN = 0; }
     var pollC as Number = 0;            // counter for empty polls (section 9.3 "c")
 
     function start() as Void {
@@ -52,19 +65,36 @@ module Net {
             if (q[2] == msg[2] && q[1] == msg[1]) { return; }
         }
         queue.add(msg);
+        // bounded: while TCS is unreachable only the newest 30 wait (reliable ones are also kept in the outbox)
+        while (queue.size() > 30) { queue = queue.slice(1, null); }
         pump();
     }
 
     function poll() as Void { needPoll = true; pump(); }
 
+    function retryDelay() as Number {
+        var i = fails < 1 ? 0 : fails - 1;
+        return RETRY_MS[i > 4 ? 4 : i] as Number;
+    }
+
+    // Start again now (the user opened the link screen, tapped Try again, or woke the app)
+    function retryNow() as Void { fails = 0; gaveUp = false; waitSince = 0; lastReq = -1000000; }
+
     function onTimer() as Void {
-        if (busy) { return; }
+        if (busy || Idle.asleep || gaveUp) { return; }
         var t = System.getTimer();
         if (!Link.trusted) {
-            // waiting for Allow: keep asking every 3 s; TCS not answering: every 10 s
-            var every = (Link.pairState == Link.PAIR_WAIT) ? WAIT_POLL_MS : RETRY_MS;
+            // waiting for Allow: ask every 3 s for up to 3 min; TCS not answering: back off
+            var every = retryDelay();
+            if (Link.pairState == Link.PAIR_WAIT) {
+                if (waitSince == 0) { waitSince = t; }
+                if (t - waitSince >= PAIR_WAIT_MAX_MS) { gaveUp = true; Log.p("no Allow in 3 min: stopped asking"); WatchUi.requestUpdate(); return; }
+                every = WAIT_POLL_MS;
+            } else {
+                waitSince = 0;
+            }
             if (t - lastReq >= every) { Link.hello(); }
-        } else if (t - lastReq >= (canPush ? KEEPALIVE_MS : NOPUSH_POLL_MS)) {
+        } else if (t - lastReq >= (canPush ? KEEPALIVE_MS : noPushPoll())) {
             poll();
         }
     }
@@ -120,6 +150,7 @@ module Net {
             if (fails > 0 || t - lastOk > 60000) { Log.p("http ok " + (t - lastReq) + "ms port " + PORTS[port]); }
             fails = 0; lastOk = t; latency = t - lastReq;
             var m = (data as Dictionary)["m"];
+            if (m instanceof Array && (m as Array).size() > 0) { emptyN = 0; } else { emptyN++; }
             if (m instanceof Array) {
                 for (var i = 0; i < (m as Array).size(); i++) {
                     var a = (m as Array)[i];

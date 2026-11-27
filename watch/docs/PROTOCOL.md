@@ -41,7 +41,7 @@ for F-Droid, GitHub and Play.
 | 5 | `DEPTH` | `depthFt` (shallow end of the charted range at the boat), or null | Every 30 s while page = Gauge |
 | 6 | `ROUTE` | `next, [[latE6, lonE6], …]` (pins in order; pin 0 = start) | On `HELLO`; when pins change. ≤ 6 pins (TCS `MAX_ROUTE_POINTS`) |
 | 7 | `ROUTE_NEXT` | `next` | When the phone advances (`POINT_REACHED_NM`) or accepts `NEXT_MARK` |
-| 8 | `ANCHOR` | `on, latE6, lonE6, radiusFt, alarm(0 ok / 1 alarm / 2 silenced), silencedUntil, gpsLost(bool)` | On `HELLO`; on any change; with an alarm, immediately (any page) |
+| 8 | `ANCHOR` | `on, latE6, lonE6, radiusFt, alarm(0 ok / 1 alarm / 2 silenced), silencedUntil, fixState(0 good / 1 stale / 2 lost; TCS decides; older TCS sends a bool "lost")` | On `HELLO`; on any change; with an alarm, immediately (any page) |
 | 9 | `ANCHOR_TRACE` | `chunk, chunks, t0, intervalS, [dxFt, dyFt, dxFt, dyFt, …]` (offsets from the anchor, east and north) | When page becomes Anchor: the last 6 h (Full) or 3 h (Lite), 60 points per chunk |
 | 10 | `ANCHOR_FIX` | `t, dxFt, dyFt, fixAgeS, accuracyFt` | Each new phone fix (every 2 min) while page = Anchor |
 | 11 | `MOB` | `on, latE6, lonE6, tMark, source(0 phone / 1 watch)` | On any change (any page), in the full set after pairing, and as `STATE.mobOn`. **Latest wins** (the watch sends no ACKs). While a watch `MOB_MARK` / `MOB_RESET` is waiting for its ACK, the watch keeps its own MOB state |
@@ -54,7 +54,7 @@ for F-Droid, GitHub and Play.
 
 | Type | Name | Fields after `[ver, type, seq]` | When |
 |---|---|---|---|
-| 101 | `HELLO` | `appVersion, deviceId(string, Garmin part number), caps` (bits: 1 compass, 2 touch, 4 mono, 8 lite, 16 vibrate), `watchTime, watchId, hasToken(bool), pairCode or null`. **The token itself is never sent** | Each new Bluetooth connection, and after 5 quiet minutes as a check |
+| 101 | `HELLO` | `appVersion (major*10000 + minor*100 + patch, e.g. 101 = 0.1.1), deviceId(string, Garmin part number), caps` (bits: 1 compass, 2 touch, 4 mono, 8 lite, 16 vibrate), `watchTime, watchId, hasToken(bool), pairCode or null`. **The token itself is never sent** | Each new Bluetooth connection, and after 5 quiet minutes as a check |
 | 102 | `PAGE` | `page` (0 Gauge, 1 Next mark, 2 Anchor, 3 Conditions, 4 Sight, 5 MOB, 6 Set anchor), `screenOn(bool)` | On every page change, and when the display goes off/on if the device reports it |
 | 103 | `MOB_MARK` ★ | `tMark, latE6, lonE6, fixAgeS` (watch GPS, only if its fix is at most 10 s old; else all three null) | MOB tapped on the watch. The phone uses its own fix if it has a fresh one, else the watch's. Never refused for age |
 | 104 | `MOB_RESET` ★ | `tMark` (of the MOB being reset) | Hold 5 s completed |
@@ -258,4 +258,4 @@ message is too big to push (for example `POLAR` after a polar change), or when t
 - With `"p": false` the watch polls every **5 s** while open, so data arrives in replies instead of pushes. With
   `true` (the default) it keeps the 2-minute keep-alive.
 - Open: whether Garmin Connect forwards a watch's `makeWebRequest` to `http://127.0.0.1` on the phone. Test with a
-  phone paired through Garmin Connect. If it doesn't, Garmin Connect users need Garmin's SDK (a project decision).
+  phone paired through Garmin Connect. If it doesn't, Garmin Connect users need Garmin's SDK (HappyRock's decision).

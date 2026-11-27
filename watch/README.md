@@ -12,13 +12,17 @@ charts, forecasts, route and anchor watch. The watch shows them on your wrist an
 |---|---|
 | **Gauge** | Wind gauge with the polar, target speed, SOG and depth, heading-up compass ring |
 | **Next mark** | Bearing, distance and time to the next route point; the whole route as a ring; VMC and SOG; haptics at quarters, approach and arrival |
-| **Anchor watch** | The boat swinging live around the anchor inside the red alarm ring, distance to the anchor. Tap the anchor for settings, hold it to lift |
+| **Anchor watch** | The boat swinging live around the anchor inside the red alarm ring, distance to the anchor. The boat's colour shows the phone's fix (green good, yellow stale, blinking red lost). Tap the anchor for settings, hold it to lift |
 | **Set anchor** | Aim the bearing with the watch compass (or dial it), distance and alarm-radius dials, set or lift the anchor from the watch |
 | **Sight** (celestial training) | Mark sight times to the millisecond, enter sextant angles, review the trend for up to 3 bodies |
 | **MOB** | One tap marks a man overboard; time in the water, bearing and distance, with an arrow to the person |
 
 A phone icon on every page shows the link: green connected, yellow slow, orange pairing, red offline. Tap it for
 the link screen.
+
+Battery: nothing runs when the app is closed (no background service). Left open and untouched for 10 minutes with no
+anchor watch, MOB or route running, it pauses (GPS and phone link off); after 30 minutes it closes itself.
+Details in [docs/BATTERY_REVIEW_2026-11-24.md](docs/BATTERY_REVIEW_2026-11-24.md).
 
 ## How it talks to the phone
 The watch app talks to Third Coast Sailing on the phone through the phone app the watch already uses:
@@ -32,8 +36,9 @@ HMAC-SHA256 challenge; the pairing token never travels again. The messages are i
 [docs/PROTOCOL.md](docs/PROTOCOL.md) (section 9 is the current transport).
 
 ## Watches
-Connect IQ 3.2 and newer: 139 Garmin watches and devices, including fēnix, epix, Forerunner, vívoactive, Venu,
-Instinct (monochrome theme), Enduro, MARQ, Descent, Edge and GPSMAP. Details per device are in
+Connect IQ 3.2 and newer, round colour screens: 107 Garmin watches, including fēnix, epix, Forerunner, vívoactive, Venu,
+Enduro, MARQ and Descent. Rectangular watches (Venu Sq), Edge and GPSMAP units and the monochrome Instinct are not built
+for now: the layout looked cluttered or used too little of their screens. Details per device are in
 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Building

@@ -2,27 +2,11 @@
 project.manifest = manifest.xml
 
 base.sourcePath = source;source-color
-base.excludeAnnotations = lite;notour;noble;log
+base.excludeAnnotations = lite;notour;ble;log
 
-descentg1.sourcePath = source;source-mono
-descentg1.excludeAnnotations = full;sight;notour;noble;log
-enduro.excludeAnnotations = full;sight;notour;noble;log
-fenix6.excludeAnnotations = full;sight;notour;noble;log
-fenix6s.excludeAnnotations = full;sight;notour;noble;log
-fr245.excludeAnnotations = full;sight;notour;noble;log
-fr55.excludeAnnotations = full;sight;notour;noble;log
-instinct2.sourcePath = source;source-mono
-instinct2.excludeAnnotations = full;sight;notour;noble;log
-instinct2s.sourcePath = source;source-mono
-instinct2s.excludeAnnotations = full;sight;notour;noble;log
-instinct2x.sourcePath = source;source-mono
-instinct2x.excludeAnnotations = full;sight;notour;noble;log
-instinct3solar45mm.sourcePath = source;source-mono
-instinct3solar45mm.excludeAnnotations = full;sight;notour;noble;log
-instinctcrossover.sourcePath = source;source-mono
-instinctcrossover.excludeAnnotations = full;sight;notour;noble;log
-instincte40mm.sourcePath = source;source-mono
-instincte40mm.excludeAnnotations = full;sight;notour;noble;log
-instincte45mm.sourcePath = source;source-mono
-instincte45mm.excludeAnnotations = full;sight;notour;noble;log
-venusq.excludeAnnotations = full;sight;notour;noble;log
+enduro.excludeAnnotations = full;sight;notour;ble;log
+fenix6.excludeAnnotations = full;sight;notour;ble;log
+fenix6s.excludeAnnotations = full;sight;notour;ble;log
+fr245.excludeAnnotations = full;sight;notour;ble;log
+fr55.excludeAnnotations = full;sight;notour;ble;log
+venusq.excludeAnnotations = full;sight;notour;ble;log

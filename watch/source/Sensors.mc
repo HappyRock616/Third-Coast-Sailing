@@ -75,17 +75,25 @@ module Sensors {
         }
     }
 
-    // Keep the second boundary current; call often (100 ms) while millisecond marks matter (Sight page)
-    function tickClock() as Void {
+    // Millisecond sight times without fast polling: calibrate() is called every 50 ms for at most ~1.1 s (Sight page
+    // shown) until the UTC second changes; from then on the time is the boundary plus System.getTimer(), so the page
+    // only needs a 1 s tick. Recalibrated each time the page opens (the two clocks drift a few ppm).
+    var calibrated as Boolean = false;
+    var calLast as Number = -1;
+    function startCalibration() as Void { calibrated = false; calLast = -1; }
+    function calibrate() as Void {
         var s = Time.now().value();
-        if (s != secBase) { secBase = s; timerBase = System.getTimer(); }
+        if (calLast >= 0 && s != calLast) { secBase = s; timerBase = System.getTimer(); calibrated = true; }
+        calLast = s;
     }
+    function tickClock() as Void { if (!calibrated) { calibrate(); } }
 
     // [seconds UTC, milliseconds 0-999] for a mark
     function markTime() as Array<Number> {
-        tickClock();
-        var ms = System.getTimer() - timerBase;
-        if (ms < 0 || ms > 999) { ms = 999; }
-        return [secBase, ms];
+        if (!calibrated) { var s = Time.now().value(); return [s, 0]; }      // not calibrated yet: whole seconds
+        var d = System.getTimer() - timerBase;
+        return [secBase + d / 1000, d % 1000];
     }
+    // current UTC second, from the calibrated clock when there is one
+    function nowSec() as Number { return calibrated ? secBase + (System.getTimer() - timerBase) / 1000 : Time.now().value(); }
 }

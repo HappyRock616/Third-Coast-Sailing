@@ -28,6 +28,18 @@ Nothing in `Documents\ThirdCoastSailing` has been changed for this.
   (placeholders: yellow 15 kt, red 22 kt or any SCA).
 - Wind colour thresholds from `Buoys.kt`; wave thresholds yellow 3 ft / red 4.5 ft (placeholders, to confirm).
 
+## 0b. UI rules (HappyRock, 2026-11-24; line card docs/linecard/linecard_v0.1.1-ui2.png)
+- **No floating text.** No hint lines, no lowercase helper sentences over the ring or off the screen edge. Text sits in
+  a box or is a single label; symbols beat words (boat / anchor / alarm-clock icons, colours, rings).
+- Normal device behaviour needs no explanation: an alarm is silenced by Start, a tap or a short hold.
+- Next mark: one tall orange box, four fields (MARK n/N, bearing, distance, time to go m:ss + ETA); the ring blinks
+  slowly under 30 s to the mark. Bearing is magnetic, shown without a letter.
+- Anchor: the boat shows TCS's fix state (green good, yellow stale, blinking red lost); a lost fix is an alarm.
+  Set anchor: "0 ft" (not "at boat"); the send result is one word in the heading box; Start sets, hold Start lifts.
+- Dial: boat ---[distance]--- anchor, or anchor ---[radius]--- alarm clock; no title.
+- Sight: only the UTC time at the bottom; Hs label in bold orange; review: no time/angle text, "Delete" on a tap.
+- A watch model whose screens look cluttered or don't work is dropped from this design and the build list.
+
 ## 1. Product
 
 A Garmin Connect IQ **device app** that is a wrist companion to the Third Coast Sailing
@@ -58,6 +70,9 @@ Vertical loop, as in Just Go 5K: swipe up/down or the Up/Down buttons.
 
 Hold Menu: settings (units, haptics, data source, Sight page on/off). Buttons-only watches: Start acts on the
 page's main control (MOB, Silence, Next mark, MARK).
+
+Back closes a pushed screen (link screen, Set anchor, dials) or, on any loop page, exits the app (0.1.1; it used to
+jump to the Gauge first, which made it easy to think the app had closed when it hadn't).
 
 ## 3. Pages
 
@@ -234,6 +249,18 @@ Haptics run on whichever page is showing, while the app is open. Each pattern ca
 
 Moving numbers come from the watch's own GPS, because sending them from the phone once a second
 over Garmin's phone-to-watch messages is slow and drains both batteries. Slow data comes from the phone.
+
+### Idle and retries (0.1.1, BATTERY_REVIEW_2026-11-24)
+Watch apps opened from the apps menu never time out on their own, so the app does it:
+- **Paused** after 10 minutes with no touch or button and nothing to watch (no anchor watch, MOB or route): GPS off,
+  page timer off, BYE to the phone, no polls. The screen shows "Paused · tap or press to resume"; the first input only
+  wakes it.
+- **Exits** after 30 minutes idle.
+- **Retries back off** when TCS can't be reached: 10 s, 30 s, 1 min, 2 min, then every 5 min. Opening the link screen
+  retries at once.
+- **Waiting for Allow** polls every 3 s for at most 3 minutes, then shows "No answer from the phone · Try again".
+- Gauge and Next mark **redraw only when something shown changed**.
+- The message number is saved every 50 messages (it skips 50 ahead at start), not on every message.
 
 ### Anchor page battery plan
 - **No watch GPS on the anchor and conditions pages.** All positions come from the phone, which

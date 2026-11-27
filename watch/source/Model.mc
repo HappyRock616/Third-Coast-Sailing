@@ -51,6 +51,7 @@ module Model {
     var alarm as Number = 0;               // 0 ok, 1 alarm, 2 silenced
     var silencedUntil as Number = 0;
     var gpsLost as Boolean = false;
+    var fixState as Number = 0;            // the phone's anchor fix: 0 good, 1 stale, 2 lost (TCS decides; the watch only shows it)
     var trDx as Array<Number> = [];        // boat offsets from the anchor, east (ft)
     var trDy as Array<Number> = [];        // north (ft)
     var fixTime as Number = 0;
@@ -77,6 +78,16 @@ module Model {
     var hasCompass as Boolean = false;
 
     function now() as Number { return Time.now().value(); }
+
+    // Rounded value for a page signature (Page.sig): -99999 for null
+    function rnd(v as Numeric?, k as Numeric) as Number { return v == null ? -99999 : (v * k).toNumber(); }
+    // What the Gauge and Next mark show from the boat, wind and link: they redraw only when this changes (BATTERY_REVIEW B5)
+    function sigBase() as String {
+        var p = pos;
+        return [rnd(sogKn, 10), rnd(cogDeg, 1), rnd(lastCog, 1), rnd(tws, 10), rnd(twd, 1), rnd(gust, 10), rnd(depthFt, 1),
+                outside ? 1 : 0, p == null ? 0 : rnd(p[0], 10000), p == null ? 0 : rnd(p[1], 10000), next, pins.size(),
+                LinkUi.color(), linked ? 1 : 0].toString();
+    }
 
     function addFix(dx as Number, dy as Number) as Void {
         trDx.add(dx); trDy.add(dy);
@@ -133,8 +144,8 @@ module Model {
         Application.Storage.setValue("mob", [mobTime, p == null ? null : (p[0] * 1e6).toNumber(), p == null ? null : (p[1] * 1e6).toNumber()]);
     }
 
-    // Debug builds: sample data matching the renders, so every page shows without a phone. Never in release builds.
-    (:debug)
+    // Tour builds only (test.jungle): sample data matching the renders, so every page shows without a phone.
+    (:tour)
     function demo() as Void {
         var t = now();
         linked = true; lastRx = t; magVar = -4.5;
@@ -160,6 +171,6 @@ module Model {
                      [t0 + 150, 0, 2, 28224], [t0 + 190, 0, 2, 28191]];
         }
     }
-    (:release)
+    (:notour)
     function demo() as Void {}
 }

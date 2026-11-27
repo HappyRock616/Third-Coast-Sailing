@@ -246,8 +246,13 @@ module Draw {
 
     // Heading box over the top of the ring, with the pointer below. value = digits; degMark adds the ring.
     function headBox(dc as Dc, f as Frame, value as String, suffix as String, y as Numeric, w as Numeric) as Void {
+        // black margin first, so the box stands off the compass ring like a button
+        box(dc, f.x(195 - w / 2) - f.d(5), f.y(y) - f.d(5), f.d(w) + f.d(10), f.d(56), f.d(15), Theme.BG, Theme.BG, 0);
         box(dc, f.x(195 - w / 2), f.y(y), f.d(w), f.d(46), f.d(11), Theme.NAVY, Theme.ORANGE, f.d(3));
-        if (value.equals("--")) { text(dc, f.x(195), f.y(y + 23), "--", f.d(26), Theme.MIST, 0); }   // number fonts draw "--" badly
+        if (value.length() > 0 && value.toNumber() == null && !value.equals("--")) {
+            var sc = value.equals("SET") ? Theme.GREEN : (value.equals("SENDING") || value.equals("QUEUED") ? Theme.ORANGE : Theme.ALARM);
+            text(dc, f.x(195), f.y(y + 23), value, f.d(18), sc, f.d(w - 10));                              // a status word
+        } else if (value.equals("--")) { text(dc, f.x(195), f.y(y + 23), "--", f.d(26), Theme.MIST, 0); }   // number fonts draw "--" badly
         else { num(dc, f.x(195) - (suffix.length() > 0 ? f.d(10) : 0), f.y(y + 23), value, f.d(30), Theme.FOAM, true); }
         if (suffix.length() > 0) { text(dc, f.x(195 + w / 2 - 16), f.y(y + 26), suffix, f.d(15), Theme.MIST, 0); }
         poly(dc, f, f.x(195), f.y(y + 46), [[-8, 0], [8, 0], [0, 9]], 0, 1.0, Theme.ORANGE);
@@ -290,7 +295,7 @@ module Draw {
         box(dc, f.x(x), f.y(y), f.d(w), f.d(80), f.d(13), Theme.NAVY, focus ? Theme.ORANGE : Theme.LINE, f.d(focus ? 3 : 2));
         if (label.length() > 0) { text(dc, f.x(x + w / 2), f.y(y + 16), label, f.d(11), Theme.MIST, 0); }
         num(dc, f.x(x + w / 2) - (unit.length() > 0 ? f.d(12) : 0), f.y(y + (label.length() > 0 ? 50 : 42)), val, f.d(44), Theme.FOAM, false);
-        if (unit.length() > 0) { text(dc, f.x(x + w - 22), f.y(y + 54), unit, f.d(15), Theme.MIST, 0); }
+        if (unit.length() > 0) { text(dc, f.x(x + w - 20), f.y(y + 44), unit, f.d(26), Theme.MIST, 0); }
         text(dc, f.x(x + w / 2), f.y(y + 98), dn, f.d(20), Theme.FADE, 0);
     }
 
@@ -321,18 +326,23 @@ module Draw {
     }
 
     // Data box (navy, orange edge) centred on (x, y) pixels; clock = an alarm-clock glyph before the value
+    // Alarm clock symbol (radius r design px), red
+    function clockIcon(dc as Dc, f as Frame, cx as Number, cy as Number, r as Numeric) as Void {
+        var k = r / 10.0, rr = f.d(r);
+        dc.setColor(Theme.ALARM, Graphics.COLOR_TRANSPARENT);
+        setPen(dc, f.d(2.5 * k));
+        dc.drawCircle(cx, cy, rr);
+        dc.drawLine(cx, cy, cx, cy - f.d(6 * k));
+        dc.drawLine(cx, cy, cx + f.d(5 * k), cy + f.d(3 * k));
+        dc.drawLine(cx - f.d(9 * k), cy - f.d(12 * k), cx - f.d(5 * k), cy - f.d(15 * k));
+        dc.drawLine(cx + f.d(9 * k), cy - f.d(12 * k), cx + f.d(5 * k), cy - f.d(15 * k));
+    }
+
     function dataBox(dc as Dc, f as Frame, x as Number, y as Number, s as String, clock as Boolean, edge as Number) as Void {
         var w = f.d(92), h = f.d(40);
         box(dc, x - w / 2, y - h / 2, w, h, f.d(10), Theme.NAVY, edge, f.d(3));
         if (clock) {
-            var cx = x - f.d(28), cy = y + f.d(1), r = f.d(10);
-            dc.setColor(Theme.ALARM, Graphics.COLOR_TRANSPARENT);
-            setPen(dc, f.d(2.5));
-            dc.drawCircle(cx, cy, r);
-            dc.drawLine(cx, cy, cx, cy - f.d(6));
-            dc.drawLine(cx, cy, cx + f.d(5), cy + f.d(3));
-            dc.drawLine(cx - f.d(9), cy - f.d(12), cx - f.d(5), cy - f.d(15));
-            dc.drawLine(cx + f.d(9), cy - f.d(12), cx + f.d(5), cy - f.d(15));
+            clockIcon(dc, f, x - f.d(28), y + f.d(1), 10);
             text(dc, x + f.d(12), y, s, f.d(19), Theme.FOAM, f.d(56));
         } else {
             text(dc, x, y, s, f.d(20), Theme.FOAM, f.d(84));

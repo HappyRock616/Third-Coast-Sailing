@@ -24,6 +24,7 @@ class TcsApp extends Application.AppBase {
         Model.load();
         Model.demo();                 // debug builds only: sample data
         Sensors.readCompass();
+        Idle.start();
         Link.start();
         timer = new Timer.Timer();
         (timer as Timer.Timer).start(method(:onBeat), 1000, true);      // the app's only timer besides the page's
@@ -57,9 +58,12 @@ class TcsApp extends Application.AppBase {
         return [h, new HostDelegate(h)];
     }
 
-    // Every second: the link's polls; every 10 s: resend unacknowledged messages and follow the celestial setting
+    // Every second: idle check and the link's polls; every 10 s: resend unacknowledged messages and follow the
+    // celestial setting. Paused (Idle): only the idle check runs.
     var beats as Number = 0;
     function onBeat() as Void {
+        Idle.check();
+        if (Idle.asleep) { return; }
         Net.onTimer();
         beats++;
         if (beats % 10 != 0) { return; }

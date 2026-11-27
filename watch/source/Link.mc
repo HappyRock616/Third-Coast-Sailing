@@ -37,12 +37,15 @@ module Link {
         var ob = Application.Storage.getValue("outbox");
         if (ob instanceof Array) { outbox = ob as Array<Array>; }
         var sq = Application.Storage.getValue("seq");
-        if (sq instanceof Number) { seq = sq; }
+        // seq is saved only every 50 messages (BATTERY_REVIEW B7): skip ahead so no number is used twice
+        if (sq instanceof Number) { seq = ((sq as Number) + 50) % 65536; }
+        saveSeq();                      // once at start, so a crash before the next save cannot repeat numbers
         Log.start();
         Net.start();
     }
 
-    function stop() as Void { Net.stop(); }
+    function stop() as Void { Net.stop(); saveSeq(); }
+    function saveSeq() as Void { Application.Storage.setValue("seq", seq); }
 
     // The phone refused a request (403): start the handshake again
     function onRefused() as Void { trusted = false; nonce = null; Model.linked = false; hello(); }
@@ -60,7 +63,7 @@ module Link {
 
     function nextSeq() as Number {
         seq = (seq + 1) % 65536;
-        Application.Storage.setValue("seq", seq);
+        if (seq % 50 == 0) { saveSeq(); }
         return seq;
     }
 
@@ -128,7 +131,7 @@ module Link {
         seen = [];                      // the phone's seq may have restarted (there's no connection to reset it)
         nonce = null; trusted = false;  // PAIR 4 -> PROVE -> PAIR 0 again; signed traffic waits until then
         Log.p("tx HELLO known=" + known + " code=" + Model.pairCode);
-        send(HELLO, [1, System.getDeviceSettings().partNumber, caps, Model.now(), Model.watchId(), known, known ? null : Model.pairCode]);
+        send(HELLO, [Version.CODE, System.getDeviceSettings().partNumber, caps, Model.now(), Model.watchId(), known, known ? null : Model.pairCode]);
     }
 
     // Answer the phone's challenge: first 8 bytes of HMAC-SHA256(token, nonce + watchId) as two int32 words
@@ -257,20 +260,22 @@ module Link {
         } else if (type == ROUTE && a.size() >= 5) {
             Model.next = a[3] as Number;
             var p = a[4] as Array, pins = [] as Array<Array<Float>>;
-            for (var i = 0; i < p.size(); i++) { var q = p[i] as Array; pins.add([e6(q[0]), e6(q[1])]); }
+            for (var i = 0; i < p.size() && i < 60; i++) { var q = p[i] as Array; pins.add([e6(q[0]), e6(q[1])]); }   // at most 60 points
             Model.pins = pins;
         } else if (type == ROUTE_NEXT && a.size() >= 4) {
             Model.next = a[3] as Number;
         } else if (type == ANCHOR && a.size() >= 10) {
-            var was = Model.alarm;
+            var was = Model.alarm, wasLost = Model.fixState == 2;
             if (!hasPending(ANCHOR_SET) && !hasPending(ANCHOR_RESET)) { Model.anchorOn = a[3] as Boolean; }
             Model.anchorPos = a[4] == null ? null : [e6(a[4]), e6(a[5])];
             Model.radiusFt = a[6] as Number; Model.alarm = a[7] as Number;
-            Model.silencedUntil = a[8] as Number; Model.gpsLost = (a[9] == true) as Boolean;
+            Model.silencedUntil = a[8] as Number; var fx = a[9];          // fix state from TCS: 0 good, 1 stale, 2 lost (older TCS: bool lost)
+            Model.fixState = fx instanceof Number ? fx as Number : (fx == true ? 2 : 0);
+            Model.gpsLost = Model.fixState == 2;
             if (!Model.anchorOn) { Model.trDx = []; Model.trDy = []; }
             var app = Application.getApp() as TcsApp;
-            if (Model.alarm == 1 && was != 1) {
-                // a new alarm: buzz and bring the Anchor page up, where the alarm repeats until silenced
+            if ((Model.alarm == 1 && was != 1) || (Model.anchorOn && Model.fixState == 2 && !wasLost && Model.alarm != 2)) {
+                // a new alarm or a lost fix: buzz and bring the Anchor page up, where the alarm repeats until silenced
                 Haptics.play(Haptics.ALARM);
                 if (app.host != null) { (app.host as Host).goTo(2); }
             }

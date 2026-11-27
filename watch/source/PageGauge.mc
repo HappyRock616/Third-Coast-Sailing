@@ -9,6 +9,7 @@ class GaugePage extends Page {
     function id() as Number { return 0; }
     function gps() as Boolean { return true; }
     function tickMs() as Number { return 1000; }
+    function sig() as String? { return Model.sigBase() + (Model.polTws == null && Model.polCurve == null ? "n" : "p"); }
     // Start or Menu opens the link screen (touch watches also tap the phone icon)
     function select() as Boolean { Ui.push(new LinkPage()); return true; }
     function menu() as Boolean { Ui.push(new LinkPage()); return true; }
@@ -60,7 +61,12 @@ class GaugePage extends Page {
                 dc.setColor(Theme.NAVY, Graphics.COLOR_TRANSPARENT); dc.fillCircle(dot[0], dot[1], f.d(9.5));
                 dc.setColor(Theme.ORANGE, Graphics.COLOR_TRANSPARENT); dc.fillCircle(dot[0], dot[1], f.d(7));
                 if (!f.small()) {
-                    Draw.text(dc, dot[0] + (dot[0] > f.cx ? -f.d(34) : f.d(34)), dot[1] + f.d(24), "target " + target.format("%.1f"), f.d(13), Theme.FOAM, 0);
+                    // label just below or above the dot, whichever doesn't cover the SOG / depth boxes; else none
+                    var lab = "target " + target.format("%.1f");
+                    var below = [dot[0], dot[1] + f.d(22)], above = [dot[0], dot[1] - f.d(22)];
+                    var first = dot[1] >= f.cy ? below : above, second = dot[1] >= f.cy ? above : below;
+                    if (labelFree(f, first)) { Draw.text(dc, first[0], first[1], lab, f.d(13), Theme.FOAM, 0); }
+                    else if (labelFree(f, second)) { Draw.text(dc, second[0], second[1], lab, f.d(13), Theme.FOAM, 0); }
                 }
             }
         }
@@ -75,10 +81,21 @@ class GaugePage extends Page {
         Draw.text(dc, f.x(195), f.y(264), out || dep == null ? "-- ft" : ((dep as Number) < 6 ? "<6 ft" : dep.format("%d") + " ft"), f.d(15), Theme.FOAM, 0);
 
         windUp = h;
-        if ((out || twd == null || tws == null) && !out && !f.small()) {
-            Draw.text(dc, f.cx, f.y(330), "no wind forecast yet", f.d(14), Theme.MIST, 0);
-        }
+        // no forecast: the polar is drawn grey and there is no wind triangle or target (no text)
         Draw.headBox(dc, f, moving ? Nav.deg3(h) : "--", "", 22, 96);
+    }
+
+    // A target label centred at p (about 96 x 22 design px) stays clear of the SOG box, the depth box and the ring
+    function labelFree(f as Draw.Frame, p as Array<Number>) as Boolean {
+        var hw = f.d(48), hh = f.d(11);
+        var boxes = [[129, 181, 261, 235], [163, 251, 227, 277]];
+        for (var i = 0; i < boxes.size(); i++) {
+            var b = boxes[i] as Array<Number>;
+            if (p[0] + hw > f.x(b[0]) && p[0] - hw < f.x(b[2]) && p[1] + hh > f.y(b[1]) && p[1] - hh < f.y(b[3])) { return false; }
+        }
+        // corners inside the ring's inner edge (r 149)
+        var dx = (p[0] - f.cx).abs() + hw, dy = (p[1] - f.cy).abs() + hh;
+        return dx * dx + dy * dy < f.d(149) * f.d(149);
     }
 
     // The wind triangle sits on the ring: drawn over the phone icon so it never hides

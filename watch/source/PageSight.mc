@@ -47,10 +47,16 @@ class SightPage extends Page {
 
     function initialize() { Page.initialize(); }
     function id() as Number { return 4; }
-    function tickMs() as Number { return 100; }
+    // 50 ms only while finding the second boundary (about 1 s after the page opens), then 1 s
+    function tickMs() as Number { return Sensors.calibrated ? 1000 : 50; }
     var drawnSec as Number = 0;
-    function tick() as Void { Sensors.tickClock(); }
-    function redrawOnTick() as Boolean { return Sensors.secBase != drawnSec; }   // 100 ms clock polling, 1 Hz redraw
+    function shown() as Void { Sensors.startCalibration(); }
+    function tick() as Void {
+        var was = Sensors.calibrated;
+        Sensors.tickClock();
+        if (!was && Sensors.calibrated && hostOf() != null) { (hostOf() as Host).restartTimer(); }
+    }
+    function redrawOnTick() as Boolean { return Sensors.nowSec() != drawnSec; }
 
     function chipAt(f as Draw.Frame, x as Number, y as Number) as Number {
         for (var b = 1; b <= 3; b++) { if (Draw.hit(f, x, y, 79 + (b - 1) * 72, 78, 64, 44)) { return b; } }
@@ -91,7 +97,7 @@ class SightPage extends Page {
 
     function draw(dc as Dc, f as Draw.Frame) as Void {
         var now = Model.now();
-        drawnSec = Sensors.secBase;
+        drawnSec = Sensors.nowSec();
         // twilight ring: time left in the nautical twilight window, draining
         Draw.circle(dc, f, 180, 16, Theme.NAVY_L);
         if (Model.nautEnd > now && Model.nautEnd > Model.nautStart) {
@@ -108,23 +114,14 @@ class SightPage extends Page {
             for (var j = 0; j < k; j++) { dc.fillCircle(f.x(x + 32 - (k - 1) * 3.5 + j * 7), f.y(112), f.d(2.6)); }
         }
         dc.setColor(Theme.NAVY, Graphics.COLOR_TRANSPARENT); dc.fillCircle(f.cx, f.y(204), f.d(72));
-        dc.setColor(Theme.ORANGE, Graphics.COLOR_TRANSPARENT); Draw.setPen(dc, f.d(6)); dc.drawCircle(f.cx, f.y(204), f.d(72));
-        Draw.text(dc, f.cx, f.y(200), "MARK", f.d(36), Theme.FOAM, 0);
-        if (System.getTimer() - fullAt < 2500) {
-            Draw.text(dc, f.cx, f.y(236), "body full: review to delete", f.d(13), Theme.RED, f.d(200));
-        } else {
-            Draw.text(dc, f.cx, f.y(236), "body " + Sight.body.format("%d") + " · shot " + (Sight.count(Sight.body) + 1).format("%d"), f.d(13), Theme.MIST, 0);
-        }
-        var l = Sight.lastOf(Sight.body);
-        if (l != null && !f.small()) {
-            Draw.text(dc, f.cx, f.y(296), "last " + Sight.utc(l[0] as Number) + " · " + (l[3] == null ? "no angle" : Nav.fmtHs(l[3] as Number)), f.d(13), Theme.MIST, f.d(250));
-        }
-        Draw.num(dc, f.cx, f.y(326), Sight.utc(now), f.d(32), Theme.FOAM, false);
-        if (!f.small()) {
-            var left = Model.nautEnd > now ? ((Model.nautEnd - now) / 60 + 1).format("%d") + " min left" : "no twilight times";
-            Draw.text(dc, f.cx, f.y(350), "UTC · " + left, f.d(12), Theme.MIST, 0);
-        }
-        Draw.holdRing(dc, f, host == null ? 0.0 : (host as Host).holdFrac());
+        // body full (the chip dots show the count): the MARK ring turns red for 2.5 s, with a buzz
+        var full = System.getTimer() - fullAt < 2500;
+        dc.setColor(full ? Theme.RED : Theme.ORANGE, Graphics.COLOR_TRANSPARENT); Draw.setPen(dc, f.d(6)); dc.drawCircle(f.cx, f.y(204), f.d(72));
+        Draw.text(dc, f.cx, f.y(204), "MARK", f.d(36), Theme.FOAM, 0);
+        // the only text at the bottom: the time, UTC
+        Draw.num(dc, f.x(178), f.y(318), Sight.utc(drawnSec), f.d(32), Theme.FOAM, false);
+        Draw.text(dc, f.x(272), f.y(322), "UTC", f.d(14), Theme.MIST, 0);
+        Draw.holdRing(dc, f, hostOf() == null ? 0.0 : (hostOf() as Host).holdFrac());
     }
 }
 
@@ -171,7 +168,6 @@ class AnglePage extends Page {
         if (Draw.hit(f, x, y, 66, 138, 124, 88)) { selMin = false; }
         else if (Draw.hit(f, x, y, 198, 138, 132, 88)) { selMin = true; }
         else if (Draw.hit(f, x, y, 120, 278, 150, 46)) { save(true); }
-        else if (y > f.y(335)) { save(false); }
         return true;
     }
     function dragStart(f as Draw.Frame, x as Number, y as Number) as Void { dragY = y; acc = 0; }
@@ -184,15 +180,14 @@ class AnglePage extends Page {
     function dragEnd(f as Draw.Frame, x as Number, y as Number) as Void { dragY = null; }
 
     function draw(dc as Dc, f as Draw.Frame) as Void {
-        Draw.text(dc, f.cx, f.y(62), "body " + Sight.body.format("%d") + " · shot " + (Sight.count(Sight.body) + 1).format("%d") + " · " + Sight.utc(tSec), f.d(15), Theme.MIST, f.d(280));
-        Draw.text(dc, f.cx, f.y(104), "Hs", f.d(20), Theme.MIST, 0);
+        // Hs = sextant altitude (as read, before corrections), degrees and minutes to 0.1'
+        Draw.text(dc, f.cx, f.y(100), "Hs", f.d(30), Theme.ORANGE, 0);
         var dm = deg > 0 ? (deg - 1).format("%d") : "", dp = deg < 90 ? (deg + 1).format("%d") : "";
-        Draw.drum(dc, f, 66, 140, 124, "", [deg.format("%d"), dm, dp], "", !selMin);
+        Draw.drum(dc, f, 66, 140, 124, "", [deg.format("%d"), dm, dp], "°", !selMin);
         var m0 = (mnt + 599) % 600, m1 = (mnt + 1) % 600;
         Draw.drum(dc, f, 198, 140, 132, "", [(mnt / 10).format("%d") + "." + (mnt % 10).format("%d"),
-                  (m0 / 10).format("%d") + "." + (m0 % 10).format("%d"), (m1 / 10).format("%d") + "." + (m1 % 10).format("%d")], "", selMin);
+                  (m0 / 10).format("%d") + "." + (m0 % 10).format("%d"), (m1 / 10).format("%d") + "." + (m1 % 10).format("%d")], "'", selMin);
         Draw.pill(dc, f, 120, 278, 150, 46, "ENTER", Theme.ORANGE, Theme.ON_ORANGE);
-        Draw.text(dc, f.cx, f.y(352), System.getDeviceSettings().isTouchScreen ? "skip · add the angle later" : "Menu = skip", f.d(13), Theme.MIST, 0);
     }
 }
 
@@ -200,7 +195,6 @@ class AnglePage extends Page {
 (:sight)
 class ReviewPage extends Page {
     var sel as Number = -1;      // index into Model.shots
-    var clearArmed as Number = -10000;
 
     function initialize() {
         Page.initialize();
@@ -217,17 +211,10 @@ class ReviewPage extends Page {
         if (k >= 0 && k < idx.size()) { sel = idx[k]; }
         return true;
     }
-    function keyHoldMs() as Number { return sel >= 0 ? 1500 : 0; }
     function showIcon() as Boolean { return false; }
-    function holdAt(f as Draw.Frame, x as Number, y as Number) as Number { return sel >= 0 && Draw.hit(f, x, y, 105, 276, 180, 38) ? 1500 : 0; }
-    // Menu twice within 3 s clears every body
-    function menu() as Boolean {
-        if (System.getTimer() - clearArmed < 3000) { Sight.clearAll(); Ui.pop(); }
-        else { clearArmed = System.getTimer(); }
-        return true;
-    }
-    // A completed hold (touch on the bar, or Start held) deletes the selected shot
-    function holdDone() as Void {
+    // Delete is a tap (or Start). Back (swipe or the Back button) returns to the Sight page; it never exits the app.
+    function select() as Boolean { del(); return true; }
+    function del() as Void {
         if (sel < 0) { return; }
         var s = Model.shots[sel] as Array;
         Link.sendReliable(Link.SHOT_DELETE, [Nav.shotId(s[0] as Number, s[2] as Number)]);
@@ -240,7 +227,7 @@ class ReviewPage extends Page {
     }
 
     function tap(f as Draw.Frame, x as Number, y as Number) as Boolean {
-        if (y < f.y(74)) { Ui.pop(); return true; }
+        if (Draw.hit(f, x, y, 115, 270, 160, 48)) { del(); return true; }
         if (Draw.hit(f, x, y, 62, 78, 266, 128)) {
             var idx = indices(), best = -1, bd = 99999;
             for (var k = 0; k < idx.size(); k++) { var dx = (xOf(f, idx[k]) - x).abs(); if (dx < bd) { bd = dx; best = idx[k]; } }
@@ -288,21 +275,7 @@ class ReviewPage extends Page {
             else if (bad && Theme.MONO) { dc.drawRectangle(x - f.d(6), y - f.d(6), f.d(12), f.d(12)); }
             else { dc.fillCircle(x, y, f.d(6)); }
         }
-        if (sel >= 0) {
-            var s = sh[sel] as Array;
-            Draw.text(dc, f.cx, f.y(236), Sight.utc(s[0] as Number) + " · " + (s[3] == null ? "no angle" : Nav.fmtHs(s[3] as Number)), f.d(19), Theme.FOAM, f.d(280));
-            var r = Nav.residual(sh, sel), bad = Nav.isOutlier(sh, sel), msg = "";
-            if (s[3] == null) { msg = "time only"; }
-            else if (bad) { msg = r.abs().format("%.1f") + "' off the trend"; }
-            else if (fit != null) { var pm = (fit as Array<Float>)[2] * 60; msg = "on the trend · " + (pm > 0 ? "rising " : "falling ") + pm.abs().format("%.1f") + "'/min"; }
-            Draw.text(dc, f.cx, f.y(258), msg, f.d(13), bad ? Theme.RED : Theme.MIST, f.d(260));
-        }
-        var hf = host == null ? 0.0 : (host as Host).holdFrac();
-        Draw.holdBar(dc, f, 105, 276, 180, System.getDeviceSettings().isTouchScreen ? "hold to delete shot" : "hold Start: delete", hf, Theme.RED);
-        if (!f.small()) {
-            var clr = System.getTimer() - clearArmed < 3000 ? "Menu again = clear all bodies" : "back: tap the title";
-            Draw.text(dc, f.cx, f.y(342), clr, f.d(11), Theme.FADE, 0);
-        }
+        if (sel >= 0) { Draw.pill(dc, f, 125, 276, 140, 42, "Delete", Theme.RED, Theme.FOAM); }
     }
 }
 

@@ -27,49 +27,51 @@ module AnchorUi {
 class AnchorPage extends Page {
     function initialize() { Page.initialize(); }
     function id() as Number { return 2; }
-    function tickMs() as Number { return Model.alarm == 1 ? 500 : 0; }
+    // Alarm: the phone's anchor alarm, or its fix lost (until silenced). Ring flashes and the watch buzzes.
+    function alarming() as Boolean { return Model.alarm == 1 || (Model.fixState == 2 && Model.alarm != 2); }
+    // 500 ms while alarming or while a lost fix blinks the boat
+    function tickMs() as Number { return alarming() || (Model.anchorOn && Model.fixState == 2) ? 500 : 0; }
 
     function openSettings() as Void { Haptics.play(Haptics.HOLD); Ui.push(new SetAnchorPage()); }
 
-    // touch: tap = silence an alarm, or the anchor button opens settings; hold the anchor 2 s = lift
+    // touch: tap or a short hold anywhere = silence an alarm; else the anchor button opens settings; hold it 2 s = lift
     function tap(f as Draw.Frame, x as Number, y as Number) as Boolean {
-        if (Model.alarm == 1) { silence(); return true; }
+        if (alarming()) { silence(); return true; }
         if (AnchorUi.anchorHit(f, x, y) || !Model.anchorOn) { openSettings(); return true; }
         return true;
     }
     function holdAt(f as Draw.Frame, x as Number, y as Number) as Number {
+        if (alarming()) { silence(); return 0; }
         return Model.anchorOn && AnchorUi.anchorHit(f, x, y) ? 2000 : 0;
     }
-    function holdDone() as Void { AnchorUi.lift(); if (host != null) { (host as Host).restartTimer(); } }
+    function holdDone() as Void { AnchorUi.lift(); if (hostOf() != null) { (hostOf() as Host).restartTimer(); } }
     // buttons: Start = silence or settings; hold Start 2 s = lift; Menu = settings
     function select() as Boolean {
-        if (Model.alarm == 1) { silence(); return true; }
+        if (alarming()) { silence(); return true; }
         openSettings(); return true;
     }
-    function keyHoldMs() as Number { return Model.anchorOn && Model.alarm != 1 ? 2000 : 0; }
+    function keyHoldMs() as Number { return Model.anchorOn && !alarming() ? 2000 : 0; }
     function menu() as Boolean { openSettings(); return true; }
 
     function silence() as Void {
         Model.alarm = 2;
         Model.silencedUntil = Model.now() + 900;
         Link.sendReliable(Link.ANCHOR_SILENCE, [Model.now()]);     // tCmd: the phone ignores a silence over 60 s old
-        if (host != null) { (host as Host).restartTimer(); }
+        if (hostOf() != null) { (hostOf() as Host).restartTimer(); }
     }
-    function tick() as Void { if (Model.alarm == 1 && (System.getTimer() / 2000) % 2 == 0) { Haptics.play(Haptics.ALARM); } }
+    function tick() as Void { if (alarming() && (System.getTimer() / 2000) % 2 == 0) { Haptics.play(Haptics.ALARM); } }
 
     function draw(dc as Dc, f as Draw.Frame) as Void {
-        var hold = host == null ? 0.0 : (host as Host).holdFrac();
+        var hold = hostOf() == null ? 0.0 : (hostOf() as Host).holdFrac();
         Draw.text(dc, f.cx, f.y(34), "N", f.d(20), Theme.ORANGE, 0);
         if (!Model.anchorOn || Model.anchorPos == null) {
-            Draw.anchorButton(dc, f, f.cx, f.cy, false);
-            Draw.text(dc, f.cx, f.y(270), "Anchor watch off", f.d(22), Theme.FOAM, 0);
-            Draw.text(dc, f.cx, f.y(300), "tap the anchor to set", f.d(15), Theme.MIST, 0);
+            Draw.anchorButton(dc, f, f.cx, f.cy, false);      // red anchor = not set; tap it to set
             return;
         }
         var n = Model.trDx.size();
         var bx = n > 0 ? Model.trDx[n - 1] : 0, by = n > 0 ? Model.trDy[n - 1] : 0;
         var ta = Nav.toAnchor(bx, by);
-        var alarm = Model.alarm == 1;
+        var alarm = alarming();
         var sc = Nav.plotScale(Model.radiusFt, ta[0], 140) * f.s;   // px per ft
         dc.setColor(Theme.RED, Graphics.COLOR_TRANSPARENT);
         Draw.setPen(dc, f.d(4));
@@ -90,26 +92,22 @@ class AnchorPage extends Page {
         // the bow points at the anchor when lying back on it, else into the wind
         var bow = ta[1];
         if (ta[0] < Model.radiusFt * 0.5 && Model.twd != null) { bow = Model.twd as Float; }
-        Draw.hull(dc, f, px, py, 50, 20, bow, Theme.ORANGE, Theme.NAVY);
+        // the boat shows the phone's fix: green good, yellow stale, red blinking lost
+        var fs = Model.fixState;
+        if (fs != 2 || (System.getTimer() / 500) % 2 == 0) {
+            Draw.hull(dc, f, px, py, 50, 20, bow, fs == 0 ? Theme.GREEN : (fs == 1 ? Theme.CAUTION : Theme.ALARM), Theme.NAVY);
+        }
 
         // live distance to the anchor, in a data box beside the middle of the line
         var mx = (f.cx + px) / 2, my = (f.cy + py) / 2;
         var off = f.d(38);
         var ux = (py - f.cy), uy = -(px - f.cx), ul = Math.sqrt(ux * ux + uy * uy);
         if (ul > 1) { mx += (off * ux / ul).toNumber(); my += (off * uy / ul).toNumber(); } else { my += off; }
-        Draw.dataBox(dc, f, mx, my, Model.gpsLost ? "no fix" : ta[0].format("%.0f") + " ft", false, alarm ? Theme.ALARM : Theme.ORANGE);
+        Draw.dataBox(dc, f, mx, my, ta[0].format("%.0f") + " ft", false, alarm ? Theme.ALARM : Theme.ORANGE);
 
         if (alarm) {
             if ((System.getTimer() / 500) % 2 == 0) { Draw.circle(dc, f, 186, 12, Theme.ALARM); }
             Draw.text(dc, f.cx, f.y(92), "ALARM", f.d(30), Theme.ALARM, 0);
-            Draw.text(dc, f.cx, f.y(332), "tap to silence", f.d(15), Theme.FOAM, 0);
-        } else if (Model.alarm == 2) {
-            var left = Model.silencedUntil - Model.now();
-            if (left < 0) { left = 0; }
-            Draw.text(dc, f.cx, f.y(332), "silenced " + (left / 60).format("%d") + ":" + (left % 60).format("%02d"), f.d(15), Theme.MIST, 0);
-        } else if (!f.small()) {
-            var age = (Model.now() - Model.fixTime) / 60;
-            Draw.text(dc, f.cx, f.y(332), "fix " + age.format("%d") + " min ago", f.d(15), Theme.MIST, 0);
         }
         Draw.anchorButton(dc, f, f.cx, f.cy, true);
         if (hold > 0.0) { Draw.holdRing(dc, f, hold); }
@@ -146,7 +144,8 @@ class SetAnchorPage extends Page {
         }
     }
     function id() as Number { return 6; }
-    function tickMs() as Number { return locked && state == 0 && System.getTimer() > probeUntil ? 0 : 250; }
+    // 250 ms only while aiming with the compass; 1 s while a send result is showing; nothing once locked
+    function tickMs() as Number { return state != 0 ? 1000 : (locked && System.getTimer() > probeUntil ? 0 : 250); }
     function wantsDrag() as Boolean { return true; }
 
     function aim() as Number {
@@ -164,7 +163,7 @@ class SetAnchorPage extends Page {
             if (state == 2) { Ui.pop(); return; }
             state = state == 1 ? 6 : 0;
             stateAt = System.getTimer();
-            if (host != null) { (host as Host).restartTimer(); }
+            if (hostOf() != null) { (hostOf() as Host).restartTimer(); }
         }
     }
 
@@ -187,11 +186,8 @@ class SetAnchorPage extends Page {
         else { valueUp(-dir); }
         return true;
     }
-    function select() as Boolean {
-        if (!locked && ahead > 0) { lock(); return true; }
-        send();
-        return true;
-    }
+    // Start sets the anchor (at the bearing aimed now, if not locked); hold Start 2 s lifts it
+    function select() as Boolean { send(); return true; }
     function holdMs() as Number { return 1; }
     function holdDone() as Void {
         if (lifting) { lifting = false; if (AnchorUi.lift()) { Ui.pop(); } else { state = 4; stateAt = System.getTimer(); } return; }
@@ -207,13 +203,14 @@ class SetAnchorPage extends Page {
     function lock() as Void {
         locked = !locked;
         if (locked) { bear = aim(); Haptics.play(Haptics.HOLD); }
-        if (host != null) { (host as Host).restartTimer(); }
+        if (hostOf() != null) { (hostOf() as Host).restartTimer(); }
     }
 
     function send() as Void {
         if (state != 0) { return; }              // never a second command while one is on its way
         if (Link.hasPending(Link.ANCHOR_SET)) { state = 6; stateAt = System.getTimer(); return; }
         if (!Model.linked) { state = 4; stateAt = System.getTimer(); return; }
+        if (!locked) { bear = aim(); }
         state = 1; stateAt = System.getTimer();
         Link.pendingSet = method(:onResult);
         if (Model.anchorOn && ahead == 0 && radius != Model.radiusFt) {
@@ -222,7 +219,7 @@ class SetAnchorPage extends Page {
         } else {
             Link.sendReliable(Link.ANCHOR_SET, [radius, ahead, ahead == 0 ? 0 : bear * 10, Model.now()]);   // + tCmd
         }
-        if (host != null) { (host as Host).restartTimer(); }
+        if (hostOf() != null) { (hostOf() as Host).restartTimer(); }
     }
 
     function onResult(res as Number) as Void {
@@ -266,7 +263,11 @@ class SetAnchorPage extends Page {
         Draw.dim = drop;                 // dropping at the boat: no bearing, so the ring is shown dimmed
         Draw.compass(dc, f, h, false);
         Draw.dim = false;
-        Draw.headBox(dc, f, drop ? "--" : h.format("%03d"), drop ? "" : "T", 22, 104);
+        // the heading box also carries the send result, as one word (no floating text)
+        var word = state == 1 ? "SENDING" : (state == 2 ? "SET" : (state == 3 ? "NO FIX" : (state == 4 ? "NO LINK" :
+                   (state == 5 ? "TOO LATE" : (state == 6 ? "QUEUED" : "")))));
+        if (word.length() > 0) { Draw.headBox(dc, f, word, "", 22, 104); }
+        else { Draw.headBox(dc, f, drop ? "--" : h.format("%03d"), "", 22, 104); }
 
         // dashed red alarm ring (schematic, not to scale)
         for (var a = 0; a < 360; a += 12) { Draw.arc(dc, f, 138, a.toFloat(), (a + 7).toFloat(), 4, Theme.RED); }
@@ -275,15 +276,11 @@ class SetAnchorPage extends Page {
         Draw.setPen(dc, f.d(4));
         dc.drawLine(f.cx, f.y(195 + AnchorUi.BTN_R), f.cx, f.y(BOAT_Y - 22));
         Draw.hull(dc, f, f.cx, f.y(BOAT_Y), 46, 18, 0, Theme.ORANGE, Theme.NAVY);
-        Draw.dataBox(dc, f, f.cx, f.y(DIST_Y), drop ? "at boat" : ahead.format("%d") + " ft", false, !editRadius ? Theme.ORANGE : Theme.LINE);
+        Draw.dataBox(dc, f, f.cx, f.y(DIST_Y), ahead.format("%d") + " ft", false, !editRadius ? Theme.ORANGE : Theme.LINE);
         Draw.dataBox(dc, f, f.x(ALARM_X), f.y(195), radius.format("%d"), true, editRadius ? Theme.ORANGE : Theme.LINE);
 
-        var msg = state == 1 ? "sending..." : (state == 2 ? "set" : (state == 3 ? "no GPS fix on the phone" :
-                  (state == 4 ? "no phone link" : (state == 5 ? "too late: try again" : (state == 6 ? "queued: waiting for the phone" :
-                  (drop ? "tap anchor: drop here" : (locked ? "tap anchor: set · hold: lift" : "aim · tap the ring to lock")))))));
-        Draw.text(dc, f.cx, f.y(345), msg, f.d(13), state >= 3 ? Theme.ALARM : Theme.MIST, 0);
         Draw.anchorButton(dc, f, f.cx, f.cy, Model.anchorOn);
-        var hf = host != null && lifting ? (host as Host).holdFrac() : 0.0;
+        var hf = hostOf() != null && lifting ? (hostOf() as Host).holdFrac() : 0.0;
         if (hf > 0.0) { Draw.holdRing(dc, f, hf); }
     }
 }
@@ -327,12 +324,22 @@ class DialPage extends Page {
     function dragEnd(f as Draw.Frame, x as Number, y as Number) as Void { dragY = null; }
 
     function draw(dc as Dc, f as Draw.Frame) as Void {
-        Draw.text(dc, f.cx, f.y(70), isRadius ? "Alarm radius" : "Distance to anchor", f.d(17), Theme.MIST, 0);
+        // symbols say what the number is: boat ---[ distance ]--- anchor, or anchor ---[ radius ]--- alarm clock
+        dc.setColor(Theme.POLAR, Graphics.COLOR_TRANSPARENT);
+        Draw.setPen(dc, f.d(4));
+        dc.drawLine(f.x(70), f.y(188), f.x(320), f.y(188));
+        if (isRadius) {
+            Draw.anchorButton(dc, f, f.x(62), f.y(188), true);
+            Draw.clockIcon(dc, f, f.x(328), f.y(190), 16);
+        } else {
+            Draw.hull(dc, f, f.x(62), f.y(188), 60, 24, 90, Theme.ORANGE, Theme.NAVY);
+            Draw.anchorButton(dc, f, f.x(328), f.y(188), true);
+        }
         var up = Nav.drumUp(v, maxV()), dn = Nav.drumDown(v, minV());
         if (up != v) { Draw.text(dc, f.cx, f.y(124), up.format("%d"), f.d(24), Theme.FADE, 0); }
-        Draw.box(dc, f.x(110), f.y(148), f.d(170), f.d(80), f.d(14), Theme.NAVY, Theme.ORANGE, f.d(3));
-        Draw.num(dc, f.cx, f.y(188), v.format("%d"), f.d(48), Theme.FOAM, false);
-        Draw.text(dc, f.x(262), f.y(196), "ft", f.d(15), Theme.MIST, 0);
+        Draw.box(dc, f.x(125), f.y(148), f.d(140), f.d(80), f.d(14), Theme.NAVY, Theme.ORANGE, f.d(3));
+        Draw.num(dc, f.x(185), f.y(188), v.format("%d"), f.d(48), Theme.FOAM, false);
+        Draw.text(dc, f.x(246), f.y(196), "ft", f.d(15), Theme.MIST, 0);
         if (dn != v) { Draw.text(dc, f.cx, f.y(262), dn.format("%d"), f.d(24), Theme.FADE, 0); }
         Draw.pill(dc, f, 135, 290, 120, 42, "DONE", Theme.ORANGE, Theme.ON_ORANGE);
     }

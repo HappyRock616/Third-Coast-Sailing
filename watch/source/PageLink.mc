@@ -5,7 +5,7 @@ import Toybox.System;
 // Phone link status (PROTOCOL.md section 9): a small phone icon in the same place on every page, coloured by the link,
 // and the link screen it opens, where all status messages live.
 module LinkUi {
-    const NOSUPPORT = 0; const LINKED = 1; const WAIT = 2; const DENIED = 3; const CONNECTING = 4; const OFFLINE = 5;
+    const NOSUPPORT = 0; const LINKED = 1; const WAIT = 2; const DENIED = 3; const CONNECTING = 4; const OFFLINE = 5; const TIMEDOUT = 6;
     // design units: 2 o'clock, straddling the compass ring's inner edge (r 149 at 57 deg), radius 30: half on the
     // ring, half inside (2026-11-22). Clear of the 6 o'clock label, the Next mark SOG panel and the MOB time.
     const ICON_X = 320;
@@ -16,6 +16,7 @@ module LinkUi {
         if (!Net.supported) { return NOSUPPORT; }
         if (Link.trusted || Model.linked) { return LINKED; }
         if (Link.pairState == Link.PAIR_DENIED) { return DENIED; }
+        if (Net.gaveUp) { return TIMEDOUT; }
         if (Link.pairState == Link.PAIR_WAIT) { return WAIT; }
         if (Net.fails >= 2) { return OFFLINE; }
         return CONNECTING;
@@ -60,6 +61,9 @@ class LinkPage extends Page {
     function initialize() { Page.initialize(); }
     function tickMs() as Number { return 1000; }
     function showIcon() as Boolean { return false; }
+    // Opening this screen while offline retries at once instead of waiting out the back-off
+    function shown() as Void { if (LinkUi.status() == LinkUi.OFFLINE) { Net.retryNow(); } }
+    function retryable() as Boolean { var s = LinkUi.status(); return s == LinkUi.DENIED || s == LinkUi.TIMEDOUT; }
 
     function line(dc as Dc, f as Draw.Frame, y as Numeric, s as String, px as Number, c as Number) as Void {
         Draw.text(dc, f.cx, f.y(y), s, f.d(px), c, f.d(290));
@@ -78,8 +82,8 @@ class LinkPage extends Page {
         } else if (s == LinkUi.LINKED) {
             line(dc, f, 140, "Connected to TCS", 22, Theme.FOAM);
             line(dc, f, 170, Net.latency > 0 ? "reply " + (Net.latency / 100 / 10.0).format("%.1f") + " s" : "", 15, Theme.MIST);
-            if (host != null && (host as Host).holdLen > 0) {
-                Draw.holdBar(dc, f, 105, 262, 180, "Forget phone", (host as Host).holdFrac(), Theme.FOAM);
+            if (hostOf() != null && (hostOf() as Host).holdLen > 0) {
+                Draw.holdBar(dc, f, 105, 262, 180, "Forget phone", (hostOf() as Host).holdFrac(), Theme.FOAM);
             } else {
                 Draw.box(dc, f.x(105), f.y(262), f.d(180), f.d(38), f.d(19), Theme.BG, Theme.FOAM, f.d(2));
                 line(dc, f, 281, "Forget phone", 15, Theme.FOAM);
@@ -94,6 +98,10 @@ class LinkPage extends Page {
             line(dc, f, 140, "Not allowed", 22, Theme.FOAM);
             line(dc, f, 170, "on the phone", 16, Theme.MIST);
             Draw.pill(dc, f, 125, 240, 140, 40, "Try again", Theme.ORANGE, Theme.ON_ORANGE);
+        } else if (s == LinkUi.TIMEDOUT) {
+            line(dc, f, 140, "No answer", 22, Theme.FOAM);
+            line(dc, f, 170, "from the phone", 16, Theme.MIST);
+            Draw.pill(dc, f, 125, 240, 140, 40, "Try again", Theme.ORANGE, Theme.ON_ORANGE);
         } else if (s == LinkUi.OFFLINE) {
             line(dc, f, 136, "Can't reach TCS", 22, Theme.FOAM);
             line(dc, f, 172, "Open TCS on the phone", 15, Theme.POLAR);
@@ -104,14 +112,15 @@ class LinkPage extends Page {
             line(dc, f, 150, "Connecting to TCS...", 20, Theme.FOAM);
         }
         if (s != LinkUi.WAIT) { Log.draw(dc, f); }       // link test build only
+        line(dc, f, 352, "v" + Version.NAME, 12, Theme.MIST);
     }
 
     function select() as Boolean {
-        if (LinkUi.status() == LinkUi.DENIED) { Link.pairState = -1; Link.hello(); return true; }
+        if (retryable()) { Net.retryNow(); Link.pairState = -1; Link.hello(); return true; }
         return false;
     }
     function tap(f as Draw.Frame, x as Number, y as Number) as Boolean {
-        if (LinkUi.status() == LinkUi.DENIED && Draw.hit(f, x, y, 125, 240, 140, 40)) { return select(); }
+        if (retryable() && Draw.hit(f, x, y, 125, 240, 140, 40)) { return select(); }
         return true;
     }
 

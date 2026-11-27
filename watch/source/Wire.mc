@@ -4,6 +4,7 @@ import Toybox.StringUtil;
 
 // Wire format of the direct Bluetooth link (PROTOCOL.md section 6). Line-for-line port of reference/wire.js; the
 // test vectors in reference/wire.test.js define the exact bytes.
+(:ble)            // only the direct Bluetooth link (Ble.mc) uses the binary wire format; compiled out with it
 module Wire {
     const T_NULL = 0; const T_FALSE = 1; const T_TRUE = 2; const T_I8 = 3; const T_I16 = 4; const T_I32 = 5;
     const T_STR = 6; const T_ARR = 7;

@@ -27,7 +27,7 @@ class MobPage extends Page {
     function holdDone() as Void {
         Link.sendReliable(Link.MOB_RESET, [Model.mobTime]);
         Model.mobOn = false; Model.mobPos = null; Model.saveMob();
-        if (host != null) { (host as Host).restartTimer(); }
+        if (hostOf() != null) { (hostOf() as Host).restartTimer(); }
     }
 
     // The watch's own position goes with the MOB only if its GPS fix is fresh (the watch GPS runs only on some
@@ -41,7 +41,7 @@ class MobPage extends Page {
         Link.sendReliable(Link.MOB_MARK, [t, p == null ? null : ((p as Array<Float>)[0] * 1e6).toNumber(),
                                           p == null ? null : ((p as Array<Float>)[1] * 1e6).toNumber(), p == null ? null : age]);
         Sensors.setGps(true);
-        if (host != null) { (host as Host).restartTimer(); }
+        if (hostOf() != null) { (hostOf() as Host).restartTimer(); }
     }
 
     function tick() as Void { Sensors.readCompass(); }
@@ -95,7 +95,7 @@ class MobPage extends Page {
             Draw.text(dc, f.cx, f.y(224), "waiting for GPS", f.d(18), Theme.MIST, 0);
         }
         // big RESET button: hold 5 s (touch) or hold Start
-        var frac = host == null ? 0.0 : (host as Host).holdFrac();
+        var frac = hostOf() == null ? 0.0 : (hostOf() as Host).holdFrac();
         var bx = f.x(80), by = f.y(270), bw = f.d(230), bh = f.d(56);
         Draw.box(dc, bx, by, bw, bh, bh / 2, Theme.ALARM_BG, Theme.ALARM, f.d(3));
         if (frac > 0.0) { var fw = (bw * frac).toNumber(); Draw.box(dc, bx, by, fw < bh ? bh : fw, bh, bh / 2, Theme.ALARM_FILL, Theme.ALARM, 0); }
